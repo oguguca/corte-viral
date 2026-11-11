@@ -77,40 +77,55 @@
   --good: #30d158; --warn: #ff9f0a; --bad: #ff6961; --info: #64aaff;
 }
 
-/* GTA 6 — pôr do sol de "Vice": roxo profundo → magenta, rosa neon, turquesa (sem marcas/arte oficiais) */
+/* GTA 6 — paleta do pôr do sol de Vice: azul → violeta → rosa → laranja, contorno roxo profundo,
+   texto branco grosso. Só as cores inspiram; nenhuma marca, logo ou fonte oficial é usada. */
 :root[data-theme="gta"] {
   color-scheme: dark;
-  --bg: #12081f;
-  --surface: rgba(34, 14, 54, 0.88); --surface-2: rgba(52, 22, 78, 0.9); --surface-3: #43205f;
-  --line: rgba(255, 110, 199, 0.16); --line-strong: rgba(255, 110, 199, 0.32); --control: rgba(255, 150, 215, 0.55);
-  --text: #fff4fb; --text-2: #f3c6e4; --text-3: #c8a0cf;
-  --chrome: rgba(24, 8, 40, 0.62); --chrome-edge: rgba(255, 110, 199, 0.18); --scrim: rgba(10, 2, 20, 0.6);
+  --vice: linear-gradient(180deg, #3d5fe0 0%, #8a52d0 35%, #f04ea6 62%, #f2994a 100%);
+  --vice-x: linear-gradient(90deg, #3d5fe0, #8a52d0 35%, #f04ea6 65%, #f2994a);
+  --edge: #4a0b62;              /* contorno roxo escuro */
+  --bg: #140a2a;
+  --surface: rgba(30, 14, 58, 0.9); --surface-2: rgba(46, 20, 82, 0.92); --surface-3: #3b1d66;
+  --line: rgba(160, 110, 255, 0.18); --line-strong: rgba(200, 120, 240, 0.34); --control: rgba(220, 150, 255, 0.55);
+  --text: #ffffff; --text-2: #ecd4ff; --text-3: #c3a6e0;
+  --chrome: rgba(20, 8, 44, 0.64); --chrome-edge: rgba(240, 78, 166, 0.2); --scrim: rgba(10, 2, 24, 0.62);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-2: 0 10px 30px rgba(8, 0, 20, 0.55), 0 0 0 1px rgba(255, 60, 160, 0.06);
-  --shadow-3: 0 28px 70px rgba(8, 0, 20, 0.7), 0 0 40px rgba(255, 46, 136, 0.12);
-  --accent: #d6136f;            /* rosa neon (branco por cima ≈ 5:1) */
+  --shadow-2: 0 10px 30px rgba(8, 0, 24, 0.55), 0 0 0 1px rgba(138, 82, 208, 0.12);
+  --shadow-3: 0 28px 70px rgba(8, 0, 24, 0.7), 0 0 40px rgba(240, 78, 166, 0.14);
+  --accent: #d92f8c;            /* rosa do degradê (branco por cima ≈ 4.6:1) */
   --accent-ink: #ffffff;
-  --accent-text: #ff8cc6;
-  --accent-soft: rgba(255, 46, 136, 0.2);
-  --bar: #19d3c5;               /* turquesa nas barras e gráficos */
-  --good: #3ee08f; --warn: #ffb347; --bad: #ff6b8b; --info: #5fd7ff;
-  --good-soft: rgba(62, 224, 143, 0.16); --warn-soft: rgba(255, 179, 71, 0.18);
-  --bad-soft: rgba(255, 107, 139, 0.18); --info-soft: rgba(95, 215, 255, 0.16);
+  --accent-text: #ff9bd0;
+  --accent-soft: rgba(240, 78, 166, 0.22);
+  --bar: #f2994a;               /* laranja do fim do degradê nas barras */
+  --good: #4fe39a; --warn: #ffb35c; --bad: #ff6f8f; --info: #8fa8ff;
+  --good-soft: rgba(79, 227, 154, 0.16); --warn-soft: rgba(255, 179, 92, 0.18);
+  --bad-soft: rgba(255, 111, 143, 0.18); --info-soft: rgba(143, 168, 255, 0.18);
 }
 :root[data-theme="gta"] body {
   background:
-    radial-gradient(120% 60% at 70% 110%, rgba(255, 122, 69, 0.28), transparent 60%),
-    radial-gradient(90% 70% at 10% -10%, rgba(25, 211, 197, 0.12), transparent 60%),
-    linear-gradient(165deg, #1a0a2e 0%, #2b0f45 45%, #4a1048 80%, #5a1640 100%) fixed;
+    radial-gradient(110% 55% at 75% 115%, rgba(242, 153, 74, 0.30), transparent 60%),
+    radial-gradient(90% 60% at 40% 100%, rgba(240, 78, 166, 0.22), transparent 65%),
+    radial-gradient(90% 70% at 0% -10%, rgba(61, 95, 224, 0.30), transparent 60%),
+    linear-gradient(180deg, #150c35 0%, #241048 45%, #3a1150 80%, #4a1445 100%) fixed;
 }
-:root[data-theme="gta"] .brand-mark { background: linear-gradient(135deg, #ff2e88, #ff7a45); color: #fff; }
-:root[data-theme="gta"] .btn.primary { background: linear-gradient(135deg, #d6136f, #c2185b); box-shadow: 0 6px 20px rgba(255, 46, 136, 0.35); }
-:root[data-theme="gta"] .hero .t-display { background: linear-gradient(90deg, #ff8cc6, #ffb08a, #7ff0e6);
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* elementos de marca com o degradê + contorno grosso, como letreiro */
+:root[data-theme="gta"] .brand-mark { background: var(--vice); color: #fff; box-shadow: 0 0 0 2px var(--edge), 0 0 0 3px rgba(255,255,255,.18);
+  font-weight: 900; text-shadow: 0 2px 0 var(--edge); }
+:root[data-theme="gta"] .btn.primary { background: linear-gradient(180deg, #8a52d0 -40%, #f04ea6 45%, #e0457a 75%, #f2994a 140%);
+  color: #fff; font-weight: 800; border: 2px solid var(--edge); text-shadow: 0 1px 0 rgba(74, 11, 98, 0.8);
+  box-shadow: 0 6px 22px rgba(240, 78, 166, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+:root[data-theme="gta"] .hero .t-display { background: var(--vice-x); -webkit-background-clip: text; background-clip: text; color: transparent;
+  font-weight: 900; filter: drop-shadow(0 3px 0 var(--edge)); }
+:root[data-theme="gta"] .page-head .t-display { font-weight: 800; text-shadow: 0 3px 0 var(--edge), 0 0 24px rgba(240, 78, 166, 0.35); }
 :root[data-theme="gta"] .card, :root[data-theme="gta"] .moment, :root[data-theme="gta"] .sheet {
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
-:root[data-theme="gta"] .sheet, :root[data-theme="gta"] .sheet-head, :root[data-theme="gta"] .sheet-foot { background: #24103b; }
-:root[data-theme="gta"] .switch input:checked + .track { background: #19d3c5; }
+:root[data-theme="gta"] .card { border-color: rgba(138, 82, 208, 0.35); }
+:root[data-theme="gta"] .sheet, :root[data-theme="gta"] .sheet-head, :root[data-theme="gta"] .sheet-foot { background: #1f0f40; }
+:root[data-theme="gta"] .score.hi { background: var(--vice); color: #fff; box-shadow: 0 0 0 2px var(--edge); text-shadow: 0 1px 0 var(--edge); }
+:root[data-theme="gta"] .score.hi small { color: rgba(255, 255, 255, 0.85); }
+:root[data-theme="gta"] .bar > i, :root[data-theme="gta"] .pill .track i { background: var(--vice-x); }
+:root[data-theme="gta"] .step[aria-current="step"] .n { background: var(--vice); color: #fff; box-shadow: 0 0 0 2px var(--edge); }
+:root[data-theme="gta"] .switch input:checked + .track { background: var(--vice-x); }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -258,13 +273,7 @@ a { color: var(--info); }
 .sw-auto { background: linear-gradient(90deg, #f5f5f7 50%, #1c1c1e 50%); }
 .sw-light { background: linear-gradient(180deg, #ffffff, #f2f2f5); }
 .sw-dark { background: linear-gradient(180deg, #2c2c30, #111113); }
-.sw-gta { background: radial-gradient(80% 60% at 70% 110%, rgba(255,122,69,.6), transparent 60%),
-                      linear-gradient(165deg, #1a0a2e, #4a1048 70%, #d6136f); }
-
-/* chave estilo iOS */
-.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
-.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.switch .track { width: 42px; height: 26px; border-radius: 99px; background: var(--surface-3); border: 1px solid var(--control);
+.sw-gta { background: linear-gradient(180deg, #3d5fe0 0%, #8a52d0 35%, #f04ea6 62%, #f2994a 100%); border: 2px solid #4a0b62 !important; }
                  position: relative; transition: background var(--dur) var(--ease); flex: none; }
 .switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
                         background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform var(--dur) var(--ease); }
