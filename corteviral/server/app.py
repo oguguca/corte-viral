@@ -22,10 +22,10 @@ from corteviral.browser_session import (BrowserSessionError, edge_path, export_c
                                         open_login_window, profile_in_use)
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
-from corteviral.models import Transcript
-from corteviral.caption_style import load_style, realign, save_style
+from corteviral.caption_style import load_style, save_style
 from corteviral.config import CaptionStyle
 from corteviral.feedback import FeedbackStore
+from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
@@ -74,12 +74,16 @@ class MomentPatch(BaseModel):
     captions: bool | None = None
     caption_text: str | None = Field(default=None, max_length=2000)
     reset_caption: bool = False
+    status: str | None = None
+    start: float | None = None
+    end: float | None = None
+    hook_on: bool | None = None
+    meta: dict | None = None
 
 
 FONT_FILES = {"Arial Black": "ariblk.ttf", "Impact": "impact.ttf", "Segoe UI Black": "seguibl.ttf",
               "Verdana": "verdanab.ttf", "Bahnschrift": "bahnschrift.ttf", "Trebuchet MS": "trebucbd.ttf",
               "Tahoma": "tahomabd.ttf"}
-_MOMENTS_LOCK = threading.Lock()
 
 
 def available_fonts() -> list[str]:
@@ -271,32 +275,14 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
 
     @app.put("/api/projects/{name}/moments/{moment_id}")
     def patch_moment(name: str, moment_id: str, body: MomentPatch):
-        from corteviral.pipeline.analyze import MOMENTS
-        from corteviral.utils import write_json_atomic
         project = Project.load(_project_dir(name))
-        with _MOMENTS_LOCK:
-            data = load_moments(project) or {}
-            targets = [m for m in data.get("moments", []) + data.get("all", []) if m["id"] == moment_id]
-            if not targets:
-                raise HTTPException(404, "momento não encontrado")
-            m0 = targets[0]
-            words = None
-            if body.caption_text is not None:
-                tpath = project.path("transcript.json")
-                original = []
-                if tpath.exists():
-                    original = [{"w": w.w, "start": w.start, "end": w.end}
-                                for w in Transcript.load(tpath).words if m0["start"] <= w.start < m0["end"]]
-                words = realign(original, body.caption_text)
-            for m in targets:
-                if body.captions is not None:
-                    m["captions"] = body.captions
-                if words is not None:
-                    m["caption_words"] = words
-                if body.reset_caption:
-                    m.pop("caption_words", None)
-            write_json_atomic(project.path(MOMENTS), data)
-        return {"ok": True, "moment": targets[0]}
+        try:
+            moment = apply_patch(project, moment_id, body.model_dump(), settings)
+        except KeyError:
+            raise HTTPException(404, "momento não encontrado")
+        except ReviewError as e:
+            raise HTTPException(422, str(e))
+        return {"ok": True, "moment": moment}
 
     @app.get("/api/caption-style")
     def get_caption_style():
