@@ -18,7 +18,7 @@
   header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
   header h1 span { color: var(--accent); }
   header small { color: var(--muted); }
-  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 24px; }
+  main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px 24px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
   .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
@@ -27,14 +27,14 @@
                   border-radius: 8px; padding: 9px 10px; font: inherit; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .row { display: flex; gap: 8px; }
-  .row > * { flex: 1; }
+  .row > * { flex: 1; min-width: 0; }
   button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
            padding: 9px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
   button:hover { border-color: var(--muted); }
   button.primary { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; width: 100%; margin-top: 14px; }
   button:disabled { opacity: .5; cursor: not-allowed; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .stack { display: grid; gap: 16px; align-content: start; }
+  .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
 
   #job { display: none; }
   .stage { display: flex; justify-content: space-between; font-weight: 600; }
