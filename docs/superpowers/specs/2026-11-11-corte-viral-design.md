@@ -257,3 +257,24 @@ Objetivo do usuário: monetizar os clipes. Requisitos derivados:
 
 Cada fase termina com testes passando, commit (Conventional Commits, PT-BR, sem
 linhas de atribuição) e push para `origin/main`.
+
+## 14. Interface redesenhada no estilo Apple (2026-11-11)
+
+Pedido do usuário: "trabalhar no design do projeto" usando a skill **apple-design** (princípios da Apple
+traduzidos para a web), sem apagar nenhum dado. Decisões do usuário: **barra lateral + etapas**, tema
+**automático** (segue claro/escuro do Windows); demais decisões delegadas.
+
+- **Estrutura:** barra lateral translúcida (logo, "+ Novo vídeo", lista de projetos com status, Ajustes,
+  medidor de uso da IA) + área principal com 4 etapas por projeto — ① Vídeo › ② Momentos › ③ Clipes ›
+  ④ Exportar — uma tela focada por vez. Rotas por hash (`#/p/<projeto>/<etapa>`), para voltar/avançar.
+- **Painéis (sheets)** que nascem do botão que os abriu: Novo vídeo, Ajustes (Contas, Estilo da legenda,
+  Uso da IA, Sobre), Layout do vertical, clipe em tela vertical.
+- **Progresso** de tarefas numa pílula flutuante (não empurra o conteúdo), com erro legível.
+- **Visual:** fonte do sistema (Segoe UI Variable), tracking negativo nos títulos, materiais translúcidos
+  (`backdrop-filter`) só na barra lateral/barras flutuantes, superfícies sólidas arredondadas no conteúdo,
+  neutros adaptativos claro/escuro, amarelo do Corte Viral só como destaque de ação/seleção, status com
+  ícone + texto.
+- **Movimento:** feedback no pressionar, transições críticas amortecidas (sem quique), painéis com origem
+  no gatilho, `prefers-reduced-motion`/`-transparency`/`-contrast` respeitados.
+- **Sem mudanças de API nem de dados:** o backend só passa a servir `/static/*` (CSS/JS em módulos).
+- **Todas as funções atuais preservadas** (inventário no plano).
