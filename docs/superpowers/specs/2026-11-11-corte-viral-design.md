@@ -1,7 +1,7 @@
 # Corte Viral — Especificação de Design
 
 **Data:** 2026-11-11
-**Status:** aguardando revisão
+**Status:** aprovado
 
 ## 1. Objetivo
 
@@ -36,6 +36,8 @@ Essas restrições motivam: transcrição local com modelo `medium` int8 (cabe e
 | Legenda/gancho | **Opcionais**: chave global, por tarefa e por clipe | Pedido do usuário (estilo "limpo" também suportado) |
 | Encode | `h264_nvenc`, fallback `libx264` | Render rápido na 1050 Ti |
 | Meta de desempenho | VOD de 3h em ~60–80 min ponta a ponta | Transcrição domina (~45–60 min com `medium`) |
+| Duração dos clipes | Perfis: `viral` 15–60 s, `monetizacao` 61–120 s (padrão configurável) | Creator Rewards do TikTok só paga vídeos > 1 min |
+| Objetivo de negócio | Monetização nas plataformas | Ver seção 12 |
 
 ## 4. Arquitetura
 
@@ -106,7 +108,9 @@ rodam de novo.
    duplicatas, escolhe top N.
 6. **Fronteiras naturais:** início snap para o início da frase/pausa ≥ 300 ms
    mais próxima antes do ponto; fim snap para fim de frase/pausa depois do
-   ponto; respeita 15–60 s.
+   ponto; respeita a faixa de duração do perfil ativo (`viral` 15–60 s ou
+   `monetizacao` 61–120 s). No perfil `monetizacao`, o prompt do LLM prioriza
+   arcos completos (setup → clímax → reação), e não só o pico.
 
 ## 6. Formato vertical (Fase 3)
 
@@ -198,7 +202,28 @@ gerado sob demanda; export final em 1080x1920.
   áudio) atravessando ingest → render.
 - **Manual por fase:** um VOD real do usuário ao fim de cada fase.
 
-## 12. Fases
+## 12. Monetização
+
+Objetivo do usuário: monetizar os clipes. Requisitos derivados:
+
+- **Duração:** perfil `monetizacao` (61–120 s) atende o mínimo do TikTok Creator
+  Rewards (> 1 min) e cabe no limite do YouTube Shorts (≤ 3 min). Perfil `viral`
+  (15–60 s) para alcance. Regras das plataformas mudam; os limites ficam no config.
+- **Conteúdo transformador** (reduz risco de "conteúdo reaproveitado"): no
+  perfil `monetizacao`, legendas, gancho, zoom de ênfase em picos (punch-in
+  de 1,15x por ~0,6 s, ativável) e crédito ao streamer (texto discreto
+  "@streamer", ativável) vêm ligados por padrão — todos desligáveis.
+- **Crédito/autorização:** cada preset de streamer tem `credit_handle` e
+  `authorized: bool`; a revisão mostra aviso quando o streamer não está marcado
+  como autorizado.
+- **Sem duplicatas:** `history.json` global registra trechos exportados
+  (origem + intervalo); o app avisa ao exportar trecho com sobreposição > 50%
+  de um já exportado.
+- **Metadados por plataforma:** título/descrição/hashtags gerados com variação
+  por plataforma (TikTok, Shorts, Reels, Kwai), exportados num `.txt` ao lado
+  de cada MP4.
+
+## 13. Fases
 
 | Fase | Entrega | Instalação necessária |
 |---|---|---|
