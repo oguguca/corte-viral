@@ -115,6 +115,24 @@ rodam de novo.
    `monetizacao` 61–120 s). No perfil `monetizacao`, o prompt do LLM prioriza
    arcos completos (setup → clímax → reação), e não só o pico.
 
+## 5.1 Avaliação em duas etapas (Fase 2.5 — pedido do usuário em 2026-11-11)
+
+Problemas relatados: trechos fracos escolhidos, corte começando/terminando mal, justificativa rasa.
+
+1. **Triagem (texto):** igual à seção 5; mantém os `deep.top_k` (padrão 15) melhores.
+2. **A IA assiste:** para cada um, mini-vídeo 360p, 1 qps, áudio mono (janela do momento ± 15 s,
+   ~1,3 MB) enviado inline ao Gemini (`gemini-3.5-flash-lite`, `mediaResolution: LOW`; medido:
+   ~6,5 mil tokens e ~7 s por trecho). Retorno estruturado:
+   - critérios 0–100: `gancho`, `emocao`, `visual`, `final`, `contexto`;
+   - `inicio`/`fim` sugeridos (segundos no mini-vídeo) → convertidos para o VOD e ajustados às
+     pausas, dentro da duração do perfil;
+   - `descricao` (o que acontece), `motivo` (por que funciona) e `risco`.
+   Nota final = média ponderada dos critérios (`deep.weights`, padrão gancho 0,25, emoção 0,25,
+   visual 0,15, final 0,20, contexto 0,15).
+3. **Aprender com o usuário:** 👍/👎 por momento, salvos em `data/feedback.json` (por streamer +
+   global). Até 6 exemplos (3 bons, 3 ruins; prioriza o mesmo streamer) entram no prompt.
+4. Falha/cota na etapa 2 → o momento fica com a nota da triagem (selo "texto").
+
 ## 6. Formato vertical (Fase 3)
 
 Saída **9:16, 1080x1920**, 30 fps (ou fps de origem se ≤ 60), H.264 + AAC,
