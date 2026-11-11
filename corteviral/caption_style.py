@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from corteviral.config import CaptionStyle, Settings
 from corteviral.utils import write_json_atomic
 
@@ -20,9 +22,9 @@ def load_style(settings: Settings) -> CaptionStyle:
     f = _file(settings)
     if f.exists():
         try:
-            base.update(json.loads(f.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError):
-            pass
+            return CaptionStyle.model_validate({**base, **json.loads(f.read_text(encoding="utf-8"))})
+        except (OSError, json.JSONDecodeError, ValidationError):
+            pass  # arquivo salvo inválido nunca pode travar a geração de clipes: volta ao padrão
     return CaptionStyle.model_validate(base)
 
 

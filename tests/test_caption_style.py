@@ -49,3 +49,18 @@ def test_realign_different_count_distributes_monotonic():
 def test_realign_empty_text_returns_empty():
     assert realign(ORIG, "   ") == []
     assert realign([], "algo") == []
+
+
+def test_invalid_saved_style_falls_back_to_defaults(settings_tmp):
+    settings_tmp.paths.data_dir.mkdir(parents=True)
+    (settings_tmp.paths.data_dir / "caption_style.json").write_text(json.dumps({"size": 999, "lixo": 1}),
+                                                                    encoding="utf-8")
+    assert load_style(settings_tmp).size == settings_tmp.captions.size
+
+
+def test_font_name_validated():
+    with pytest.raises(ValidationError):
+        CaptionStyle(font="Arial,Bold")
+    with pytest.raises(ValidationError):
+        CaptionStyle(font="Arial\nDialogue: x")
+    assert CaptionStyle(font="Segoe UI Black").font == "Segoe UI Black"

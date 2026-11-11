@@ -39,7 +39,7 @@ def test_ass_color_bgr():
 
 
 def test_ass_escape_braces_and_backslash():
-    assert ass_escape("a{b}c\\d") == "a\\{b\\}c\\\\d"
+    assert ass_escape("a{b}c") == "a\\{b\\}c"
 
 
 def test_build_ass_one_event_per_word_with_highlight():
@@ -56,13 +56,29 @@ def test_build_ass_one_event_per_word_with_highlight():
     assert "PlayResX: 1080" in ass and "PlayResY: 1920" in ass
 
 
-def test_build_ass_position_clamped_to_safe_zone():
-    for pos, ok in ((0.70, True), (0.95, False), (0.02, False)):
-        ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=pos))
-        y = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
-        assert 210 <= y <= 1440
-        if ok:
-            assert abs(y - 0.70 * 1920) < 2
+def test_build_ass_text_edges_inside_safe_zone():
+    for pos in (0.70, 0.75, 0.95, 0.02):
+        for size in (60, 90, 140):
+            ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=pos, size=size))
+            assert r"\an2" in ass  # ancorada pela base: se quebrar linha, cresce para cima
+            bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
+            assert bottom <= 1440 and bottom - size >= 210  # topo e base dentro da zona segura
+    ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=0.70, size=90))
+    bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
+    assert abs(bottom - (0.70 * 1920 + 45)) < 2  # centro da linha na altura escolhida
+
+
+def test_long_word_is_shrunk_to_fit_width():
+    ass = build_ass([W("inconstitucionalissimamente", 0.0, 1.0)], CaptionStyle(size=90))
+    m = re.search(r"\\fscx(\d+)\\fscy(\d+)", ass.splitlines()[-1])
+    assert m and int(m.group(1)) < 100 and m.group(1) == m.group(2)
+    short = build_ass([W("oi", 0.0, 1.0)], CaptionStyle(size=90, pop=False))
+    assert r"\fscx" not in short.splitlines()[-1]
+
+
+def test_backslash_shown_without_breaking_line():
+    out = ass_escape("a\\Nb")
+    assert "\\N" not in out and "\\" not in out and out.startswith("a") and out.endswith("Nb")
 
 
 def test_build_ass_uppercase_option():

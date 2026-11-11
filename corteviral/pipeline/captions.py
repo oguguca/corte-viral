@@ -19,7 +19,8 @@ def ass_time(t: float) -> str:
 
 
 def ass_escape(text: str) -> str:
-    return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
+    # o libass não aceita "\\" como barra literal (e "\N" quebraria a linha): usa uma barra parecida
+    return text.replace("\\", "⧵").replace("{", r"\{").replace("}", r"\}")
 
 
 def ass_color(hex_color: str) -> str:
@@ -70,18 +71,25 @@ def _header(style: CaptionStyle, width: int, height: int) -> str:
         "Alignment, MarginL, MarginR, MarginV, Encoding",
         f"Style: Default,{style.font},{style.size},{ass_color(style.color)},{ass_color(style.highlight)},"
         f"{ass_color(style.outline_color)},&H80000000,-1,0,0,0,100,100,0,0,1,{style.outline},{style.shadow},"
-        f"5,{SAFE_LEFT},{SAFE_RIGHT},0,1",
+        f"2,{SAFE_LEFT},{SAFE_RIGHT},0,1",
         "", "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ])
 
 
+CHAR_W = 0.56  # largura média de caractere (fração do tamanho) em MAIÚSCULAS de fonte pesada + contorno (medido)
+
+
 def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height: int = 1920) -> str:
-    sy = height / 1920
-    x = round((SAFE_LEFT + (width - SAFE_RIGHT)) / 2)
-    y = round(min(max(style.position * height, SAFE_TOP * sy), SAFE_BOTTOM * sy))
-    hl = ass_color(style.highlight)
-    pop = r"\fscx115\fscy115\t(0,80,\fscx100\fscy100)" if style.pop else ""
+    sx, sy = width / 1080, height / 1920
+    size = style.size * sy
+    x = round((SAFE_LEFT + (1080 - SAFE_RIGHT)) / 2 * sx)
+    safe_w = (1080 - SAFE_LEFT - SAFE_RIGHT) * sx
+    # ancorada pela base (\an2): a linha inteira — não só o centro — fica dentro da zona segura
+    bottom = style.position * height + size / 2
+    bottom = max(bottom, SAFE_TOP * sy + size)
+    bottom = round(min(bottom, SAFE_BOTTOM * sy))
+    hl, prim = ass_color(style.highlight), ass_color(style.color)
     lines = [_header(style, width, height)]
     chunks = chunk_words(words, style.max_words, style.max_chars)
     for ci, chunk in enumerate(chunks):
@@ -89,13 +97,20 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height:
         last_end = chunk[-1]["end"]
         chunk_end = nxt if nxt is not None and nxt - last_end < JOIN_GAP else last_end + HOLD
         texts = [ass_escape(w["w"].upper() if style.uppercase else w["w"]) for w in chunk]
+        # grupo largo demais (ex.: palavra enorme): encolhe para caber, em vez de vazar pelas bordas
+        est = len(" ".join(w["w"] for w in chunk)) * size * CHAR_W
+        scale = min(100, int(safe_w / est * 100)) if est else 100
+        fit = rf"\fscx{scale}\fscy{scale}" if scale < 100 else ""
+        big = round(scale * 1.15)
+        pop = rf"\fscx{big}\fscy{big}\t(0,80,\fscx{scale}\fscy{scale})" if style.pop else ""
+        restore = rf"\c{prim}" + (rf"\fscx{scale}\fscy{scale}" if (style.pop or fit) else "")
         for i, w in enumerate(chunk):
             start = w["start"]
             end = chunk[i + 1]["start"] if i + 1 < len(chunk) else chunk_end
             if end <= start:
                 continue
-            parts = ["{" + rf"\c{hl}{pop}" + "}" + t + "{" + r"\r" + "}" if j == i else t
+            parts = ["{" + rf"\c{hl}{pop}" + "}" + t + "{" + restore + "}" if j == i else t
                      for j, t in enumerate(texts)]
             lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Default,,0,0,0,,"
-                         "{" + rf"\pos({x},{y})" + "}" + " ".join(parts))
+                         "{" + rf"\an2\pos({x},{bottom}){fit}" + "}" + " ".join(parts))
     return "\n".join(lines) + "\n"

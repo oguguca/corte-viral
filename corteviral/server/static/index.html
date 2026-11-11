@@ -530,13 +530,22 @@ function drawCap() {
   let words = ["olha", "essa", "explosão", "mano"].slice(0, s.max_words);
   if (s.uppercase) words = words.map((w) => w.toUpperCase());
   const active = Math.min(1, words.length - 1);
-  g.font = `900 ${Math.round(s.size * k)}px "${s.font}", sans-serif`;
-  g.textBaseline = "middle";
+  // o libass mede o tamanho pela altura da linha (~1,41× o tamanho de fonte do navegador)
+  let px = s.size * k / 1.41;
+  g.font = `900 ${px}px "${s.font}", sans-serif`;
+  g.textBaseline = "bottom";
   g.lineJoin = "round";
-  const space = g.measureText(" ").width, widths = words.map((w) => g.measureText(w).width);
-  const total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  let space = g.measureText(" ").width, widths = words.map((w) => g.measureText(w).width);
+  let total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  const safeW = (1080 - 60 - 140) * k;
+  if (total > safeW) {  // mesmo comportamento do clipe: encolhe para caber na largura segura
+    px *= safeW / total;
+    g.font = `900 ${px}px "${s.font}", sans-serif`;
+    space = g.measureText(" ").width; widths = words.map((w) => g.measureText(w).width);
+    total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  }
   const cx = ((60 + (1080 - 140)) / 2) * k;
-  const y = Math.min(Math.max(s.position * 1920, 210), 1440) * k;
+  const y = Math.min(Math.max(s.position * 1920 + s.size / 2, 210 + s.size), 1440) * k;  // base da linha
   let xx = cx - total / 2;
   words.forEach((w, i) => {
     g.lineWidth = Math.max(2, 6 * 2 * k * 1.5);
