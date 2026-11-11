@@ -5,7 +5,10 @@ import json
 import time
 from typing import Callable
 
+from pathlib import Path
+
 from corteviral.config import Settings
+from corteviral.feedback import FeedbackStore
 from corteviral.llm import DEFAULT_MODELS, make_client
 from corteviral.models import Transcript
 from corteviral.pipeline.boundaries import PROFILE_RANGES, select, snap_bounds
@@ -68,6 +71,9 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
         m["text"] = " ".join(w.w for w in transcript.words if m["start"] <= w.start < m["end"])
 
     # etapa 2: a IA assiste os melhores candidatos (só quando o provedor tem visão)
+    if examples is None:
+        examples = FeedbackStore(Path(s.paths.data_dir) / "feedback.json").examples(
+            project.data.get("streamer"), s.deep.max_examples)
     moments, deep_stats = deep_review(project, moments, transcript, s, llm, examples=examples,
                                       on_progress=lambda f, m: prog(0.62 + 0.33 * f, m))
     stats["deep"] = deep_stats
