@@ -174,3 +174,54 @@ def test_local_file_job_does_not_touch_session(settings_tmp, monkeypatch):
     c = TestClient(create_app(settings_tmp, pipeline=capture))
     _wait(c, c.post("/api/jobs", json={"source": "C:/videos/live.mp4"}).json()["id"])
     assert seen["file"] is None
+
+
+def _transcribed_project(settings_tmp):
+    p = Project.create(settings_tmp.paths.projects_dir, "https://youtu.be/z", "Live Z")
+    p.data["url"] = "https://youtu.be/z"
+    p.save()
+    return p
+
+
+def test_api_analyze_job_and_moments_endpoint(settings_tmp):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    seen = {}
+
+    def fake_analyze(project, settings, n=None, profile=None, on_progress=None):
+        seen.update(n=n, profile=profile, provider=settings.llm.provider)
+        on_progress(0.5, "IA avaliando")
+        moments = [{"id": "m1", "start": 10.0, "end": 40.0, "score": 88, "reason": "engraçado", "ai": True}]
+        write_json_atomic(project.path(MOMENTS), {"profile": profile, "moments": moments})
+        return moments
+
+    p = _transcribed_project(settings_tmp)
+    c = TestClient(create_app(settings_tmp, analyzer=fake_analyze))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "n": 5,
+                                             "profile": "monetizacao", "provider": "none"}).json()["id"])
+    assert job["status"] == "done" and job["stage"] == "analyze"
+    assert seen == {"n": 5, "profile": "monetizacao", "provider": "none"}
+    m = c.get(f"/api/projects/{p.dir.name}/moments").json()
+    assert m["moments"][0]["score"] == 88
+    assert c.get("/api/projects").json()[0]["has_moments"] is True
+
+
+def test_api_moments_404_when_not_analyzed(client, settings_tmp):
+    p = _transcribed_project(settings_tmp)
+    assert client.get(f"/api/projects/{p.dir.name}/moments").status_code == 404
+
+
+def test_api_analyze_requires_project(client):
+    assert client.post("/api/jobs", json={"kind": "analyze"}).status_code == 422
+
+
+def test_api_usage_percent(settings_tmp):
+    from corteviral.usage import UsageTracker
+    settings_tmp.llm.daily_request_limit = 10
+    settings_tmp.llm.daily_token_limit = 1000
+    UsageTracker(settings_tmp.paths.data_dir / "usage.json").record("gemini", "m", 100, 50, ok=True)
+    u = TestClient(create_app(settings_tmp)).get("/api/usage").json()
+    assert u["requests"] == 1 and u["total_tokens"] == 150
+    assert u["limits"] == {"requests": 10, "tokens": 1000}
+    assert u["percent"] == 15.0  # max(1/10=10%, 150/1000=15%)
+    assert len(u["per_minute"]) == 60

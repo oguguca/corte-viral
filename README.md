@@ -4,8 +4,8 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** Fase 1 concluída (download + transcrição, com interface básica de teste).
-> Próxima: Fase 2 — detecção e pontuação de momentos.
+> **Status:** Fases 1 e 2 concluídas (download, transcrição e melhores momentos com nota).
+> Próxima: Fase 3 — corte e formato vertical 9:16.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
 Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum.
@@ -64,6 +64,21 @@ Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela
 você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
 sincronizada com o vídeo (clique numa palavra para pular até ela).
 
+### Encontrar os melhores momentos
+
+Abra um projeto transcrito, escolha o perfil (**Viral** 15–60 s ou **Monetização**
+61–120 s), quantos momentos e a IA, e clique em **Encontrar momentos**. Cada momento
+mostra nota de 0 a 100, justificativa e uma sugestão de gancho; clicar toca o trecho.
+
+- A nota combina sinais locais (picos de volume, palavras de reação como "MEU DEUS"
+  e "kkkk", ritmo de fala, picos de chat) com a avaliação da IA.
+- **IA grátis:** crie uma chave em aistudio.google.com e coloque no `.env` como
+  `GEMINI_API_KEY=...`. Sem chave (ou com "Sem IA"), funciona só com os sinais.
+- O card **Uso da IA hoje** mostra tokens, requisições e a % do limite diário, com
+  gráfico por minuto. O Google não informa a cota grátis pela API: confira em
+  AI Studio → *Rate limits* e ajuste `llm.daily_request_limit` / `llm.daily_token_limit`
+  no `config.yaml`.
+
 ### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
 
 Clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
@@ -92,6 +107,9 @@ arquivo `cookies.txt` exportado com a extensão "Get cookies.txt LOCALLY".
 #   --language pt        força o idioma (padrão: detecção automática)
 #   --force              refaz tudo, ignorando o cache
 #   --cookies-from-browser firefox   usa o login do navegador (vídeos com restrição)
+
+# Melhores momentos (perfil viral, 10 momentos, IA Gemini)
+.venv\Scripts\python -m corteviral analyze projects\<pasta-do-projeto> --n 10 --profile viral --provider gemini
 
 # Estado de um projeto
 .venv\Scripts\python -m corteviral info projects\<pasta-do-projeto>

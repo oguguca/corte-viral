@@ -41,3 +41,14 @@ def test_cli_info(sample_video, tmp_path, monkeypatch, capsys):
     assert main(["info", str(proj)]) == 0
     out = capsys.readouterr().out
     assert "transcribe" in out and "pt" in out
+
+
+def test_cli_analyze(tmp_path, monkeypatch, capsys):
+    from corteviral.project import Project
+    cfg = write_cfg(tmp_path)
+    p = Project.create(tmp_path / "projects", "x.mp4", "x")
+    monkeypatch.setattr("corteviral.cli.analyze", lambda project, settings, n=None, profile=None, on_progress=None: [
+        {"id": "m1", "start": 65.0, "end": 100.0, "score": 91, "reason": "explodiu o carro", "ai": True, "hook": "olha isso"}])
+    assert main(["analyze", str(p.dir), "--config", str(cfg), "--n", "3", "--provider", "none"]) == 0
+    out = capsys.readouterr().out
+    assert "91" in out and "1:05" in out and "explodiu o carro" in out

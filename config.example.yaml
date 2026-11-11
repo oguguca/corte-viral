@@ -13,3 +13,17 @@ whisper:
   beam_size: 5
   vad_filter: true         # pula silêncio (acelera bastante em lives)
   cpu_fallback_model: small  # usado se a GPU falhar (CUDA/VRAM)
+
+analysis:
+  profile: viral           # viral (15–60 s) | monetizacao (61–120 s)
+  n_clips: 10
+  max_candidates: 60
+  fetch_chat: true         # baixa o chat gravado da live quando existir
+  extra_reactions: {}      # termos extras de reação, ex.: {"eita": 0.8}
+
+llm:
+  provider: gemini         # none | gemini (grátis) | anthropic (pago)
+  model: null              # null = padrão do provedor (gemini-3.5-flash-lite / claude-opus-5-5)
+  batch_size: 8
+  daily_request_limit: 1000   # confira sua cota em AI Studio → Rate limits
+  daily_token_limit: 1000000

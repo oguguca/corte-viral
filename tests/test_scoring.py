@@ -148,3 +148,42 @@ def test_make_client_none_without_key(monkeypatch, tmp_path):
     assert make_client(s, env_file=tmp_path / "nao-existe.env") is None
     s.llm.provider = "none"
     assert make_client(s) is None
+
+
+def test_gemini_retries_transient_503(monkeypatch, tmp_path):
+    import io
+    import json
+    import urllib.error
+
+    from corteviral.llm import GeminiClient
+    attempts = []
+
+    class Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def flaky(req, timeout):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise urllib.error.HTTPError(req.full_url, 503, "Unavailable", {}, None)
+        return Resp(json.dumps({"candidates": [{"content": {"parts": [{"text": json.dumps(
+            [{"id": "a", "score": 50, "reason": "r", "hook": "h", "standalone": True}])}]}}]}).encode())
+
+    monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", flaky)
+    monkeypatch.setattr("corteviral.llm.time.sleep", lambda s: None)
+    out = GeminiClient("k", "m", 5).score([{"id": "a", "text": "x", "signals": ""}], "viral", "pt")
+    assert len(attempts) == 3 and out[0]["score"] == 50
+
+
+def test_gemini_gives_up_after_retries(monkeypatch):
+    import urllib.error
+
+    from corteviral.llm import GeminiClient
+
+    def down(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, 503, "Unavailable", {}, None)
+
+    monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", down)
+    monkeypatch.setattr("corteviral.llm.time.sleep", lambda s: None)
+    with pytest.raises(LLMError, match="503"):
+        GeminiClient("k", "m", 5).score([{"id": "a", "text": "x", "signals": ""}], "viral", "pt")

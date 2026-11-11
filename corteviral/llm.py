@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -21,6 +22,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_MODELS = {"gemini": "gemini-3.5-flash-lite", "anthropic": "claude-opus-5-5"}
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+RETRY_DELAYS = (2, 5)  # s entre tentativas em erro temporário (5xx / timeout)
+_TRANSIENT = {500, 502, 503, 504}
 
 INSTRUCTIONS = """Você é editor de cortes virais de lives de games (principalmente GTA), em português do Brasil.
 Para cada trecho de transcrição, avalie o potencial de virar um clipe curto viral (TikTok, Shorts, Reels).
@@ -90,18 +93,26 @@ class GeminiClient:
             GEMINI_URL.format(model=self.model), data=json.dumps(body).encode("utf-8"),
             headers={"x-goog-api-key": self._key, "Content-Type": "application/json"}, method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                payload = json.load(r)
-        except urllib.error.HTTPError as e:
-            limited = e.code == 429
-            self._record(0, 0, ok=False, rate_limited=limited)
-            if limited:
-                raise LLMRateLimited("limite do Gemini atingido (HTTP 429)") from e
-            raise LLMError(f"Gemini HTTP {e.code}") from e
-        except (OSError, TimeoutError) as e:
-            self._record(0, 0, ok=False)
-            raise LLMError(f"Gemini sem resposta: {e}") from e
+        for attempt in range(len(RETRY_DELAYS) + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    payload = json.load(r)
+                break
+            except urllib.error.HTTPError as e:
+                limited = e.code == 429
+                self._record(0, 0, ok=False, rate_limited=limited)
+                if limited:
+                    raise LLMRateLimited("limite do Gemini atingido (HTTP 429)") from e
+                if e.code in _TRANSIENT and attempt < len(RETRY_DELAYS):
+                    time.sleep(RETRY_DELAYS[attempt])
+                    continue
+                raise LLMError(f"Gemini HTTP {e.code}") from e
+            except (OSError, TimeoutError) as e:
+                self._record(0, 0, ok=False)
+                if attempt < len(RETRY_DELAYS):
+                    time.sleep(RETRY_DELAYS[attempt])
+                    continue
+                raise LLMError(f"Gemini sem resposta: {e}") from e
         meta = payload.get("usageMetadata", {})
         out_tokens = meta.get("candidatesTokenCount", 0) + meta.get("thoughtsTokenCount", 0)
         self._record(meta.get("promptTokenCount", 0), out_tokens, ok=True)

@@ -16,15 +16,17 @@ from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from corteviral.browser_session import (BrowserSessionError, edge_path, export_cookies,
                                         open_login_window, profile_in_use)
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
+from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
 from corteviral.project import PROJECT_FILE, Project
+from corteviral.usage import UsageTracker
 
 STATIC = Path(__file__).parent / "static"
 StageProgress = Callable[[str, float, str], None]
@@ -38,11 +40,24 @@ def default_pipeline(source: str, settings: Settings, on_progress: StageProgress
 
 
 class JobRequest(BaseModel):
-    source: str
+    kind: Literal["ingest", "analyze"] = "ingest"
+    source: str | None = None       # ingest
+    project: str | None = None      # analyze
+    n: int | None = None
+    profile: Literal["viral", "monetizacao"] | None = None
+    provider: Literal["none", "gemini", "anthropic"] | None = None
     model: str | None = None
     language: Literal["auto", "pt", "en"] | None = None
     cookies_from_browser: str | None = None
     cookies_file: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if self.kind == "ingest" and not self.source:
+            raise ValueError("source é obrigatório para ingest")
+        if self.kind == "analyze" and not self.project:
+            raise ValueError("project é obrigatório para analyze")
+        return self
 
 
 class _Jobs:
@@ -52,8 +67,10 @@ class _Jobs:
         self.running: str | None = None
 
 
-def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
+def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=None) -> FastAPI:
     pipeline = pipeline or default_pipeline
+    analyzer = analyzer or analyze
+    usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
     app = FastAPI(title="Corte Viral")
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
@@ -98,8 +115,11 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
         s.download.cookies_from_browser = req.cookies_from_browser or None
         s.download.cookies_file = Path(req.cookies_file) if req.cookies_file else None
 
+        if req.provider:
+            s.llm.provider = req.provider
         # Sem escolha manual: usa a sessão de login do app (renovada agora; se falhar, a última salva)
-        if is_url(req.source) and not req.cookies_from_browser and not req.cookies_file and yt_profile.exists():
+        needs_web = is_url(req.source) if req.kind == "ingest" else True
+        if needs_web and not req.cookies_from_browser and not req.cookies_file and yt_profile.exists():
             job.update(message="lendo sessão de login")
             try:
                 _yt_sync()
@@ -112,7 +132,13 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
             job.update(stage=stage, progress=round(frac, 4), message=msg)
 
         try:
-            project = pipeline(req.source, s, progress)
+            if req.kind == "analyze":
+                project = Project.load(_project_dir(req.project))
+                job.update(stage="analyze", project=project.dir.name)
+                analyzer(project, s, n=req.n, profile=req.profile,
+                         on_progress=lambda f, m: progress("analyze", f, m))
+            else:
+                project = pipeline(req.source, s, progress)
             job.update(status="done", project=project.dir.name, progress=1.0, message="concluído")
         except (IngestError, FFmpegError, FileNotFoundError) as e:
             job.update(status="error", error=str(e))
@@ -164,6 +190,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
                     "name": pj.parent.name, "title": data.get("title"), "source": data.get("url") or data.get("source"),
                     "duration": data.get("duration", 0), "stages": list(data.get("stages", {})),
                     "has_transcript": (pj.parent / "transcript.json").exists(),
+                    "has_moments": (pj.parent / "moments.json").exists(),
                     "mtime": pj.stat().st_mtime,
                 })
         return sorted(out, key=lambda p: p["mtime"], reverse=True)
@@ -174,6 +201,21 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
         if not f.exists():
             raise HTTPException(404, "transcrição ainda não existe")
         return json.loads(f.read_text(encoding="utf-8"))
+
+    @app.get("/api/projects/{name}/moments")
+    def get_moments(name: str):
+        data = load_moments(Project.load(_project_dir(name)))
+        if not data:
+            raise HTTPException(404, "momentos ainda não calculados")
+        return data
+
+    @app.get("/api/usage")
+    def get_usage():
+        u = usage.today()
+        lim = {"requests": settings.llm.daily_request_limit, "tokens": settings.llm.daily_token_limit}
+        pct = max(u["requests"] / max(1, lim["requests"]), u["total_tokens"] / max(1, lim["tokens"])) * 100
+        provider = settings.llm.provider
+        return {**u, "limits": lim, "percent": round(min(pct, 100.0), 1), "provider": provider}
 
     @app.get("/api/projects/{name}/video")
     def get_video(name: str):

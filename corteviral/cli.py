@@ -10,6 +10,7 @@ from pathlib import Path
 from corteviral.config import load_settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.models import Transcript
+from corteviral.pipeline.analyze import analyze
 from corteviral.pipeline.ingest import IngestError, ingest
 from corteviral.pipeline.transcribe import transcribe
 from corteviral.project import Project
@@ -50,6 +51,28 @@ def _cmd_ingest(args) -> int:
     print(f"Idioma:     {transcript.language}")
     print(f"Transcrição: {project.path('transcript.json')} ({len(transcript.words)} palavras)")
     print(f"Tempo:      ingest {t1 - t0:.0f}s · transcrição {t2 - t1:.0f}s")
+    return 0
+
+
+def _fmt(sec: float) -> str:
+    sec = int(sec)
+    return f"{sec // 3600}:{sec % 3600 // 60:02d}:{sec % 60:02d}" if sec >= 3600 else f"{sec // 60}:{sec % 60:02d}"
+
+
+def _cmd_analyze(args) -> int:
+    settings = load_settings(Path(args.config) if args.config else None)
+    if args.provider:
+        settings.llm.provider = args.provider
+    project = Project.load(Path(args.project))
+    moments = analyze(project, settings, n=args.n, profile=args.profile, on_progress=_progress("analyze"))
+    print()
+    for i, m in enumerate(moments, 1):
+        tag = "IA" if m.get("ai") else "--"
+        print(f"{i:>2}. [{m['score']:>3}] {_fmt(m['start'])}–{_fmt(m['end'])} {tag} {m['reason']}")
+        if m.get("hook"):
+            print(f"       gancho: {m['hook']}")
+    print()
+    print(f"Salvo em {project.path('moments.json')}")
     return 0
 
 
@@ -118,6 +141,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("info", help="mostra o estado de um projeto")
     p.add_argument("project", help="pasta do projeto")
     p.set_defaults(func=_cmd_info)
+
+    p = sub.add_parser("analyze", help="encontra e pontua os melhores momentos de um projeto")
+    p.add_argument("project", help="pasta do projeto")
+    p.add_argument("--config", help="caminho do config.yaml")
+    p.add_argument("--n", type=int, help="quantos momentos (padrão: config)")
+    p.add_argument("--profile", choices=["viral", "monetizacao"])
+    p.add_argument("--provider", choices=["none", "gemini", "anthropic"], help="IA usada na nota")
+    p.set_defaults(func=_cmd_analyze)
 
     p = sub.add_parser("ui", help="abre a interface gráfica")
     p.add_argument("--config", help="caminho do config.yaml")
