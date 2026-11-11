@@ -63,10 +63,27 @@ def test_cli_render(tmp_path, monkeypatch, capsys):
     write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "m1", "start": 0, "end": 3}, {"id": "m2", "start": 5, "end": 9}]})
     seen = {}
 
-    def fake_render_all(project, settings, moments, preview=False, on_progress=None):
+    def fake_render_all(project, settings, moments, preview=False, on_progress=None, captions=None):
         seen.update(ids=[m["id"] for m in moments], preview=preview)
         return [project.path("clips") / f"{m['id']}.mp4" for m in moments]
     monkeypatch.setattr("corteviral.cli.render_all", fake_render_all)
     assert main(["render", str(p.dir), "--config", str(cfg), "--ids", "m2", "--preview"]) == 0
     assert seen == {"ids": ["m2"], "preview": True}
     assert "m2.mp4" in capsys.readouterr().out
+
+
+def test_cli_render_no_captions(tmp_path, monkeypatch, capsys):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.project import Project
+    from corteviral.utils import write_json_atomic
+    cfg = write_cfg(tmp_path)
+    p = Project.create(tmp_path / "projects", "x.mp4", "x")
+    write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "m1", "start": 0, "end": 3}]})
+    seen = {}
+
+    def fake_render_all(project, settings, moments, preview=False, on_progress=None, captions=None):
+        seen["captions"] = captions
+        return []
+    monkeypatch.setattr("corteviral.cli.render_all", fake_render_all)
+    assert main(["render", str(p.dir), "--config", str(cfg), "--no-captions"]) == 0
+    assert seen == {"captions": False}

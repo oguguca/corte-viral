@@ -107,6 +107,20 @@
   .m-actions button.fb { min-width: 38px; }
   .m-actions button.fb.on { border-color: var(--accent); background: #2a2610; }
   .m-actions .sp { flex: 1; }
+  /* legendas */
+  .cap-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; line-height: 1.45; }
+  .cap-form label { margin: 0 0 4px; }
+  .cap-form .f { display: flex; flex-direction: column; }
+  .cap-form input[type=color] { height: 36px; padding: 2px; }
+  .cap-form .chk { display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; color: var(--text); font-size: 13px; }
+  .cap-form .chk input { width: auto; }
+  .m-cap { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .m-cap input { width: auto; }
+  .cap-edit { margin-top: 8px; display: grid; gap: 6px; }
+  .cap-edit textarea { width: 100%; min-height: 64px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                       border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+  .cap-edit .row { justify-content: flex-start; }
+  .cap-edit .row > * { flex: 0 0 auto; }
   /* uso da IA */
   .usage-hero { display: flex; align-items: baseline; gap: 8px; }
   .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -424,6 +438,28 @@ async function openProject(name) {
         <button class="primary" id="lySave" style="width:auto;margin:0">Salvar layout deste streamer</button>
       </div>
       <div class="note" id="lyNote" style="margin-top:6px"></div>
+    </details>
+    <details class="ly" id="capBox">
+      <summary>Legendas <small id="capInfo"></small></summary>
+      <div class="ly-body">
+        <div class="cap-form">
+          <label class="chk"><input type="checkbox" id="capOn"> Legendas ligadas nos clipes (padrão)</label>
+          <div class="f"><label for="capFont">Fonte</label><select id="capFont"></select></div>
+          <div class="f"><label for="capSize">Tamanho <b id="capSizeV"></b></label><input type="range" id="capSize" min="50" max="140" step="2"></div>
+          <div class="f"><label for="capPos">Altura na tela <b id="capPosV"></b></label><input type="range" id="capPos" min="0.11" max="0.75" step="0.01"></div>
+          <div class="f"><label for="capWords">Palavras por vez</label><select id="capWords"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+          <div class="f"><label for="capColor">Cor do texto</label><input type="color" id="capColor"></div>
+          <div class="f"><label for="capHl">Cor da palavra falada</label><input type="color" id="capHl"></div>
+          <label class="chk"><input type="checkbox" id="capUpper"> Tudo em MAIÚSCULAS</label>
+          <label class="chk"><input type="checkbox" id="capPop"> Efeito "pop" na palavra falada</label>
+        </div>
+        <div class="ly-side">
+          <canvas id="capPreview" width="360" height="640" aria-label="Prévia do estilo da legenda"></canvas>
+          <div class="hint">Prévia do estilo. A legenda fica sempre dentro da área segura do TikTok, Shorts e Reels.</div>
+        </div>
+      </div>
+      <div class="ly-controls"><button class="primary" id="capSave" style="width:auto;margin:0">Salvar estilo da legenda</button></div>
+      <div class="note" id="capNote" style="margin-top:6px"></div>
     </details>` : ""}`;
   $("folder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
   words = t ? t.words : [];
@@ -449,11 +485,84 @@ async function openProject(name) {
     };
     loadMoments(name);
     $("lyBox").addEventListener("toggle", () => { if ($("lyBox").open && !lyState) loadLayout(name); });
+    $("capBox").addEventListener("toggle", () => { if ($("capBox").open) fillCapForm(); });
   }
 }
 
 // ---- momentos ------------------------------------------------------------------
 let lastRenderIds = null;
+let capStyle = { enabled: true };
+let capFonts = [];
+
+async function loadCapStyle() {
+  try { const r = await api("/api/caption-style"); capStyle = r.style; capFonts = r.fonts; } catch (e) { /* mantém padrão */ }
+}
+
+function fillCapForm() {
+  const s = capStyle;
+  $("capFont").innerHTML = capFonts.map((f) => `<option ${f === s.font ? "selected" : ""}>${esc(f)}</option>`).join("");
+  $("capOn").checked = s.enabled; $("capSize").value = s.size; $("capPos").value = s.position;
+  $("capWords").value = String(s.max_words); $("capColor").value = s.color; $("capHl").value = s.highlight;
+  $("capUpper").checked = s.uppercase; $("capPop").checked = s.pop;
+  ["capOn", "capFont", "capSize", "capPos", "capWords", "capColor", "capHl", "capUpper", "capPop"].forEach((id) => {
+    $(id).oninput = drawCap; $(id).onchange = drawCap;
+  });
+  $("capSave").onclick = saveCapStyle;
+  $("capInfo").textContent = s.enabled ? "· ligadas por padrão" : "· desligadas por padrão";
+  drawCap();
+}
+
+function capFromForm() {
+  return { ...capStyle, enabled: $("capOn").checked, font: $("capFont").value, size: +$("capSize").value,
+           position: +$("capPos").value, max_words: +$("capWords").value, color: $("capColor").value.toUpperCase(),
+           highlight: $("capHl").value.toUpperCase(), uppercase: $("capUpper").checked, pop: $("capPop").checked };
+}
+
+function drawCap() {
+  const s = capFromForm(), cv = $("capPreview"), g = cv.getContext("2d");
+  const W = cv.width, H = cv.height, k = H / 1920;
+  $("capSizeV").textContent = s.size + " px";
+  $("capPosV").textContent = Math.round(s.position * 100) + "%";
+  const bg = $("lyPreview");
+  if (bg && lyState) g.drawImage(bg, 0, 0, W, H);
+  else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, "#2b3240"); gr.addColorStop(1, "#11141a");
+         g.fillStyle = gr; g.fillRect(0, 0, W, H); }
+  let words = ["olha", "essa", "explosão", "mano"].slice(0, s.max_words);
+  if (s.uppercase) words = words.map((w) => w.toUpperCase());
+  const active = Math.min(1, words.length - 1);
+  g.font = `900 ${Math.round(s.size * k)}px "${s.font}", sans-serif`;
+  g.textBaseline = "middle";
+  g.lineJoin = "round";
+  const space = g.measureText(" ").width, widths = words.map((w) => g.measureText(w).width);
+  const total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  const cx = ((60 + (1080 - 140)) / 2) * k;
+  const y = Math.min(Math.max(s.position * 1920, 210), 1440) * k;
+  let xx = cx - total / 2;
+  words.forEach((w, i) => {
+    g.lineWidth = Math.max(2, 6 * 2 * k * 1.5);
+    g.strokeStyle = "#000";
+    g.strokeText(w, xx, y);
+    g.fillStyle = i === active ? s.highlight : s.color;
+    g.fillText(w, xx, y);
+    xx += widths[i] + space;
+  });
+  g.strokeStyle = "rgba(255,255,255,.25)";
+  g.setLineDash([4, 4]);
+  g.lineWidth = 1;
+  g.strokeRect(60 * k, 210 * k, (1080 - 200) * k, (1440 - 210) * k);
+  g.setLineDash([]);
+}
+
+async function saveCapStyle() {
+  try {
+    const r = await api("/api/caption-style", { method: "PUT", body: JSON.stringify(capFromForm()) });
+    capStyle = r.style;
+    $("capNote").className = "note";
+    $("capNote").textContent = "✓ Estilo salvo. Vale para os próximos clipes gerados (use “Gerar de novo” nos que já existem).";
+    $("capInfo").textContent = capStyle.enabled ? "· ligadas por padrão" : "· desligadas por padrão";
+    if (current) loadMoments(current);
+  } catch (e) { $("capNote").className = "note warn"; $("capNote").textContent = "Não salvou: " + e.message; }
+}
 const CRIT = [["gancho", "Gancho"], ["emocao", "Emoção"], ["visual", "Visual"], ["final", "Final"], ["contexto", "Contexto"]];
 const fbOf = (d, id) => (d.feedback || {})[id] || null;
 let currentMoments = [];
@@ -648,14 +757,44 @@ async function loadMoments(name) {
         <div class="m-actions">
           <button data-render="${esc(m.id)}">${(d.clips || {})[m.id]?.final ? "Gerar de novo" : "Gerar clipe"}</button>
           ${(d.clips || {})[m.id]?.final ? `<button data-watch="${esc(m.id)}">Ver clipe</button>` : ""}
+          <label class="m-cap" title="Liga/desliga a legenda só neste clipe"><input type="checkbox" data-capon="${esc(m.id)}" ${(m.captions ?? capStyle.enabled) ? "checked" : ""}> Legenda</label>
+          <button data-capedit="${esc(m.id)}">Editar legenda</button>
           <span class="sp"></span>
           <button class="fb ${fbOf(d, m.id) === "good" ? "on" : ""}" data-fb="good" data-id="${esc(m.id)}" title="Bom momento — a IA aprende com isso" aria-label="Bom momento" aria-pressed="${fbOf(d, m.id) === "good"}">👍</button>
           <button class="fb ${fbOf(d, m.id) === "bad" ? "on" : ""}" data-fb="bad" data-id="${esc(m.id)}" title="Momento ruim — a IA aprende com isso" aria-label="Momento ruim" aria-pressed="${fbOf(d, m.id) === "bad"}">👎</button>
+        </div>
+        <div class="cap-edit" data-capbox="${esc(m.id)}" hidden>
+          <textarea aria-label="Texto da legenda deste clipe">${esc(m.caption_text || "")}</textarea>
+          <div class="row"><button data-capsave="${esc(m.id)}">Salvar legenda</button>
+            <button data-capreset="${esc(m.id)}">Voltar ao texto original</button>
+            <span class="hint" style="margin:0">Corrija palavras; os tempos são reaproveitados. Depois clique em “Gerar de novo”.</span></div>
         </div>
       </div>
     </li>`).join("");
   ul.querySelectorAll("[data-render]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); startRender(name, [b.dataset.render]); });
   ul.querySelectorAll("[data-watch]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); openClip(name, b.dataset.watch); });
+  const patch = (id, body) => api(`/api/projects/${encodeURIComponent(name)}/moments/${encodeURIComponent(id)}`,
+                                   { method: "PUT", body: JSON.stringify(body) });
+  ul.querySelectorAll("[data-capon]").forEach((c) => {
+    c.onclick = (e) => e.stopPropagation();
+    c.onchange = () => patch(c.dataset.capon, { captions: c.checked }).catch((err) => showJobError(err.message));
+  });
+  ul.querySelectorAll("[data-capedit]").forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    const box = ul.querySelector(`[data-capbox="${CSS.escape(b.dataset.capedit)}"]`);
+    box.hidden = !box.hidden;
+    if (!box.hidden) box.querySelector("textarea").focus();
+  });
+  ul.querySelectorAll(".cap-edit").forEach((box) => box.onclick = (e) => e.stopPropagation());
+  ul.querySelectorAll("[data-capsave]").forEach((b) => b.onclick = async () => {
+    const box = ul.querySelector(`[data-capbox="${CSS.escape(b.dataset.capsave)}"]`);
+    try { await patch(b.dataset.capsave, { caption_text: box.querySelector("textarea").value }); b.textContent = "Salvo ✓"; }
+    catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("[data-capreset]").forEach((b) => b.onclick = async () => {
+    try { await patch(b.dataset.capreset, { reset_caption: true }); await loadMoments(name); }
+    catch (err) { showJobError(err.message); }
+  });
   ul.querySelectorAll("[data-fb]").forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();
     const id = b.dataset.id, label = fbOf(d, id) === b.dataset.fb ? null : b.dataset.fb;  // clicar de novo desmarca
@@ -838,6 +977,7 @@ function drawUsage(series) {
 // ---- inicialização --------------------------------------------------------
 (async () => {
   loadAccounts().catch(() => {});
+  loadCapStyle();
   loadUsage();
   setInterval(loadUsage, 15000);
   $("clipClose").onclick = closeClip;

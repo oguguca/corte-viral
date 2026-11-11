@@ -22,6 +22,9 @@ from corteviral.browser_session import (BrowserSessionError, edge_path, export_c
                                         open_login_window, profile_in_use)
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
+from corteviral.models import Transcript
+from corteviral.caption_style import load_style, realign, save_style
+from corteviral.config import CaptionStyle
 from corteviral.feedback import FeedbackStore
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
@@ -50,6 +53,7 @@ class JobRequest(BaseModel):
     ids: list[str] | None = None    # render
     preview: bool = False           # render
     force: bool = False             # analyze: ignora o cache e reavalia
+    captions: bool | None = None    # render: força legendas ligadas/desligadas
     profile: Literal["viral", "monetizacao"] | None = None
     provider: Literal["none", "gemini", "anthropic"] | None = None
     model: str | None = None
@@ -64,6 +68,24 @@ class JobRequest(BaseModel):
         if self.kind in ("analyze", "render") and not self.project:
             raise ValueError("project é obrigatório para analyze/render")
         return self
+
+
+class MomentPatch(BaseModel):
+    captions: bool | None = None
+    caption_text: str | None = Field(default=None, max_length=2000)
+    reset_caption: bool = False
+
+
+FONT_FILES = {"Arial Black": "ariblk.ttf", "Impact": "impact.ttf", "Segoe UI Black": "seguibl.ttf",
+              "Verdana": "verdanab.ttf", "Bahnschrift": "bahnschrift.ttf", "Trebuchet MS": "trebucbd.ttf",
+              "Tahoma": "tahomabd.ttf"}
+_MOMENTS_LOCK = threading.Lock()
+
+
+def available_fonts() -> list[str]:
+    fonts_dir = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+    found = [name for name, f in FONT_FILES.items() if (fonts_dir / f).exists()]
+    return found or ["Arial Black"]
 
 
 class FeedbackBody(BaseModel):
@@ -154,7 +176,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 chosen = [m for m in saved["moments"] if not req.ids or m["id"] in req.ids]
                 if not chosen:
                     raise FileNotFoundError("nenhum momento para renderizar: rode \"Encontrar momentos\" antes")
-                render_all(project, s, chosen, preview=req.preview,
+                render_all(project, s, chosen, preview=req.preview, captions=req.captions,
                            on_progress=lambda f, m: progress("render", f, m))
             elif req.kind == "analyze":
                 project = Project.load(_project_dir(req.project))
@@ -242,7 +264,48 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 clips[m["id"]] = {"final": final.exists(), "preview": prev.exists()}
         data["clips"] = clips
         data["feedback"] = feedback.labels(name)
+        for m in data["moments"]:
+            cw = m.get("caption_words")
+            m["caption_text"] = " ".join(w["w"] for w in cw) if cw is not None else m.get("text", "")
         return data
+
+    @app.put("/api/projects/{name}/moments/{moment_id}")
+    def patch_moment(name: str, moment_id: str, body: MomentPatch):
+        from corteviral.pipeline.analyze import MOMENTS
+        from corteviral.utils import write_json_atomic
+        project = Project.load(_project_dir(name))
+        with _MOMENTS_LOCK:
+            data = load_moments(project) or {}
+            targets = [m for m in data.get("moments", []) + data.get("all", []) if m["id"] == moment_id]
+            if not targets:
+                raise HTTPException(404, "momento não encontrado")
+            m0 = targets[0]
+            words = None
+            if body.caption_text is not None:
+                tpath = project.path("transcript.json")
+                original = []
+                if tpath.exists():
+                    original = [{"w": w.w, "start": w.start, "end": w.end}
+                                for w in Transcript.load(tpath).words if m0["start"] <= w.start < m0["end"]]
+                words = realign(original, body.caption_text)
+            for m in targets:
+                if body.captions is not None:
+                    m["captions"] = body.captions
+                if words is not None:
+                    m["caption_words"] = words
+                if body.reset_caption:
+                    m.pop("caption_words", None)
+            write_json_atomic(project.path(MOMENTS), data)
+        return {"ok": True, "moment": targets[0]}
+
+    @app.get("/api/caption-style")
+    def get_caption_style():
+        return {"style": load_style(settings).model_dump(), "fonts": available_fonts()}
+
+    @app.put("/api/caption-style")
+    def put_caption_style(style: CaptionStyle):
+        save_style(settings, style)
+        return {"ok": True, "style": style.model_dump()}
 
     @app.post("/api/projects/{name}/moments/{moment_id}/feedback")
     def post_feedback(name: str, moment_id: str, body: FeedbackBody):

@@ -34,3 +34,15 @@ deep:                       # a IA assiste o vídeo dos melhores candidatos (Gem
   margin: 15                # segundos de folga antes/depois do momento
   weights: {gancho: 0.25, emocao: 0.25, visual: 0.15, final: 0.20, contexto: 0.15}
   max_examples: 6           # exemplos 👍/👎 usados para calibrar
+
+captions:                   # legendas animadas (também ajustáveis na interface)
+  enabled: true
+  font: Arial Black         # Arial Black | Impact | Segoe UI Black | Verdana | Bahnschrift
+  size: 90                  # px num vídeo 1080x1920
+  color: "#FFFFFF"
+  highlight: "#FFE600"      # cor da palavra falada
+  outline: 6
+  uppercase: true
+  max_words: 3              # palavras por vez
+  position: 0.70            # altura do centro da legenda (fração da tela)
+  pop: true

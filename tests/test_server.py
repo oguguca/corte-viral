@@ -332,3 +332,63 @@ def test_api_analyze_force_recomputes(settings_tmp):
     c = TestClient(create_app(settings_tmp, analyzer=fake_analyze))
     _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "force": True}).json()["id"])
     assert seen == [False]
+
+
+def test_api_caption_style_roundtrip_and_validation(settings_tmp):
+    c = TestClient(create_app(settings_tmp))
+    s = c.get("/api/caption-style").json()
+    assert s["style"]["font"] == "Arial Black" and "Arial Black" in s["fonts"]
+    new = {**s["style"], "highlight": "#00FF00", "size": 100}
+    assert c.put("/api/caption-style", json=new).status_code == 200
+    assert c.get("/api/caption-style").json()["style"]["highlight"] == "#00FF00"
+    assert c.put("/api/caption-style", json={**new, "highlight": "verde"}).status_code == 422
+
+
+def _captioned_project(settings_tmp):
+    from corteviral.models import Segment, Transcript, Word
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    p = Project.create(settings_tmp.paths.projects_dir, "x.mp4", "X")
+    Transcript(language="pt", duration=60, model="t", device="cpu", segments=[Segment(start=0, end=60, text="x")],
+               words=[Word(w="olha", start=10.0, end=10.4, p=1), Word(w="iso", start=10.5, end=10.9, p=1),
+                      Word(w="aqui", start=11.0, end=11.5, p=1)]).save(p.path("transcript.json"))
+    m = {"id": "m1", "start": 9.0, "end": 30.0, "score": 80, "reason": "r", "ai": True, "text": "olha iso aqui"}
+    write_json_atomic(p.path(MOMENTS), {"profile": "viral", "moments": [m], "all": [dict(m)]})
+    return p
+
+
+def test_api_moment_caption_toggle_and_text(settings_tmp):
+    from corteviral.pipeline.analyze import load_moments
+    p = _captioned_project(settings_tmp)
+    c = TestClient(create_app(settings_tmp))
+    r = c.put(f"/api/projects/{p.dir.name}/moments/m1", json={"captions": False})
+    assert r.status_code == 200 and load_moments(p)["moments"][0]["captions"] is False
+    r = c.put(f"/api/projects/{p.dir.name}/moments/m1", json={"caption_text": "olha isso aqui"})
+    words = load_moments(p)["moments"][0]["caption_words"]
+    assert [w["w"] for w in words] == ["olha", "isso", "aqui"] and words[1]["start"] == 10.5
+    assert load_moments(p)["all"][0]["caption_words"] == words  # mantém "all" em sincronia
+    m = c.get(f"/api/projects/{p.dir.name}/moments").json()["moments"][0]
+    assert m["caption_text"] == "olha isso aqui"
+    c.put(f"/api/projects/{p.dir.name}/moments/m1", json={"reset_caption": True})
+    assert "caption_words" not in load_moments(p)["moments"][0]
+    assert c.put(f"/api/projects/{p.dir.name}/moments/zz", json={"captions": True}).status_code == 404
+
+
+def test_api_render_job_captions_flag(settings_tmp):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    import corteviral.server.app as appmod
+    p = _captioned_project(settings_tmp)
+    seen = {}
+    real = appmod.render_all
+
+    def fake(project, settings, moments, preview=False, on_progress=None, captions=None):
+        seen["captions"] = captions
+        return []
+    appmod.render_all = fake
+    try:
+        c = TestClient(create_app(settings_tmp))
+        _wait(c, c.post("/api/jobs", json={"kind": "render", "project": p.dir.name, "captions": False}).json()["id"])
+    finally:
+        appmod.render_all = real
+    assert seen == {"captions": False}

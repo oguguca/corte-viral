@@ -101,7 +101,8 @@ def _cmd_render(args) -> int:
         return 1
     ids = set(args.ids.split(",")) if args.ids else None
     chosen = [m for m in saved["moments"] if not ids or m["id"] in ids]
-    outs = render_all(project, settings, chosen, preview=args.preview, on_progress=_progress("render"))
+    outs = render_all(project, settings, chosen, preview=args.preview, on_progress=_progress("render"),
+                      captions=args.captions)
     print()
     for o in outs:
         print(f"  {o}")
@@ -193,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--config", help="caminho do config.yaml")
     p.add_argument("--ids", help="só estes momentos (ex.: m00012,m01618)")
     p.add_argument("--preview", action="store_true", help="prévia rápida 540x960")
+    p.add_argument("--captions", dest="captions", action="store_true", default=None, help="força legendas")
+    p.add_argument("--no-captions", dest="captions", action="store_false", help="sem legendas")
     p.set_defaults(func=_cmd_render)
 
     p = sub.add_parser("ui", help="abre a interface gráfica")

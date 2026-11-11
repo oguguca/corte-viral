@@ -4,8 +4,8 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** Fases 1–3 concluídas (download, transcrição, melhores momentos e clipes verticais 9:16).
-> Próxima: Fase 4 — legendas animadas.
+> **Status:** Fases 1–4 concluídas (download, transcrição, melhores momentos, clipes verticais 9:16 e legendas animadas).
+> Próxima: Fase 5 — título, descrição, hashtags, gancho e exportação em lote.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
 Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum.
@@ -103,6 +103,18 @@ Abra **Layout do vertical** para conferir o recorte:
 
 Codificação: tenta a GPU (NVENC) e cai para a CPU (libx264) se não der. Placas da linha
 Pascal (GTX 10xx) com driver 58x não rodam o NVENC do FFmpeg 9 (exige driver ≥ 610).
+
+### Legendas animadas
+
+Os clipes saem com legenda no estilo TikTok: 1 a 3 palavras por vez, a palavra falada
+destacada em amarelo com um "pop", contorno preto e sempre dentro da área segura das
+plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
+
+- **Legendas** (no projeto): liga/desliga padrão, fonte (Arial Black, Impact, Segoe UI
+  Black…), tamanho, altura na tela, palavras por vez, cores e maiúsculas — com prévia.
+- Em cada momento: chave **Legenda** (só aquele clipe) e **Editar legenda** para corrigir
+  palavras que a transcrição errou (os tempos são reaproveitados). Depois, **Gerar de novo**.
+- Linha de comando: `render ... --no-captions` / `--captions`.
 
 ### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
 
