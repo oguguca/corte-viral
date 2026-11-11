@@ -88,3 +88,21 @@ def test_review_prompt_has_calibration_anchors():
     from corteviral.llm import _review_prompt
     text = _review_prompt({"profile": "viral", "transcript": "x", "window": [0, 60], "examples": []})
     assert "Calibração" in text and "90" in text and "50" in text
+
+
+def test_review_values_out_of_range_are_clamped(monkeypatch):
+    r = dict(REVIEW, visual=101, gancho=-5, final=77.6)
+    monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", lambda req, timeout: _Resp(json.dumps(
+        {"candidates": [{"content": {"parts": [{"text": json.dumps(r)}]}}]}).encode()))
+    out = GeminiClient("k", "m", 5).review_video(b"x", {"profile": "viral", "transcript": "", "window": [0, 1], "examples": []})
+    assert out["visual"] == 100 and out["gancho"] == 0 and out["final"] == 78
+
+
+def test_make_client_deep_model_override(monkeypatch, tmp_path):
+    from corteviral.config import Settings
+    from corteviral.llm import make_client
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    s = Settings()
+    s.paths.data_dir = tmp_path
+    assert make_client(s, model="gemini-3.5-flash").model == "gemini-3.5-flash"
+    assert make_client(s).model == "gemini-3.5-flash-lite"

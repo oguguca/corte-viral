@@ -17,7 +17,7 @@ from corteviral.pipeline.deep_review import deep_review
 from corteviral.pipeline.scoring import score_candidates
 from corteviral.pipeline.signals import compute_signals, signals_params
 from corteviral.project import Project
-from corteviral.utils import write_json_atomic
+from corteviral.utils import params_hash, write_json_atomic
 
 ProgressFn = Callable[[float, str], None]
 MOMENTS = "moments.json"
@@ -44,6 +44,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
               "signals": signals_params(project, s),
               "deep": s.deep.model_dump() if provider == "gemini" else None}
     saved = load_moments(project)
+    key = params_hash(params)
     if project.is_stage_done("scoring", params) and saved and "all" in saved:
         # mudar só a quantidade não precisa da IA: refaz a seleção sobre tudo que já foi pontuado
         if saved.get("n") != n:
@@ -53,38 +54,49 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
         prog(1.0, "momentos já calculados")
         return saved["moments"]
 
-    prog(0.02, "lendo sinais (áudio, reações, chat)")
-    signals = compute_signals(project, s)
     transcript = Transcript.load(project.path("transcript.json"))
-    prog(0.15, "procurando candidatos")
-    candidates = find_candidates(signals, transcript, s)
-
     llm = make_client(s) if client is _AUTO else client
-    moments, stats = score_candidates(
-        candidates, s, llm, has_chat=signals.chat is not None, language=transcript.language,
-        on_progress=lambda f, m: prog(0.2 + 0.4 * f, m))
-
-    prog(0.92, "ajustando início e fim")
-    lo, hi = PROFILE_RANGES[s.analysis.profile]
-    for m in moments:
-        m["start"], m["end"] = snap_bounds(m["start"], m["end"], transcript, lo, hi)
-        m["text"] = " ".join(w.w for w in transcript.words if m["start"] <= w.start < m["end"])
+    resume = (saved and saved.get("params_hash") == key and saved.get("all") and not saved.get("complete")
+              and not saved["stats"].get("rate_limited") and not saved["stats"].get("errors") and llm is not None)
+    if resume:
+        # execução anterior parou no meio da etapa de vídeo: reaproveita triagem e o que já foi assistido
+        prog(0.6, "retomando de onde parou")
+        moments, stats = saved["all"], {k: v for k, v in saved["stats"].items() if k != "deep"}
+        has_chat, n_candidates = saved.get("has_chat", False), saved.get("candidates", len(moments))
+    else:
+        prog(0.02, "lendo sinais (áudio, reações, chat)")
+        signals = compute_signals(project, s)
+        prog(0.15, "procurando candidatos")
+        candidates = find_candidates(signals, transcript, s)
+        moments, stats = score_candidates(
+            candidates, s, llm, has_chat=signals.chat is not None, language=transcript.language,
+            on_progress=lambda f, m: prog(0.2 + 0.4 * f, m))
+        has_chat, n_candidates = signals.chat is not None, len(candidates)
+        prog(0.61, "ajustando início e fim")
+        lo, hi = PROFILE_RANGES[s.analysis.profile]
+        for m in moments:
+            m["start"], m["end"] = snap_bounds(m["start"], m["end"], transcript, lo, hi)
+            m["text"] = " ".join(w.w for w in transcript.words if m["start"] <= w.start < m["end"])
 
     # etapa 2: a IA assiste os melhores candidatos (só quando o provedor tem visão)
     if examples is None:
         examples = FeedbackStore(Path(s.paths.data_dir) / "feedback.json").examples(
             project.data.get("streamer"), s.deep.max_examples)
-    moments, deep_stats = deep_review(project, moments, transcript, s, llm, examples=examples,
+    vision = None if stats["rate_limited"] else llm
+    if vision is not None and provider == "gemini" and s.deep.model and client is _AUTO:
+        vision = make_client(s, model=s.deep.model)
+    moments, deep_stats = deep_review(project, moments, transcript, s, vision, examples=examples,
                                       on_progress=lambda f, m: prog(0.62 + 0.33 * f, m))
     stats["deep"] = deep_stats
-    chosen = select(moments, n)
+    watched = any(m.get("ai") == "video" for m in moments)
+    chosen = select(moments, n, priority=(lambda m: m.get("ai") == "video") if watched else None)
 
     # Só vira cache se a IA avaliou tudo que devia: senão a próxima execução tenta de novo
     complete = provider == "none" or (llm is not None and not stats["rate_limited"] and not stats["errors"]
                                       and not deep_stats["rate_limited"] and not deep_stats["errors"])
     write_json_atomic(project.path(MOMENTS), {
         "created_at": time.time(), "profile": s.analysis.profile, "n": n, "provider": provider,
-        "model": model, "has_chat": signals.chat is not None, "candidates": len(candidates),
+        "model": model, "has_chat": has_chat, "candidates": n_candidates, "params_hash": key,
         "stats": stats, "complete": complete, "ai_missing": provider != "none" and llm is None,
         "moments": chosen, "all": moments,
     })

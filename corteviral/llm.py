@@ -69,7 +69,8 @@ REVIEW_SCHEMA = {
     "required": ["descricao", "motivo", "risco", *CRITERIA, "inicio", "fim"],
 }
 REVIEW_INSTRUCTIONS = """Você é editor de cortes virais de lives de games (principalmente GTA), em português do Brasil.
-ASSISTA e OUÇA o vídeo anexo (um trecho de live com {pre:.0f} s de folga antes e depois do momento escolhido) e
+ASSISTA e OUÇA o vídeo anexo (um trecho de live: o momento escolhido começa em {pre:.0f} s e termina
+{post:.0f} s antes do fim do vídeo) e
 avalie o potencial de virar um clipe curto viral (TikTok, Shorts, Reels). Perfil "{profile}": {profile_hint}
 
 Calibração (use a escala inteira e diferencie os trechos entre si):
@@ -98,7 +99,8 @@ Transcrição do trecho (pode ter erros):
 def _review_prompt(ctx: dict) -> str:
     w0, w1 = ctx.get("window", [0, 0])
     text = REVIEW_INSTRUCTIONS.format(
-        pre=ctx.get("margin", 15), profile=ctx.get("profile", "viral"),
+        pre=ctx.get("pre", ctx.get("margin", 15)), post=ctx.get("post", ctx.get("margin", 15)),
+        profile=ctx.get("profile", "viral"),
         profile_hint=PROFILE_HINTS.get(ctx.get("profile", "viral"), ""),
         streamer=ctx.get("streamer") or "desconhecido", transcript=(ctx.get("transcript") or "")[:4000])
     examples = ctx.get("examples") or []
@@ -108,6 +110,16 @@ def _review_prompt(ctx: dict) -> str:
         text += ("\nGosto do usuário (exemplos que ele já avaliou; use para calibrar as notas):\n"
                  + "\n".join(lines) + "\n")
     return text + f"\nDuração deste vídeo: {w1 - w0:.0f} s."
+
+
+def _clamp_review(d):
+    """Modelos pequenos às vezes devolvem 101 ou 77.6: ajusta para inteiro 0–100 em vez de descartar."""
+    if isinstance(d, dict):
+        for c in CRITERIA:
+            v = d.get(c)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                d[c] = int(round(min(100.0, max(0.0, float(v)))))
+    return d
 
 
 def _valid_review(d) -> bool:
@@ -176,7 +188,7 @@ class GeminiClient:
                 "mediaResolution": "MEDIA_RESOLUTION_LOW", "temperature": 0.2,
             },
         }
-        data = self._post(body)
+        data = _clamp_review(self._post(body))
         if not _valid_review(data):
             raise LLMError("revisão em vídeo veio incompleta")
         return data
@@ -274,13 +286,13 @@ def _key(name: str, env_file: Path) -> str:
     return (os.environ.get(name) or dotenv_values(env_file).get(name) or "").strip()
 
 
-def make_client(settings: Settings, env_file: Path = Path(".env")) -> LLMClient | None:
+def make_client(settings: Settings, env_file: Path = Path(".env"), model: str | None = None) -> LLMClient | None:
     """Cliente do provedor configurado; None se for 'none' ou se faltar a chave (com aviso)."""
     cfg = settings.llm
     if cfg.provider == "none":
         return None
     tracker = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
-    model = cfg.model or DEFAULT_MODELS[cfg.provider]
+    model = model or cfg.model or DEFAULT_MODELS[cfg.provider]
     if cfg.provider == "gemini":
         key = _key("GEMINI_API_KEY", env_file)
         if not key:

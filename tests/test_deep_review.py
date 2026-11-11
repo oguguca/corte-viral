@@ -84,6 +84,7 @@ def test_only_top_k_are_reviewed(settings_tmp, sample_video):
 
 def test_quota_midway_keeps_triage_for_rest(settings_tmp, sample_video):
     settings_tmp.deep.top_k = 4
+    settings_tmp.deep.workers = 1  # sequencial: contagem de chamadas determinística
     vis = FakeVision(fail_at=1)
     out, stats = deep_review(_proj(settings_tmp, sample_video), _moments(4), _sentences(8.0), settings_tmp, vis)
     assert stats["video"] == 1 and stats["rate_limited"] is True
@@ -117,3 +118,88 @@ def test_analyze_runs_deep_stage_and_marks_ai_video(settings_tmp, monkeypatch, s
     assert any(m["ai"] == "video" for m in ms)
     d = load_moments(p)
     assert d["stats"]["deep"]["video"] >= 1
+
+
+def test_already_watched_moments_are_not_reviewed_again(settings_tmp, sample_video):
+    settings_tmp.deep.top_k = 3
+    ms = _moments(3)
+    ms[2] = {**ms[2], "ai": "video", "criteria": {"gancho": 1}}
+    vis = FakeVision()
+    out, stats = deep_review(_proj(settings_tmp, sample_video), ms, _sentences(8.0), settings_tmp, vis)
+    assert len(vis.calls) == 2 and stats["video"] == 3
+
+
+def test_invalid_response_is_retried_once(settings_tmp, sample_video):
+    from corteviral.llm import LLMError
+
+    class Flaky(FakeVision):
+        def review_video(self, video_bytes, context):
+            self.calls.append(1)
+            if len(self.calls) == 1:
+                raise LLMError("revisão em vídeo veio incompleta")
+            return _review()
+
+    settings_tmp.deep.top_k = 1
+    vis = Flaky()
+    out, stats = deep_review(_proj(settings_tmp, sample_video), _moments(1), _sentences(8.0), settings_tmp, vis)
+    assert stats["video"] == 1 and stats["errors"] == 0 and len(vis.calls) == 2
+
+
+def test_parallel_reviews_all_complete(settings_tmp, sample_video):
+    import threading
+    settings_tmp.deep.top_k = 6
+    settings_tmp.deep.workers = 3
+    seen_threads = set()
+
+    class Tracking(FakeVision):
+        def review_video(self, video_bytes, context):
+            seen_threads.add(threading.get_ident())
+            return super().review_video(video_bytes, context)
+
+    out, stats = deep_review(_proj(settings_tmp, sample_video), _moments(6), _sentences(8.0), settings_tmp, Tracking())
+    assert stats["video"] == 6 and sum(m["ai"] == "video" for m in out) == 6
+
+
+def test_missing_video_skips_stage_cleanly(settings_tmp, sample_video):
+    p = _proj(settings_tmp, sample_video)
+    p.data["video_path"] = str(sample_video) + ".sumiu"
+    out, stats = deep_review(p, _moments(2), _sentences(8.0), settings_tmp, FakeVision())
+    assert stats["skipped"] is True and stats.get("reason") and all(m["ai"] is True for m in out)
+
+
+def test_mini_clips_are_cleaned_up(settings_tmp, sample_video):
+    p = _proj(settings_tmp, sample_video)
+    settings_tmp.deep.top_k = 2
+    deep_review(p, _moments(2), _sentences(8.0), settings_tmp, FakeVision())
+    assert not list(p.path("deep").glob("*.mp4"))
+
+
+def test_partial_deep_run_resumes_without_redoing(settings_tmp, monkeypatch, sample_video):
+    from tests.test_analyze import make_project
+    from corteviral.pipeline.analyze import analyze, load_moments
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    monkeypatch.setattr("corteviral.pipeline.deep_review.make_mini_clip",
+                        lambda video, s, e, out: (out.parent.mkdir(parents=True, exist_ok=True), out.write_bytes(b"mp4"))[1] and out)
+    settings_tmp.deep.top_k = 3
+    settings_tmp.deep.workers = 1
+    p = make_project(settings_tmp, seconds=400, loud_at=200)
+    p.data["video_path"] = str(sample_video)
+    p.save()
+
+    class Both(FakeVision):
+        def __init__(self, fail_at=None):
+            super().__init__(fail_at)
+            self.triage = 0
+
+        def score(self, items, profile, language):
+            self.triage += 1
+            return [{"id": it["id"], "score": 60, "reason": "ok", "hook": "h", "standalone": True} for it in items]
+
+    first = Both(fail_at=1)
+    analyze(p, settings_tmp, n=3, client=first)
+    assert load_moments(p)["complete"] is False
+    second = Both()
+    analyze(p, settings_tmp, n=3, client=second)
+    assert second.triage == 0                      # triagem reaproveitada
+    assert len(second.calls) == 2                  # só os que faltavam assistir
+    assert load_moments(p)["complete"] is True

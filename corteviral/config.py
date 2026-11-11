@@ -67,6 +67,7 @@ class DeepSettings(_Strict):
     weights: dict[str, float] = Field(default_factory=lambda: {
         "gancho": 0.25, "emocao": 0.25, "visual": 0.15, "final": 0.20, "contexto": 0.15})
     max_examples: int = 6
+    workers: int = 3              # trechos assistidos em paralelo
 
 
 class RenderSettings(_Strict):

@@ -64,10 +64,10 @@ def _overlap(a: dict, b: dict) -> float:
     return inter / shorter
 
 
-def select(moments: list[dict], n: int, max_overlap: float = 0.3) -> list[dict]:
-    """Os N de maior nota, sem sobreposição relevante entre eles."""
+def select(moments: list[dict], n: int, max_overlap: float = 0.3, priority=None) -> list[dict]:
+    """Os N de maior nota, sem sobreposição relevante; `priority(m)` verdadeiro vem antes (ex.: assistidos)."""
     out: list[dict] = []
-    for m in sorted(moments, key=lambda m: -m["score"]):
+    for m in sorted(moments, key=lambda m: (not priority(m) if priority else False, -m["score"])):
         if len(out) >= n:
             break
         if all(_overlap(m, o) <= max_overlap for o in out):

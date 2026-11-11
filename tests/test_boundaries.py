@@ -55,3 +55,10 @@ def test_select_drops_overlapping_lower_score():
     out = select(ms, n=10)
     assert [m["id"] for m in out] == ["a", "c", "d"]
     assert [m["id"] for m in select(ms, n=2)] == ["a", "c"]
+
+
+def test_select_with_priority_ranks_watched_first():
+    ms = [{"id": "w", "start": 0, "end": 20, "score": 48, "ai": "video"},
+          {"id": "u", "start": 100, "end": 120, "score": 55, "ai": True}]
+    out = select(ms, n=2, priority=lambda m: m.get("ai") == "video")
+    assert [m["id"] for m in out] == ["w", "u"]

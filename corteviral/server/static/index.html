@@ -436,7 +436,10 @@ async function openProject(name) {
   $("q").oninput = (e) => search(e.target.value);
   if (t) {
     $("aStart").onclick = () => startAnalyze(name);
-    $("aForce").onclick = () => startAnalyze(name, true);
+    $("aForce").onclick = () => {
+      if (confirm("Reavaliar do zero refaz toda a análise, incluindo a IA assistindo os vídeos. " +
+                  "Leva alguns minutos e gasta cerca de 120 mil tokens da cota grátis. Continuar?")) startAnalyze(name, true);
+    };
     $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
     $("rAll").onclick = () => {
       const n = Math.max(1, parseInt($("rN").value, 10) || 1);
@@ -620,9 +623,11 @@ async function loadMoments(name) {
                  dv.video ? `IA assistiu ${dv.video}` : null,
                  d.provider === "none" ? "sem IA" : `IA avaliou ${s.ai ?? 0}`,
                  d.has_chat ? "com chat" : "sem chat"];
-  note.className = "note" + (s.rate_limited || s.errors ? " warn" : "");
+  note.className = "note" + (s.rate_limited || s.errors || dv.rate_limited || dv.errors ? " warn" : "");
   note.textContent = parts.filter(Boolean).join(" · ")
-                     + (dv.rate_limited ? " · ⚠ cota acabou durante a revisão em vídeo" : "") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
+                     + (dv.rate_limited ? " · ⚠ cota acabou durante a revisão em vídeo" : "")
+                     + (dv.errors ? ` · ⚠ IA não conseguiu assistir ${dv.errors} trecho(s)` : "")
+                     + (dv.skipped && dv.reason && d.provider === "gemini" ? ` · vídeo não assistido: ${dv.reason}` : "") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
                      : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais`
                      : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
                      + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");

@@ -57,3 +57,11 @@ def test_analyze_uses_saved_feedback_as_examples(settings_tmp, monkeypatch, samp
     FeedbackStore(settings_tmp.paths.data_dir / "feedback.json").add("x", "Flow", _m(1), "good")
     analyze(p, settings_tmp, n=3)
     assert seen["examples"] and seen["examples"][0]["streamer"] == "Flow"
+
+
+def test_examples_zero_disables_and_odd_k(tmp_path):
+    fb = FeedbackStore(tmp_path / "feedback.json")
+    for i in range(4):
+        fb.add("p", "Flow", _m(i), "good" if i % 2 else "bad")
+    assert fb.examples("Flow", k=0) == []
+    assert len(fb.examples("Flow", k=3)) == 3

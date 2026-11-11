@@ -42,8 +42,9 @@ class FeedbackStore:
 
     def examples(self, streamer: str | None, k: int = 6) -> list[dict]:
         """Até k exemplos (metade bons, metade ruins); mesmo streamer primeiro, mais recentes primeiro."""
+        if k <= 0:
+            return []
         items = sorted(self._load(), key=lambda e: (e["streamer"] != (streamer or ""), -e["ts"]))
-        half = max(1, k // 2)
-        good = [e for e in items if e["label"] == "good"][:half]
-        bad = [e for e in items if e["label"] == "bad"][:half]
-        return good + bad
+        good = [e for e in items if e["label"] == "good"]
+        bad = [e for e in items if e["label"] == "bad"]
+        return good[:(k + 1) // 2] + bad[:k // 2]  # equilibrado: metade bons, metade ruins
