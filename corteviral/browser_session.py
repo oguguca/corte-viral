@@ -28,6 +28,9 @@ _PLATFORM_LOGIN = {
 }
 
 
+PORT_FILE = "corteviral-debug-port"
+
+
 class BrowserSessionError(Exception):
     pass
 
@@ -81,18 +84,39 @@ def profile_in_use(profile_dir: Path) -> bool:
 
 
 def open_login_window(profile_dir: Path) -> None:
+    """Abre a janela de login com porta de depuração, para ler a sessão mesmo com ela aberta.
+
+    O caminho do perfil precisa ser absoluto: o Edge não resolve caminhos relativos a partir da
+    pasta do app (e cai no perfil padrão do usuário).
+    """
     edge = edge_path()
     if not edge:
         raise BrowserSessionError("Microsoft Edge não encontrado")
-    Path(profile_dir).mkdir(parents=True, exist_ok=True)
-    subprocess.Popen([str(edge), f"--user-data-dir={profile_dir}", "--no-first-run",
-                      "--no-default-browser-check", "--new-window", *LOGIN_URLS])
+    profile_dir = Path(profile_dir).resolve()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    port = _free_port()
+    (profile_dir / PORT_FILE).write_text(str(port))
+    subprocess.Popen([str(edge), f"--user-data-dir={profile_dir}", f"--remote-debugging-port={port}",
+                      "--no-first-run", "--no-default-browser-check", "--new-window", *LOGIN_URLS])
 
 
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def _ws_url(port: int, timeout: float) -> str | None:
+    """URL do WebSocket de depuração do Edge na porta dada (None se não responder a tempo)."""
+    end = time.time() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=2) as r:
+                return json.load(r)["webSocketDebuggerUrl"]
+        except (OSError, ValueError, KeyError):
+            if time.time() >= end:
+                return None
+            time.sleep(0.3)
 
 
 def _cdp_get_cookies(ws_url: str) -> list[dict]:
@@ -111,15 +135,31 @@ def _cdp_get_cookies(ws_url: str) -> list[dict]:
         ws.close()
 
 
+def _write(cookies: list[dict], out_file: Path) -> dict:
+    out_file = Path(out_file)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(to_netscape(cookies), encoding="utf-8")
+    return {"count": len(cookies), "platforms": logged_platforms(cookies)}
+
+
 def export_cookies(profile_dir: Path, out_file: Path, timeout: float = 20) -> dict:
-    """Abre o perfil do app invisível, lê os cookies via CDP e grava cookies.txt."""
+    """Lê os cookies do perfil do app via CDP e grava cookies.txt.
+
+    Janela de login aberta → lê dela (porta salva). Fechada → abre o perfil invisível e lê.
+    """
     edge = edge_path()
     if not edge:
         raise BrowserSessionError("Microsoft Edge não encontrado")
-    if not Path(profile_dir).exists():
+    profile_dir = Path(profile_dir).resolve()
+    if not profile_dir.exists():
         raise BrowserSessionError("nenhuma conta conectada: clique em \"Conectar contas\"")
+
     if profile_in_use(profile_dir):
-        raise BrowserSessionError("feche a janela de login (Edge) antes de continuar")
+        port_file = profile_dir / PORT_FILE
+        ws = _ws_url(int(port_file.read_text()), timeout=3) if port_file.exists() else None
+        if not ws:
+            raise BrowserSessionError("feche a janela de login (Edge) antes de continuar")
+        return _write(_cdp_get_cookies(ws), out_file)
 
     port = _free_port()
     proc = subprocess.Popen(
@@ -128,25 +168,14 @@ def export_cookies(profile_dir: Path, out_file: Path, timeout: float = 20) -> di
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:
-        ws_url = None
-        end = time.time() + timeout
-        while time.time() < end and ws_url is None:
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=2) as r:
-                    ws_url = json.load(r)["webSocketDebuggerUrl"]
-            except OSError:
-                time.sleep(0.3)
-        if not ws_url:
+        ws = _ws_url(port, timeout)
+        if not ws:
             raise BrowserSessionError("não consegui abrir o Edge em segundo plano para ler a sessão")
-        cookies = _cdp_get_cookies(ws_url)
+        cookies = _cdp_get_cookies(ws)
     finally:
         proc.terminate()
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
-
-    out_file = Path(out_file)
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    out_file.write_text(to_netscape(cookies), encoding="utf-8")
-    return {"count": len(cookies), "platforms": logged_platforms(cookies)}
+    return _write(cookies, out_file)

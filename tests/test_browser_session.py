@@ -30,3 +30,36 @@ def test_logged_platforms():
              "expires": 1900000000, "session": False}]
     assert logged_platforms(kick) == ["kick"]
     assert logged_platforms([]) == []
+
+
+def test_open_login_window_uses_absolute_profile_and_debug_port(tmp_path, monkeypatch):
+    from pathlib import Path
+    import corteviral.browser_session as bs
+    launched = []
+    monkeypatch.setattr(bs, "edge_path", lambda: Path("C:/edge/msedge.exe"))
+    monkeypatch.setattr(bs.subprocess, "Popen", lambda args, **kw: launched.append(args))
+    monkeypatch.chdir(tmp_path)
+    bs.open_login_window(Path("data/session-profile"))
+    args = launched[0]
+    udd = next(a for a in args if a.startswith("--user-data-dir="))
+    assert Path(udd.split("=", 1)[1]).is_absolute()
+    assert Path(udd.split("=", 1)[1]) == (tmp_path / "data" / "session-profile")
+    port_arg = next(a for a in args if a.startswith("--remote-debugging-port="))
+    port = int(port_arg.split("=")[1])
+    assert (tmp_path / "data" / "session-profile" / bs.PORT_FILE).read_text() == str(port)
+
+
+def test_export_reads_from_open_login_window(tmp_path, monkeypatch):
+    import corteviral.browser_session as bs
+    profile = tmp_path / "p"
+    profile.mkdir()
+    (profile / bs.PORT_FILE).write_text("5555")
+    monkeypatch.setattr(bs, "edge_path", lambda: tmp_path / "msedge.exe")
+    monkeypatch.setattr(bs, "profile_in_use", lambda p: True)
+    monkeypatch.setattr(bs, "_ws_url", lambda port, timeout: "ws://x" if port == 5555 else None)
+    monkeypatch.setattr(bs, "_cdp_get_cookies", lambda ws: COOKIES)
+    monkeypatch.setattr(bs.subprocess, "Popen",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("não deveria abrir outro Edge")))
+    info = bs.export_cookies(profile, tmp_path / "c.txt")
+    assert info["platforms"] == ["twitch", "youtube"]
+    assert (tmp_path / "c.txt").read_text(encoding="utf-8").startswith("# Netscape")
