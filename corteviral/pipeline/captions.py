@@ -6,7 +6,7 @@ from corteviral.config import CaptionStyle
 PAUSE = 0.35            # s de silêncio que quebra o grupo
 HOLD = 0.3              # s que o último grupo fica na tela depois da fala
 JOIN_GAP = 0.6          # grupos mais próximos que isso ficam colados (sem piscar)
-SAFE_TOP, SAFE_BOTTOM, SAFE_LEFT, SAFE_RIGHT = 210, 1440, 60, 140  # zona segura em 1080x1920
+SAFE_TOP, SAFE_BOTTOM, SAFE_LEFT, SAFE_RIGHT = 210, 1440, 140, 140  # zona segura em 1080x1920 (simétrica: legenda centralizada e longe dos botões laterais)
 _SENTENCE_END = (".", "!", "?", "…")
 
 

@@ -131,18 +131,19 @@ function drawCaption(b) {
   g.textBaseline = "bottom"; g.lineJoin = "round";
   let space = g.measureText(" ").width, widths = words.map((w) => g.measureText(w).width);
   let total = widths.reduce((a, c) => a + c, 0) + space * (words.length - 1);
-  const safeW = (1080 - 200) * k;
+  const SAFE_X = 140;  // igual a captions.py: margens simétricas, legenda centralizada
+  const safeW = (1080 - 2 * SAFE_X) * k;
   if (total > safeW) { px *= safeW / total; setFont(); space = g.measureText(" ").width; widths = words.map((w) => g.measureText(w).width);
                        total = widths.reduce((a, c) => a + c, 0) + space * (words.length - 1); }
   const y = Math.min(Math.max(s.position * 1920 + s.size / 2, 210 + s.size), 1440) * k;
-  let x = ((60 + 940) / 2) * k - total / 2;
+  let x = 540 * k - total / 2;
   words.forEach((w, i) => {
     g.lineWidth = Math.max(2, 18 * k); g.strokeStyle = "#000"; g.strokeText(w, x, y);
     g.fillStyle = i === Math.min(1, words.length - 1) ? s.highlight : s.color; g.fillText(w, x, y);
     x += widths[i] + space;
   });
   g.setLineDash([4, 4]); g.strokeStyle = "rgba(255,255,255,.3)"; g.lineWidth = 1;
-  g.strokeRect(60 * k, 210 * k, 880 * k, 1230 * k); g.setLineDash([]);
+  g.strokeRect(SAFE_X * k, 210 * k, (1080 - 2 * SAFE_X) * k, 1230 * k); g.setLineDash([]);
 }
 
 // ---------------- uso da IA ----------------
@@ -200,7 +201,7 @@ export async function openSettings(from, start = "appearance") {
   settingsOpen = true;
   await loadCapStyle();
   const body = document.createElement("div");
-  const TABS = [["appearance", "Aparência"], ["accounts", "Contas"], ["captions", "Legenda"], ["usage", "Uso da IA"], ["about", "Sobre"]];
+  const TABS = [["appearance", "Aparência"], ["accounts", "Login de download"], ["captions", "Legenda"], ["usage", "Uso da IA"], ["about", "Sobre"]];
   body.innerHTML = `<div class="tabs" role="tablist">${TABS.map(([k, l]) => `<button class="tab" role="tab" data-t="${k}">${l}</button>`).join("")}</div>
     <div data-p="appearance" class="stack"><div class="theme-cards">${THEMES.map(([k, l]) => `
       <button class="theme-card" data-theme-card="${k}" aria-pressed="${getTheme() === k}"><span class="sw sw-${k}"></span>
