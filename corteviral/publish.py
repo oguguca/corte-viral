@@ -105,6 +105,8 @@ class PublishStore:
                      "network": network, "ts": time.time()}
             if fields.get("status") != "error":
                 entry.pop("error", None)
+            if fields.get("status") == "sent":
+                entry.pop("url", None)  # novo envio: o link antigo não vale mais
             items[key] = entry
             self.dir.mkdir(parents=True, exist_ok=True)
             write_json_atomic(self.log_path, items)
@@ -175,16 +177,19 @@ def send_to_n8n(url: str, body: dict, timeout: float = 60) -> dict:
     return _post(req, timeout)
 
 
-def test_connection(url: str, timeout: float = 15) -> dict:
+def test_connection(url: str, token: str = "", timeout: float = 15) -> dict:
     """O fluxo responde {"ok": true, "accounts": {...}} dizendo quais contas já estão conectadas nele."""
-    return send_to_n8n(url, {"test": True}, timeout)
+    res = send_to_n8n(url, {"test": True, "token": token}, timeout)
+    if res.get("ok") is False:
+        raise PublishError(res.get("error") or "o n8n recusou o teste")
+    return res
 
 
-def setup_account(url: str, network: str, fields: dict, timeout: float = 60) -> dict:
+def setup_account(url: str, network: str, fields: dict, token: str = "", timeout: float = 60) -> dict:
     """Entrega ao n8n os dados de uma conta (TikTok/Instagram); o Corte Viral não guarda nada disso."""
     if network not in ("tiktok", "instagram"):
         raise PublishError("rede inválida")
-    res = send_to_n8n(url, {"setup": network, **fields}, timeout)
+    res = send_to_n8n(url, {**fields, "setup": network, "token": token}, timeout)
     if not res.get("ok"):
         raise PublishError(res.get("error") or "o n8n não confirmou a conexão")
     return res
@@ -194,6 +199,15 @@ test_connection.__test__ = False  # não é um teste do pytest
 
 
 # ---------------- publicar ----------------
+SENT_WINDOW = 30 * 60  # s: enviado há pouco = o n8n ainda está postando; não manda de novo (evita post duplicado)
+
+
+def _busy_or_done(entry: dict | None) -> bool:
+    if not entry:
+        return False
+    if entry.get("status") == "published":
+        return True
+    return entry.get("status") == "sent" and time.time() - entry.get("ts", 0) < SENT_WINDOW
 def publish_clips(project: Project, settings: Settings, store: PublishStore, ids: list[str] | None,
                   callback_url: str, force: bool = False, on_progress: ProgressFn | None = None) -> dict:
     cfg = store.load()
@@ -211,7 +225,7 @@ def publish_clips(project: Project, settings: Settings, store: PublishStore, ids
     for i, m in enumerate(moments, 1):
         if on_progress:
             on_progress((i - 1) / len(moments), f"enviando clipe {i} de {len(moments)} ao n8n")
-        todo = [n for n in nets if force or (done.get(m["id"], {}).get(n, {}).get("status") != "published")]
+        todo = [n for n in nets if force or not _busy_or_done(done.get(m["id"], {}).get(n))]
         if not todo:
             skipped.append(m["id"])
             continue
@@ -246,10 +260,15 @@ def apply_callback(store: PublishStore, body: dict) -> dict:
     project, clip = str(body.get("project", ""))[:200], str(body.get("clip_id", ""))[:100]
     if not project or not clip:
         raise PublishError("faltou project/clip_id")
+    send_id = str(body.get("send_id", ""))[:40]
+    current = store.status(project).get(clip, {}).get(net)
+    if current and current.get("send_id") and current["send_id"] != send_id:
+        return {"ignored": "resultado de um envio antigo"}  # não sobrescreve um envio mais novo
     status = "published" if body.get("status") == "published" else "error"
-    fields = {"status": status, "send_id": str(body.get("send_id", ""))[:40]}
-    if body.get("url"):
-        fields["url"] = str(body["url"])[:500]
+    fields = {"status": status, "send_id": send_id}
+    url = str(body.get("url") or "")[:500]
+    if url.startswith("https://"):  # só links https (nada de javascript: no href da tela)
+        fields["url"] = url
     if status == "error":
         fields["error"] = str(body.get("error") or "falha sem detalhe")[:500]
     store.record(project, clip, net, **fields)

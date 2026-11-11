@@ -85,9 +85,9 @@ export async function renderExport(root, name, project, ctx = {}) {
     await startJob({ kind: "export", project: name });  // ao terminar, a tela é redesenhada e mostra o resultado
   };
   $("#pubBtn", root)?.addEventListener("click", async () => {
-    const already = approved.filter((m) => Object.values(pub[m.id] || {}).some((e) => e.status === "published")).length;
+    const already = approved.filter((m) => Object.values(pub[m.id] || {}).some((e) => e.status === "published" || e.status === "sent")).length;
     let force = false;
-    if (already) force = confirmAction(`${already} clipe(s) já foram publicados em alguma rede. Publicar de novo nessas redes também?\n(OK = publicar de novo · Cancelar = só onde ainda não saiu)`);
+    if (already) force = confirmAction(`${already} clipe(s) já foram enviados ou publicados em alguma rede. Mandar de novo nessas redes também?\n(OK = publicar de novo · Cancelar = só onde ainda não saiu)`);
     await startJob({ kind: "publish", project: name, ids: approved.map((m) => m.id), force });
   });
   if (state.exportResults[name]) showResult(state.exportResults[name]);

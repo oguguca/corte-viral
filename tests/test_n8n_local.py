@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from corteviral import n8n_local
 
@@ -57,18 +58,35 @@ def test_shipped_workflow_is_valid():
                 assert c["node"] in names, c["node"]
 
 
-def test_ensure_workflow_imports_once_per_version(tmp_path, monkeypatch):
-    calls = []
+TOK = "ab" * 24  # formato real: secrets.token_hex(24)
+
+
+def test_ensure_workflow_injects_token_keeps_accounts_and_runs_once(tmp_path, monkeypatch):
+    calls, imported = [], {}
 
     class R:
         returncode, stdout, stderr = 0, "ok", ""
 
+    def fake_run(args, **kw):
+        calls.append(args[1])
+        if args[1] == "export:workflow":  # versão que está no n8n, com as contas conectadas
+            out = next(a for a in args if a.startswith("--output=")).split("=", 1)[1]
+            Path(out).write_text(json.dumps([{"id": "X1", "staticData": {"global": {"tiktok": {"refresh_token": "r"}}}}]))
+        if args[1] == "import:workflow":
+            inp = next(a for a in args if a.startswith("--input=")).split("=", 1)[1]
+            imported.update(json.loads(Path(inp).read_text(encoding="utf-8")))
+        return R()
+
     monkeypatch.setattr(n8n_local, "n8n_bin", lambda d: tmp_path / "n8n.cmd")
-    monkeypatch.setattr(n8n_local.subprocess, "run", lambda args, **kw: calls.append(args[1]) or R())
+    monkeypatch.setattr(n8n_local.subprocess, "run", fake_run)
     wf = tmp_path / "wf.json"
-    wf.write_text('{"id": "X1"}')
-    assert n8n_local.ensure_workflow(tmp_path, tmp_path, wf) is True
-    assert calls == ["import:workflow", "publish:workflow"]
-    assert n8n_local.ensure_workflow(tmp_path, tmp_path, wf) is False  # mesma versão: nada a fazer
-    wf.write_text('{"id": "X1", "v": 2}')
-    assert n8n_local.ensure_workflow(tmp_path, tmp_path, wf) is True and len(calls) == 4
+    wf.write_text(json.dumps({"id": "X1", "nodes": [{"parameters": {"jsCode": "const APP_TOKEN = '__CV_TOKEN__';"}}]}))
+    assert n8n_local.ensure_workflow(tmp_path, tmp_path, TOK, wf) is True
+    assert calls == ["import:workflow", "publish:workflow"]  # primeira vez: nada a preservar
+    assert TOK in json.dumps(imported) and "__CV_TOKEN__" not in json.dumps(imported)
+    assert n8n_local.ensure_workflow(tmp_path, tmp_path, TOK, wf) is False  # mesma versão: nada a fazer
+    wf.write_text(json.dumps({**json.loads(wf.read_text()), "v": 2}))
+    calls.clear()
+    assert n8n_local.ensure_workflow(tmp_path, tmp_path, TOK, wf) is True
+    assert calls == ["export:workflow", "import:workflow", "publish:workflow"]
+    assert imported["staticData"]["global"]["tiktok"]["refresh_token"] == "r"  # contas conectadas mantidas

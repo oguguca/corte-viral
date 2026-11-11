@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -79,19 +80,39 @@ def _cli(tools_dir: Path, data_dir: Path, *args: str) -> str:
     return (r.stdout or "").strip()[-300:]
 
 
-def ensure_workflow(tools_dir: Path, data_dir: Path, file: Path = WORKFLOW_FILE) -> bool:
+def ensure_workflow(tools_dir: Path, data_dir: Path, token: str, file: Path = WORKFLOW_FILE) -> bool:
     """Importa e publica o fluxo pronto quando ele é novo ou mudou (rodar com o n8n desligado).
 
-    Atenção: reimportar substitui o fluxo; credenciais escolhidas nos nós precisam ser reescolhidas.
+    - grava no fluxo o token do Corte Viral (sem ele o webhook recusa tudo);
+    - mantém as contas já conectadas (TikTok/Instagram ficam nos dados estáticos do fluxo).
+    Credenciais escolhidas à mão nos nós (YouTube) precisam ser reescolhidas depois de uma atualização.
     """
-    file = Path(file)
-    digest = hashlib.sha256(file.read_bytes()).hexdigest()
-    marker = (Path(data_dir) / "n8n").resolve() / "workflow.sha256"
+    if not re.fullmatch(r"[0-9a-f]{32,128}", token or ""):
+        raise ValueError("token do Corte Viral inválido")
+    text = Path(file).read_text(encoding="utf-8").replace("__CV_TOKEN__", token)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    folder = (Path(data_dir) / "n8n").resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    marker = folder / "workflow.sha256"
     if marker.exists() and marker.read_text(encoding="utf-8").strip() == digest:
         return False
-    wf_id = json.loads(file.read_text(encoding="utf-8"))["id"]
-    _cli(tools_dir, data_dir, "import:workflow", f"--input={file.resolve()}")
-    _cli(tools_dir, data_dir, "publish:workflow", f"--id={wf_id}")
-    marker.parent.mkdir(parents=True, exist_ok=True)
+    wf = json.loads(text)
+    if marker.exists():  # já importado antes: traz as contas conectadas da versão atual
+        current = folder / "workflow-atual.json"
+        try:
+            _cli(tools_dir, data_dir, "export:workflow", f"--id={wf['id']}", f"--output={current}")
+            old = json.loads(current.read_text(encoding="utf-8"))
+            old = old[0] if isinstance(old, list) else old
+            if old.get("staticData"):
+                wf["staticData"] = old["staticData"]
+        finally:
+            current.unlink(missing_ok=True)
+    prepared = folder / "workflow-importar.json"  # tem o token: fica em data/ (fora do git)
+    prepared.write_text(json.dumps(wf, ensure_ascii=False), encoding="utf-8")
+    try:
+        _cli(tools_dir, data_dir, "import:workflow", f"--input={prepared}")
+        _cli(tools_dir, data_dir, "publish:workflow", f"--id={wf['id']}")
+    finally:
+        prepared.unlink(missing_ok=True)
     marker.write_text(digest, encoding="utf-8")
     return True

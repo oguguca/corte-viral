@@ -390,14 +390,16 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     @app.post("/api/publish/test")
     def post_publish_test():
         try:
-            return {"ok": True, "reply": test_connection(publish_store.load().webhook_url)}
+            cfg = publish_store.load()
+            return {"ok": True, "reply": test_connection(cfg.webhook_url, cfg.token)}
         except PublishError as e:
             return {"ok": False, "error": str(e)}
 
     @app.post("/api/publish/account/{network}")
     def post_publish_account(network: str, body: AccountBody):
         try:
-            return setup_account(publish_store.load().webhook_url, network, body.fields)
+            cfg = publish_store.load()
+            return setup_account(cfg.webhook_url, network, body.fields, cfg.token)
         except PublishError as e:
             raise HTTPException(422, str(e))
 
@@ -422,8 +424,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         p = n8n_proc["p"]
         if p is None or p.poll() is not None:
             try:  # primeira vez (ou fluxo atualizado): importa e publica antes de ligar
-                n8n_local.ensure_workflow(settings.paths.n8n_dir, data_dir)
-            except (RuntimeError, OSError) as e:
+                n8n_local.ensure_workflow(settings.paths.n8n_dir, data_dir, publish_store.load().token)
+            except (RuntimeError, OSError, ValueError) as e:
                 raise HTTPException(500, f"não consegui preparar o fluxo no n8n: {e}")
             n8n_proc["p"] = n8n_local.start(settings.paths.n8n_dir, data_dir,
                                             (projects_dir, Path(settings.paths.exports_dir)))

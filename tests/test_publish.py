@@ -120,7 +120,7 @@ def test_send_errors_are_friendly(n8n):
 def test_setup_account_forwards_and_checks(n8n):
     _Fake.reply = {"ok": True}
     setup_account(n8n, "instagram", {"ig_user_id": "1", "access_token": "x"})
-    assert _Fake.received[0]["json"] == {"setup": "instagram", "ig_user_id": "1", "access_token": "x"}
+    assert _Fake.received[0]["json"] == {"setup": "instagram", "ig_user_id": "1", "access_token": "x", "token": ""}
     _Fake.reply = {"ok": False, "error": "token recusado"}
     with pytest.raises(PublishError, match="recusado"):
         setup_account(n8n, "tiktok", {"code": "c"})
@@ -131,7 +131,7 @@ def test_setup_account_forwards_and_checks(n8n):
 def test_connection_test(n8n):
     _Fake.reply = {"ok": True, "message": "pronto"}
     assert test_connection(n8n)["ok"] is True
-    assert _Fake.received[0]["json"] == {"test": True}
+    assert _Fake.received[0]["json"] == {"test": True, "token": ""}
 
 
 # ---------- publicar ----------
@@ -155,6 +155,7 @@ def test_publish_sends_enabled_networks_and_skips_published(n8n, settings_tmp, s
     apply_callback(store, {"token": store.load().token, "send_id": sid, "project": p.dir.name, "clip_id": "m1",
                            "network": "youtube", "status": "published", "url": "https://youtu.be/x"})
     _Fake.received.clear()
+    monkeypatch.setattr("corteviral.publish.SENT_WINDOW", 0)  # o envio do TikTok já é antigo (sem resposta)
     res = publish_clips(p, settings_tmp, store, ["m1"], "http://cb")
     assert [r["payload"]["networks"] for r in _Fake.received] == [["tiktok"]]  # YouTube já publicado
     res = publish_clips(p, settings_tmp, store, ["m1"], "http://cb", force=True)
@@ -235,6 +236,45 @@ def test_routes_config_callback_and_job(settings_tmp, n8n, tmp_path, monkeypatch
                                                  "network": "tiktok", "status": "published"})
     assert bad.status_code == 403
     ok = c.post("/api/publish/callback", json={"token": sent["token"], "project": p.dir.name, "clip_id": "m1",
-                                                "network": "tiktok", "status": "published", "url": "https://t/x"})
+                                                "send_id": sent["send_id"], "network": "tiktok",
+                                                "status": "published", "url": "https://t/x"})
     assert ok.status_code == 200
     assert c.get(f"/api/projects/{p.dir.name}/publish").json()["m1"]["tiktok"]["url"] == "https://t/x"
+
+
+# ---------- revisão de segurança ----------
+def test_recently_sent_is_not_resent_without_force(n8n, settings_tmp, store, tmp_path, monkeypatch):
+    mp4 = tmp_path / "final.mp4"
+    mp4.write_bytes(b"clip")
+    monkeypatch.setattr("corteviral.publish.render_clip", lambda project, m, settings: mp4)
+    p = _project(settings_tmp, [_moment(1)])
+    store.save(PublishConfig(webhook_url=n8n, networks={"tiktok": True}))
+    publish_clips(p, settings_tmp, store, None, "http://cb")
+    res = publish_clips(p, settings_tmp, store, None, "http://cb")  # clique duplo: ainda aguardando o n8n
+    assert res["sent"] == 0 and res["skipped"] == ["m1"] and len(_Fake.received) == 1
+    publish_clips(p, settings_tmp, store, None, "http://cb", force=True)
+    assert len(_Fake.received) == 2
+
+
+def test_callback_rejects_non_https_url_and_stale_send(store):
+    t = store.load().token
+    store.record("p", "m1", "tiktok", status="sent", send_id="novo")
+    apply_callback(store, {"token": t, "project": "p", "clip_id": "m1", "network": "tiktok", "send_id": "velho",
+                           "status": "error", "error": "atrasado"})
+    assert store.status("p")["m1"]["tiktok"]["status"] == "sent"  # resultado de um envio antigo é ignorado
+    apply_callback(store, {"token": t, "project": "p", "clip_id": "m1", "network": "tiktok", "send_id": "novo",
+                           "status": "published", "url": "javascript:alert(1)"})
+    e = store.status("p")["m1"]["tiktok"]
+    assert e["status"] == "published" and "url" not in e
+
+
+def test_resend_drops_old_url(store):
+    store.record("p", "m1", "youtube", status="published", url="https://youtu.be/x", send_id="a")
+    store.record("p", "m1", "youtube", status="sent", send_id="b")
+    assert "url" not in store.status("p")["m1"]["youtube"]
+
+
+def test_test_and_setup_send_the_app_token(n8n):
+    test_connection(n8n, "segredo")
+    setup_account(n8n, "instagram", {"ig_user_id": "1", "access_token": "x"}, "segredo")
+    assert [r["json"]["token"] for r in _Fake.received] == ["segredo", "segredo"]

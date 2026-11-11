@@ -75,13 +75,20 @@ FAIL_JS = lambda net, label: cb_js(  # noqa: E731
 
 # ---------------- entrada ----------------
 node("Receber do Corte Viral", "n8n-nodes-base.webhook", 2.1,
-     {"httpMethod": "POST", "path": "corte-viral", "responseMode": "responseNode", "options": {}},
+     {"httpMethod": "POST", "path": "corte-viral", "responseMode": "responseNode",
+      # nenhuma página do navegador pode chamar (CORS); o Corte Viral chama direto, sem Origin
+      "options": {"allowedOrigins": "https://corte-viral.invalid"}},
      [0, 400], webhookId="7c0e3f5e-2f5b-4c33-9a7e-c0a7e5e00001")
 
 code("Preparar", r"""// Separa: teste da ligação, conexão de conta (TikTok/Instagram) ou clipe para postar.
+// O token do Corte Viral é gravado aqui na importação: sem ele, nada é aceito (nenhum site consegue postar).
+const APP_TOKEN = '__CV_TOKEN__';
 const body = $input.first().json.body || {};
-const sd = $getWorkflowStaticData('global');
 const reply = (obj) => [{ json: { kind: 'reply', reply: obj } }];
+if (APP_TOKEN.startsWith('__') || typeof body.token !== 'string' || body.token !== APP_TOKEN) {
+  return reply({ ok: false, error: 'token inválido: abra o n8n pelo botão Iniciar n8n do Corte Viral' });
+}
+const sd = $getWorkflowStaticData('global');
 
 if (body.test) {
   return reply({ ok: true, accounts: {
@@ -165,7 +172,8 @@ link("Qual rede?", "Sem conta", 3)
 
 AV = "Avisar o Corte Viral"
 http(AV, [2900, 700], "POST", "={{ $json.callback_url }}", json_body="={{ JSON.stringify($json.body) }}",
-     never_error=True, err=False)
+     err=False)
+nodes[-1].update(retryOnFail=True, maxTries=5, waitBetweenTries=5000)  # app reiniciando: tenta de novo
 link("Sem conta", AV)
 
 # ---------------- TikTok ----------------
@@ -243,7 +251,8 @@ http("Instagram: status", [2000, 1080], "GET", f"={G}/{{{{ {CONT} }}}}",
      query=[("fields", "status_code,status"), ("access_token", TOK)])
 node("Instagram: pronto?", "n8n-nodes-base.switch", 3.2,
      {"mode": "expression", "numberOutputs": 3,
-      "output": "={{ $json.status_code === 'FINISHED' ? 0 : ($json.status_code === 'IN_PROGRESS' ? 1 : 2) }}"},
+      # espera no máximo 30 × 20 s = 10 min; depois desiste e avisa
+      "output": "={{ $json.status_code === 'FINISHED' ? 0 : ($json.status_code === 'IN_PROGRESS' && $runIndex < 30 ? 1 : 2) }}"},
      [2220, 1080])
 http("Instagram: publicar", [2440, 1000], "POST", f"={G}/{{{{ {I}.creds.ig_user_id }}}}/media_publish",
      query=[("creation_id", f"={{{{ {CONT} }}}}"), ("access_token", TOK)])
@@ -252,7 +261,8 @@ http("Instagram: link", [2660, 1000], "GET", f"={G}/{{{{ $json.id }}}}",
 code("Instagram: resultado", cb_js("instagram", "'published'", "r.permalink || ''", "''"), [2880, 1000])
 code("Instagram: falhou", FAIL_JS("instagram", "Instagram"), [2660, 1240])
 code("Instagram: recusado", cb_js("instagram", "'error'", "''",
-                                  "'o Instagram recusou o vídeo (' + (r.status || r.status_code || 'sem detalhe') + ')'"),
+                                  "r.status_code === 'IN_PROGRESS' ? 'o Instagram demorou mais de 10 min para processar o vídeo'"
+                                  " : 'o Instagram recusou o vídeo (' + (r.status || r.status_code || 'sem detalhe') + ')'"),
      [2440, 1180])
 link("Qual rede?", "Instagram: criar envio", 2)
 for a, b in (("Instagram: criar envio", "Instagram: ler vídeo"), ("Instagram: ler vídeo", "Instagram: enviar vídeo"),
@@ -273,7 +283,10 @@ link("Instagram: falhou", AV)
 link("Instagram: recusado", AV)
 
 wf = {"id": "CorteViralPost01", "name": "Corte Viral — postagem", "active": False, "nodes": nodes,
-      "connections": conns, "settings": {"executionOrder": "v1", "saveManualExecutions": True},
+      # execuções não são guardadas: elas teriam tokens e segredos em texto puro no banco do n8n
+      "connections": conns, "settings": {"executionOrder": "v1", "saveManualExecutions": False,
+                                         "saveDataSuccessExecution": "none", "saveDataErrorExecution": "none",
+                                         "saveExecutionProgress": False},
       "pinData": {}, "tags": []}
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(json.dumps(wf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

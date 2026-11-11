@@ -8,7 +8,9 @@
         "httpMethod": "POST",
         "path": "corte-viral",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {
+          "allowedOrigins": "https://corte-viral.invalid"
+        }
       },
       "id": "40a2856c-4564-5a87-814d-2daa3767ce5b",
       "name": "Receber do Corte Viral",
@@ -22,7 +24,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Separa: teste da ligação, conexão de conta (TikTok/Instagram) ou clipe para postar.\nconst body = $input.first().json.body || {};\nconst sd = $getWorkflowStaticData('global');\nconst reply = (obj) => [{ json: { kind: 'reply', reply: obj } }];\n\nif (body.test) {\n  return reply({ ok: true, accounts: {\n    tiktok: !!(sd.tiktok && sd.tiktok.refresh_token),\n    instagram: !!(sd.instagram && sd.instagram.access_token) } });\n}\nif (body.setup === 'instagram') {\n  if (!body.ig_user_id || !body.access_token) return reply({ ok: false, error: 'faltou o ID ou o token' });\n  sd.instagram = { ig_user_id: String(body.ig_user_id), access_token: String(body.access_token) };\n  return reply({ ok: true });\n}\nif (body.setup === 'tiktok') {\n  if (!body.client_key || !body.client_secret || !body.code || !body.redirect_uri)\n    return reply({ ok: false, error: 'faltaram dados do TikTok' });\n  return [{ json: { kind: 'tiktok_setup', client_key: body.client_key, client_secret: body.client_secret,\n                    code: body.code, redirect_uri: body.redirect_uri } }];\n}\nif (!body.file_path || !Array.isArray(body.networks)) return reply({ ok: false, error: 'pedido inválido' });\n\nconst common = { kind: 'upload', send_id: body.send_id, project: body.project, clip_id: body.clip_id,\n                 callback_url: body.callback_url, token: body.token, file_path: body.file_path,\n                 file_size: body.file_size };\nreturn body.networks.map((network) => {\n  const item = { ...common, network, post: body[network] || {} };\n  if (network === 'tiktok') {\n    if (!(sd.tiktok && sd.tiktok.refresh_token)) item.error = 'TikTok não conectado no n8n';\n    else item.creds = sd.tiktok;\n  }\n  if (network === 'instagram') {\n    if (!(sd.instagram && sd.instagram.access_token)) item.error = 'Instagram não conectado no n8n';\n    else item.creds = sd.instagram;\n  }\n  return { json: item };\n});"
+        "jsCode": "// Separa: teste da ligação, conexão de conta (TikTok/Instagram) ou clipe para postar.\n// O token do Corte Viral é gravado aqui na importação: sem ele, nada é aceito (nenhum site consegue postar).\nconst APP_TOKEN = '__CV_TOKEN__';\nconst body = $input.first().json.body || {};\nconst reply = (obj) => [{ json: { kind: 'reply', reply: obj } }];\nif (APP_TOKEN.startsWith('__') || typeof body.token !== 'string' || body.token !== APP_TOKEN) {\n  return reply({ ok: false, error: 'token inválido: abra o n8n pelo botão Iniciar n8n do Corte Viral' });\n}\nconst sd = $getWorkflowStaticData('global');\n\nif (body.test) {\n  return reply({ ok: true, accounts: {\n    tiktok: !!(sd.tiktok && sd.tiktok.refresh_token),\n    instagram: !!(sd.instagram && sd.instagram.access_token) } });\n}\nif (body.setup === 'instagram') {\n  if (!body.ig_user_id || !body.access_token) return reply({ ok: false, error: 'faltou o ID ou o token' });\n  sd.instagram = { ig_user_id: String(body.ig_user_id), access_token: String(body.access_token) };\n  return reply({ ok: true });\n}\nif (body.setup === 'tiktok') {\n  if (!body.client_key || !body.client_secret || !body.code || !body.redirect_uri)\n    return reply({ ok: false, error: 'faltaram dados do TikTok' });\n  return [{ json: { kind: 'tiktok_setup', client_key: body.client_key, client_secret: body.client_secret,\n                    code: body.code, redirect_uri: body.redirect_uri } }];\n}\nif (!body.file_path || !Array.isArray(body.networks)) return reply({ ok: false, error: 'pedido inválido' });\n\nconst common = { kind: 'upload', send_id: body.send_id, project: body.project, clip_id: body.clip_id,\n                 callback_url: body.callback_url, token: body.token, file_path: body.file_path,\n                 file_size: body.file_size };\nreturn body.networks.map((network) => {\n  const item = { ...common, network, post: body[network] || {} };\n  if (network === 'tiktok') {\n    if (!(sd.tiktok && sd.tiktok.refresh_token)) item.error = 'TikTok não conectado no n8n';\n    else item.creds = sd.tiktok;\n  }\n  if (network === 'instagram') {\n    if (!(sd.instagram && sd.instagram.access_token)) item.error = 'Instagram não conectado no n8n';\n    else item.creds = sd.instagram;\n  }\n  return { json: item };\n});"
       },
       "id": "414c0c84-d3a6-549d-ab47-a82ba29908f6",
       "name": "Preparar",
@@ -187,12 +189,7 @@
         "method": "POST",
         "url": "={{ $json.callback_url }}",
         "options": {
-          "timeout": 600000,
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
+          "timeout": 600000
         },
         "sendBody": true,
         "contentType": "json",
@@ -206,7 +203,10 @@
       "position": [
         2900,
         700
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -596,7 +596,7 @@
       "parameters": {
         "mode": "expression",
         "numberOutputs": 3,
-        "output": "={{ $json.status_code === 'FINISHED' ? 0 : ($json.status_code === 'IN_PROGRESS' ? 1 : 2) }}"
+        "output": "={{ $json.status_code === 'FINISHED' ? 0 : ($json.status_code === 'IN_PROGRESS' && $runIndex < 30 ? 1 : 2) }}"
       },
       "id": "7c49a367-b3ff-531e-ad3b-4eb7d51d9eb0",
       "name": "Instagram: pronto?",
@@ -697,7 +697,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'instagram').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'instagram',\n  status: 'error', url: '', error: 'o Instagram recusou o vídeo (' + (r.status || r.status_code || 'sem detalhe') + ')' } } }];"
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'instagram').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'instagram',\n  status: 'error', url: '', error: r.status_code === 'IN_PROGRESS' ? 'o Instagram demorou mais de 10 min para processar o vídeo' : 'o Instagram recusou o vídeo (' + (r.status || r.status_code || 'sem detalhe') + ')' } } }];"
       },
       "id": "6e68aec3-bfea-5076-9eec-258876798bc0",
       "name": "Instagram: recusado",
@@ -1183,7 +1183,10 @@
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true
+    "saveManualExecutions": false,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveExecutionProgress": false
   },
   "pinData": {},
   "tags": []
