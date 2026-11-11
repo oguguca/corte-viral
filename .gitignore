@@ -79,3 +79,7 @@ cookies.txt
 
 # --- Sessão do YouTube do app e dados locais ---
 data/
+
+# --- n8n local (programa e dados com as contas conectadas; nunca versionar) ---
+tools/
+.n8n/

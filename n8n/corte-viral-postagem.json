@@ -1,0 +1,1190 @@
+{
+  "id": "CorteViralPost01",
+  "name": "Corte Viral — postagem",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "corte-viral",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "40a2856c-4564-5a87-814d-2daa3767ce5b",
+      "name": "Receber do Corte Viral",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "7c0e3f5e-2f5b-4c33-9a7e-c0a7e5e00001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Separa: teste da ligação, conexão de conta (TikTok/Instagram) ou clipe para postar.\nconst body = $input.first().json.body || {};\nconst sd = $getWorkflowStaticData('global');\nconst reply = (obj) => [{ json: { kind: 'reply', reply: obj } }];\n\nif (body.test) {\n  return reply({ ok: true, accounts: {\n    tiktok: !!(sd.tiktok && sd.tiktok.refresh_token),\n    instagram: !!(sd.instagram && sd.instagram.access_token) } });\n}\nif (body.setup === 'instagram') {\n  if (!body.ig_user_id || !body.access_token) return reply({ ok: false, error: 'faltou o ID ou o token' });\n  sd.instagram = { ig_user_id: String(body.ig_user_id), access_token: String(body.access_token) };\n  return reply({ ok: true });\n}\nif (body.setup === 'tiktok') {\n  if (!body.client_key || !body.client_secret || !body.code || !body.redirect_uri)\n    return reply({ ok: false, error: 'faltaram dados do TikTok' });\n  return [{ json: { kind: 'tiktok_setup', client_key: body.client_key, client_secret: body.client_secret,\n                    code: body.code, redirect_uri: body.redirect_uri } }];\n}\nif (!body.file_path || !Array.isArray(body.networks)) return reply({ ok: false, error: 'pedido inválido' });\n\nconst common = { kind: 'upload', send_id: body.send_id, project: body.project, clip_id: body.clip_id,\n                 callback_url: body.callback_url, token: body.token, file_path: body.file_path,\n                 file_size: body.file_size };\nreturn body.networks.map((network) => {\n  const item = { ...common, network, post: body[network] || {} };\n  if (network === 'tiktok') {\n    if (!(sd.tiktok && sd.tiktok.refresh_token)) item.error = 'TikTok não conectado no n8n';\n    else item.creds = sd.tiktok;\n  }\n  if (network === 'instagram') {\n    if (!(sd.instagram && sd.instagram.access_token)) item.error = 'Instagram não conectado no n8n';\n    else item.creds = sd.instagram;\n  }\n  return { json: item };\n});"
+      },
+      "id": "414c0c84-d3a6-549d-ab47-a82ba29908f6",
+      "name": "Preparar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.kind === 'reply' ? 0 : ($json.kind === 'tiktok_setup' ? 1 : 2) }}"
+      },
+      "id": "910610f2-956a-5cc5-81ca-d01f67229858",
+      "name": "Tipo de pedido",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.reply) }}",
+        "options": {}
+      },
+      "id": "5ef08345-5e69-5d4f-aea4-ff122082e416",
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, received: true }) }}",
+        "options": {}
+      },
+      "id": "b98aa941-02d8-5fad-8986-c9db56933d55",
+      "name": "Recebido",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/oauth/token/",
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_key",
+              "value": "={{ $json.client_key }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.client_secret }}"
+            },
+            {
+              "name": "code",
+              "value": "={{ $json.code }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "authorization_code"
+            },
+            {
+              "name": "redirect_uri",
+              "value": "={{ $json.redirect_uri }}"
+            }
+          ]
+        }
+      },
+      "id": "c3544220-61f0-51cd-9d27-cd6e7682b618",
+      "name": "TikTok: trocar código",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst s = $('Preparar').first().json;\nif (!r.refresh_token) {\n  return [{ json: { reply: { ok: false, error: 'TikTok recusou o código: ' + (r.error_description || r.error || 'tente de novo') } } }];\n}\nconst sd = $getWorkflowStaticData('global');\nsd.tiktok = { client_key: s.client_key, client_secret: s.client_secret, refresh_token: r.refresh_token, open_id: r.open_id };\nreturn [{ json: { reply: { ok: true } } }];"
+      },
+      "id": "7f3e652b-32de-50e9-8d03-02b293687b9a",
+      "name": "TikTok: guardar conta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.reply) }}",
+        "options": {}
+      },
+      "id": "de7d5171-8562-5038-97af-784ac53b9046",
+      "name": "Responder (TikTok)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 4,
+        "output": "={{ $json.error ? 3 : ['tiktok', 'youtube', 'instagram'].indexOf($json.network) }}"
+      },
+      "id": "58a1365a-b69d-5cb3-8cc4-581e12f18976",
+      "name": "Qual rede?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        900,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.all();\nreturn r.map((it) => ({ json: { callback_url: it.json.callback_url, body: {\n  token: it.json.token, send_id: it.json.send_id, project: it.json.project, clip_id: it.json.clip_id,\n  network: it.json.network, status: 'error', url: '', error: it.json.error } } }));"
+      },
+      "id": "f81c4a9b-f682-5ce5-9af0-8c8ec042aafe",
+      "name": "Sem conta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "a06bf70a-f78c-58c3-8f67-dfbe5881619d",
+      "name": "Avisar o Corte Viral",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2900,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/oauth/token/",
+        "options": {
+          "timeout": 600000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "client_key",
+              "value": "={{ $json.creds.client_key }}"
+            },
+            {
+              "name": "client_secret",
+              "value": "={{ $json.creds.client_secret }}"
+            },
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.creds.refresh_token }}"
+            }
+          ]
+        }
+      },
+      "id": "d30e0dde-fb1c-57c4-9ca0-72e60983592f",
+      "name": "TikTok: renovar acesso",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nif (!r.access_token) throw new Error('TikTok recusou o acesso (' + (r.error_description || r.error || 'refaça a conexão') + ')');\nconst sd = $getWorkflowStaticData('global');\nsd.tiktok = { ...sd.tiktok, refresh_token: r.refresh_token || sd.tiktok.refresh_token };\nconst p = $('Preparar').all().find(i => i.json.network === 'tiktok').json;\nif (p.file_size > 64 * 1024 * 1024) throw new Error('clipe acima de 64 MB: o TikTok não aceita num envio só');\nreturn [{ json: { access_token: r.access_token, size: p.file_size, caption: String(p.post.caption || '').slice(0, 2200) } }];"
+      },
+      "id": "377584e8-4bf9-5ca0-bea1-ae7eaf0fe7a2",
+      "name": "TikTok: guardar acesso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        "options": {
+          "timeout": 600000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_info: { title: $json.caption, privacy_level: 'SELF_ONLY', disable_comment: false, disable_duet: false, disable_stitch: false }, source_info: { source: 'FILE_UPLOAD', video_size: $json.size, chunk_size: $json.size, total_chunk_count: 1 } }) }}"
+      },
+      "id": "447dd688-3fa2-570d-a470-ba70c24fb8cc",
+      "name": "TikTok: iniciar envio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Preparar').all().find(i => i.json.network === 'tiktok').json.file_path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "71b952d9-a965-550b-ba91-2eefb91338ab",
+      "name": "TikTok: ler vídeo",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('TikTok: iniciar envio').first().json.data.upload_url }}",
+        "options": {
+          "timeout": 600000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "video/mp4"
+            },
+            {
+              "name": "Content-Range",
+              "value": "=bytes 0-{{ $('Preparar').all().find(i => i.json.network === 'tiktok').json.file_size - 1 }}/{{ $('Preparar').all().find(i => i.json.network === 'tiktok').json.file_size }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "ca96d8e8-65cc-5c24-beb0-136c474afe99",
+      "name": "TikTok: enviar vídeo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        480
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'tiktok').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'tiktok',\n  status: 'published', url: '', error: '' } } }];"
+      },
+      "id": "19b010f7-16d7-508a-9221-5843e01a21f5",
+      "name": "TikTok: resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'tiktok').json;\nconst r = $input.first().json;\nconst e = r.error;\nconst msg = String((e && (e.description || e.message || e)) || r.message || 'falha ao postar no TikTok').slice(0, 450);\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'tiktok',\n  status: 'error', url: '', error: msg } } }];"
+      },
+      "id": "e94eac70-a744-57db-acce-afd3841f31d7",
+      "name": "TikTok: falhou",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Preparar').all().find(i => i.json.network === 'youtube').json.file_path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "afa7ac8d-4602-5da6-8f47-6bd4acc40aa4",
+      "name": "YouTube: ler vídeo",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        800
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $('Preparar').all().find(i => i.json.network === 'youtube').json.post.title }}",
+        "regionCode": "BR",
+        "categoryId": "20",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{ $('Preparar').all().find(i => i.json.network === 'youtube').json.post.description }}",
+          "tags": "={{ ($('Preparar').all().find(i => i.json.network === 'youtube').json.post.tags || []).join(',') }}",
+          "privacyStatus": "={{ $('Preparar').all().find(i => i.json.network === 'youtube').json.post.privacy || 'private' }}",
+          "selfDeclaredMadeForKids": false,
+          "defaultLanguage": "pt"
+        }
+      },
+      "id": "6e316e16-4e2f-53ff-aea6-f2f03a0ad748",
+      "name": "YouTube: enviar",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        800
+      ],
+      "onError": "continueErrorOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
+      },
+      "id": "de8cc87f-da90-511a-9816-8702a6707cab",
+      "name": "YouTube: resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\nconst e = r.error;\nconst msg = String((e && (e.description || e.message || e)) || r.message || 'falha ao postar no YouTube').slice(0, 450);\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: 'error', url: '', error: msg } } }];"
+      },
+      "id": "98527daa-ad72-56d4-8c8a-643e61629a3c",
+      "name": "YouTube: falhou",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        940
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.creds.ig_user_id }}/media",
+        "options": {
+          "timeout": 600000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "REELS"
+            },
+            {
+              "name": "upload_type",
+              "value": "resumable"
+            },
+            {
+              "name": "share_to_feed",
+              "value": "true"
+            },
+            {
+              "name": "caption",
+              "value": "={{ String($json.post.caption || '').slice(0, 2200) }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $json.creds.access_token }}"
+            }
+          ]
+        }
+      },
+      "id": "b4c2eff7-b35b-52be-a0ae-24970922bac2",
+      "name": "Instagram: criar envio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "={{ $('Preparar').all().find(i => i.json.network === 'instagram').json.file_path }}",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "c16bedd4-270d-59fb-8270-88de3995da0b",
+      "name": "Instagram: ler vídeo",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://rupload.facebook.com/ig-api-upload/v23.0/{{ $('Instagram: criar envio').first().json.id }}",
+        "options": {
+          "timeout": 600000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=OAuth {{ $('Preparar').all().find(i => i.json.network === 'instagram').json.creds.access_token }}"
+            },
+            {
+              "name": "offset",
+              "value": "0"
+            },
+            {
+              "name": "file_size",
+              "value": "={{ $('Preparar').all().find(i => i.json.network === 'instagram').json.file_size }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "9af8b727-42fe-5247-b6d6-7f8217054192",
+      "name": "Instagram: enviar vídeo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "46c239b0-7c19-5e39-81bd-0ede7ece5aef",
+      "name": "Instagram: esperar",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1780,
+        1080
+      ],
+      "webhookId": "7c0e3f5e-2f5b-4c33-9a7e-c0a7e5e00002"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('Instagram: criar envio').first().json.id }}",
+        "options": {
+          "timeout": 600000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status_code,status"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $('Preparar').all().find(i => i.json.network === 'instagram').json.creds.access_token }}"
+            }
+          ]
+        }
+      },
+      "id": "2369778c-51c9-59f1-9b4f-818b98e02180",
+      "name": "Instagram: status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        1080
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.status_code === 'FINISHED' ? 0 : ($json.status_code === 'IN_PROGRESS' ? 1 : 2) }}"
+      },
+      "id": "7c49a367-b3ff-531e-ad3b-4eb7d51d9eb0",
+      "name": "Instagram: pronto?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2220,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('Preparar').all().find(i => i.json.network === 'instagram').json.creds.ig_user_id }}/media_publish",
+        "options": {
+          "timeout": 600000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('Instagram: criar envio').first().json.id }}"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $('Preparar').all().find(i => i.json.network === 'instagram').json.creds.access_token }}"
+            }
+          ]
+        }
+      },
+      "id": "0f956dca-70ba-5297-841f-469d6bda8f80",
+      "name": "Instagram: publicar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        1000
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.id }}",
+        "options": {
+          "timeout": 600000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "permalink"
+            },
+            {
+              "name": "access_token",
+              "value": "={{ $('Preparar').all().find(i => i.json.network === 'instagram').json.creds.access_token }}"
+            }
+          ]
+        }
+      },
+      "id": "f89e09ef-b500-53a9-bcce-cdeebbdbc7c6",
+      "name": "Instagram: link",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        1000
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'instagram').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'instagram',\n  status: 'published', url: r.permalink || '', error: '' } } }];"
+      },
+      "id": "cf49f39b-8843-551e-8acc-0e693ef64f73",
+      "name": "Instagram: resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'instagram').json;\nconst r = $input.first().json;\nconst e = r.error;\nconst msg = String((e && (e.description || e.message || e)) || r.message || 'falha ao postar no Instagram').slice(0, 450);\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'instagram',\n  status: 'error', url: '', error: msg } } }];"
+      },
+      "id": "06c6313c-2549-50e3-9778-26c9a91fdca2",
+      "name": "Instagram: falhou",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        1240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'instagram').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'instagram',\n  status: 'error', url: '', error: 'o Instagram recusou o vídeo (' + (r.status || r.status_code || 'sem detalhe') + ')' } } }];"
+      },
+      "id": "6e68aec3-bfea-5076-9eec-258876798bc0",
+      "name": "Instagram: recusado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        1180
+      ]
+    }
+  ],
+  "connections": {
+    "Receber do Corte Viral": {
+      "main": [
+        [
+          {
+            "node": "Preparar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar": {
+      "main": [
+        [
+          {
+            "node": "Tipo de pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo de pedido": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: trocar código",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Recebido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: trocar código": {
+      "main": [
+        [
+          {
+            "node": "TikTok: guardar conta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: guardar conta": {
+      "main": [
+        [
+          {
+            "node": "Responder (TikTok)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recebido": {
+      "main": [
+        [
+          {
+            "node": "Qual rede?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qual rede?": {
+      "main": [
+        [
+          {
+            "node": "TikTok: renovar acesso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YouTube: ler vídeo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: criar envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sem conta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sem conta": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: renovar acesso": {
+      "main": [
+        [
+          {
+            "node": "TikTok: guardar acesso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: guardar acesso": {
+      "main": [
+        [
+          {
+            "node": "TikTok: iniciar envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: iniciar envio": {
+      "main": [
+        [
+          {
+            "node": "TikTok: ler vídeo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: ler vídeo": {
+      "main": [
+        [
+          {
+            "node": "TikTok: enviar vídeo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: enviar vídeo": {
+      "main": [
+        [
+          {
+            "node": "TikTok: resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TikTok: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: resultado": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TikTok: falhou": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: ler vídeo": {
+      "main": [
+        [
+          {
+            "node": "YouTube: enviar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YouTube: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: enviar": {
+      "main": [
+        [
+          {
+            "node": "YouTube: resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "YouTube: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: resultado": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: falhou": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: criar envio": {
+      "main": [
+        [
+          {
+            "node": "Instagram: ler vídeo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: ler vídeo": {
+      "main": [
+        [
+          {
+            "node": "Instagram: enviar vídeo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: enviar vídeo": {
+      "main": [
+        [
+          {
+            "node": "Instagram: esperar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: esperar": {
+      "main": [
+        [
+          {
+            "node": "Instagram: status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: status": {
+      "main": [
+        [
+          {
+            "node": "Instagram: pronto?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: pronto?": {
+      "main": [
+        [
+          {
+            "node": "Instagram: publicar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: esperar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: recusado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: publicar": {
+      "main": [
+        [
+          {
+            "node": "Instagram: link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: link": {
+      "main": [
+        [
+          {
+            "node": "Instagram: resultado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instagram: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: resultado": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: falhou": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram: recusado": {
+      "main": [
+        [
+          {
+            "node": "Avisar o Corte Viral",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

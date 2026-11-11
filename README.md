@@ -133,9 +133,9 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
 
 Linha de comando: `.venv\Scripts\python -m corteviral export projects\<pasta-do-projeto>`
 
-### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
+### Login de download (vídeos com restrição de idade, privados ou de inscritos)
 
-Clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
+Em **Ajustes › Login de download**, clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
 Twitch e Kick, num perfil separado só do app. Entre nas contas que quiser e
 feche a janela. Pronto: antes de cada download o app renova essa sessão sozinho.
 
@@ -148,6 +148,42 @@ feche a janela. Pronto: antes de cada download o app renova essa sessão sozinho
 
 Alternativas em "Outras formas de login": Firefox (lê direto do perfil) ou um
 arquivo `cookies.txt` exportado com a extensão "Get cookies.txt LOCALLY".
+
+### Postagem automática (Contas conectadas + n8n)
+
+As contas de **YouTube, TikTok e Instagram** ficam no [n8n](https://n8n.io), gratuito e rodando neste PC.
+O Corte Viral entrega cada clipe aprovado (caminho do MP4 + título, descrição e hashtags de cada rede) ao
+fluxo **"Corte Viral — postagem"**, que posta e avisa de volta o resultado.
+
+**Instalar o n8n (uma vez só, precisa do Node.js 24 ou mais novo):**
+
+```powershell
+mkdir tools\n8n -Force; cd tools\n8n
+npm install n8n --ignore-scripts
+```
+
+`--ignore-scripts` evita compilar o conector de Kafka (não usado aqui), que exige Visual Studio.
+O programa (`tools/`) e os dados do n8n (`data/n8n`: login, contas, chaves) nunca vão para o GitHub.
+
+**Ligar e preparar:**
+
+1. Barra lateral › **Contas conectadas** › **Iniciar n8n** e depois **Abrir n8n** (`http://localhost:5678`).
+   Na primeira vez, crie o usuário dono do n8n.
+2. O botão **Iniciar n8n** já importa e publica o fluxo `n8n/corte-viral-postagem.json` (na primeira vez e
+   quando o fluxo mudar). O nó **YouTube: enviar** vem desligado até você escolher a credencial do YouTube nele.
+3. Em cada rede, siga o passo a passo da própria tela (botão "Como conectar…"):
+   - **YouTube:** credencial **YouTube OAuth2 API** dentro do n8n (projeto no Google Cloud com a YouTube Data API v3).
+     Sem a verificação do Google, os vídeos sobem **privados**; a cota grátis aguenta ~6 envios por dia.
+   - **Instagram:** conta **Profissional** ligada a uma Página do Facebook + app da Meta. Cole o ID da conta e o
+     token de um *Usuário do sistema* na tela e clique em **Conectar no n8n**.
+   - **TikTok:** app em developers.tiktok.com com *Login Kit* e *Content Posting API*. Preencha client key,
+     secret e redirect URI, faça o login e cole o endereço de volta. Antes da auditoria do TikTok os vídeos
+     saem **só para você**; clipes acima de 64 MB não são aceitos.
+4. Ligue as redes desejadas e clique em **Testar ligação**.
+
+**Postar:** na etapa **Exportar**, **Enviar N clipe(s) para postar** — ou ligue **"Enviar para postar ao exportar"**.
+Cada clipe mostra o status por rede (→ enviado, ✓ publicado com link, ⚠ falhou); clipes já publicados numa rede
+não são reenviados sem confirmação. O histórico fica em `data/publish_log.json`.
 
 ### Linha de comando
 

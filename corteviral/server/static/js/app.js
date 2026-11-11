@@ -7,6 +7,8 @@ import { openSettings } from "./sheets/settings.js";
 import { renderProjects, renderUsageMini } from "./sidebar.js";
 import { loadCapStyle, state } from "./state.js";
 import { applyTheme, themeSwitcher } from "./theme.js";
+import { toast } from "./ui.js";
+import { renderAccounts } from "./views/accounts.js";
 import { renderClips } from "./views/clips.js";
 import { renderExport } from "./views/export.js";
 import { renderMoments } from "./views/moments.js";
@@ -40,6 +42,15 @@ async function render({ keepFocus = false } = {}) {
   state.current = route.view === "project" ? route.name : null;
   await renderProjects();
   if (token !== renderToken) return;
+  if (route.view === "accounts") $("#openAccounts").setAttribute("aria-current", "page");
+  else $("#openAccounts").removeAttribute("aria-current");
+  if (route.view === "accounts") {
+    main.innerHTML = '<div class="page" id="page"></div>';
+    if (!keepFocus) main.scrollTop = 0;
+    await renderAccounts($("#page"));
+    if (!keepFocus) { const h1 = $("#page h1"); h1?.setAttribute("tabindex", "-1"); h1?.focus({ preventScroll: true }); }
+    return;
+  }
   if (route.view === "home") {
     main.innerHTML = homeView();
     $("#homeNew").onclick = (e) => openNewVideo(e.currentTarget);
@@ -76,6 +87,11 @@ function init() {
     renderUsageMini();
     if (job.status !== "done") return;
     if (job.stage === "export" && job.project) state.exportResults[job.project] = job;  // a tela mostra depois de redesenhar
+    if (job.stage === "publish" && job.result) {
+      const r = job.result, errs = r.errors || [];
+      toast(`${r.sent} clipe(s) entregues ao n8n${r.skipped?.length ? ` · ${r.skipped.length} já publicados` : ""}${
+        errs.length ? ` · ${errs.length} falharam: ${errs[0].error}` : ""}`, errs.length ? "bad" : "good");
+    }
     if (job.stage === "transcribe" || job.stage === "ingest") {
       await renderProjects();
       const r = parse();

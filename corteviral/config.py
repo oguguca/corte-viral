@@ -29,6 +29,7 @@ class PathsSettings(_Strict):
     models_dir: Path = Path("models")
     exports_dir: Path = Path("exports")  # clipes prontos para postar
     data_dir: Path = Path("data")  # sessão do YouTube do app, preferências locais
+    n8n_dir: Path = Path("tools/n8n")  # n8n local (postagem automática); dados dele em data/n8n
 
 
 class DownloadSettings(_Strict):

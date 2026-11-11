@@ -4,7 +4,7 @@ import { toast } from "./ui.js";
 
 const STAGES = {
   ingest: "Baixando o vídeo", transcribe: "Transcrevendo", analyze: "Encontrando momentos",
-  render: "Gerando clipes", posts: "Escrevendo os textos", export: "Exportando",
+  render: "Gerando clipes", posts: "Escrevendo os textos", export: "Exportando", publish: "Enviando para postar",
 };
 const listeners = new Set();
 let watching = null;

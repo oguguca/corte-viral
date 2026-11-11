@@ -278,3 +278,26 @@ traduzidos para a web), sem apagar nenhum dado. Decisões do usuário: **barra l
   no gatilho, `prefers-reduced-motion`/`-transparency`/`-contrast` respeitados.
 - **Sem mudanças de API nem de dados:** o backend só passa a servir `/static/*` (CSS/JS em módulos).
 - **Todas as funções atuais preservadas** (inventário no plano).
+
+## 15. Contas conectadas e postagem automática via n8n (2026-11-11)
+
+**Decisão do usuário:** as contas de YouTube, TikTok e Instagram ficam no **n8n**, gratuito, rodando neste PC.
+O Corte Viral não guarda tokens das redes.
+
+- **Corte Viral → n8n:** `POST` JSON no webhook `http://127.0.0.1:5678/webhook/corte-viral` com `send_id`,
+  `project`, `clip_id`, `networks`, textos por rede (`youtube.title/description/tags/privacy`,
+  `tiktok.caption`, `instagram.caption`), `file_path`/`file_size` do MP4 final, `callback_url` e `token`.
+  O n8n lê o MP4 do disco (`N8N_RESTRICT_FILE_ACCESS_TO` = pastas de projetos e exportações).
+- **n8n → Corte Viral:** `POST /api/publish/callback` com `token`, `project`, `clip_id`, `network`,
+  `status` (`published`/`error`), `url`, `error`. Token errado → 403.
+- **Contas no n8n:** YouTube pela credencial OAuth nativa do n8n; Instagram (Graph API, envio resumable) e
+  TikTok (Content Posting API, refresh token) guardados nos dados estáticos do fluxo, entregues pela tela via
+  `{"setup": "<rede>", ...}`. O teste `{"test": true}` responde quais contas estão prontas.
+- **Arquivos:** `corteviral/publish.py` (config `data/publish.json`, registro `data/publish_log.json`, envio),
+  `corteviral/n8n_local.py` (instalação em `tools/n8n`, dados em `data/n8n`, iniciar/importar),
+  `n8n/corte-viral-postagem.json` (fluxo pronto), tela `views/accounts.js` (rota `#/contas`) e botão
+  "Enviar para postar" na etapa Exportar; opção de envio automático ao exportar.
+- **Limites conhecidos:** YouTube e TikTok publicam privados até a auditoria/verificação do app; cota do
+  YouTube ~6 envios/dia; TikTok aceita até 64 MB num único bloco; Instagram exige conta Profissional ligada
+  a uma Página.
+- **Fora do escopo agora:** n8n na nuvem (exigiria enviar o arquivo pela internet), agendamento de horários.

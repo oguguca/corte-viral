@@ -41,3 +41,10 @@ def test_classic_interface_removed(settings_tmp):
     c = TestClient(create_app(settings_tmp))
     assert c.get("/classico").status_code == 404
     assert "classico" not in (Path(STATIC) / "js" / "sheets" / "settings.js").read_text(encoding="utf-8")
+
+
+def test_css_core_rules_present_and_balanced():
+    css = (STATIC / "css" / "app.css").read_text(encoding="utf-8")
+    assert css.count("{") == css.count("}")
+    for rule in (".switch {", ".switch input {", ".switch .track {", ".sw-gta {", ".btn {", ".card {"):
+        assert rule in css, rule

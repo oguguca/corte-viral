@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Callable, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
@@ -25,8 +25,11 @@ from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.caption_style import load_style, save_style
 from corteviral.config import AnalysisSettings, CaptionStyle
+from corteviral import n8n_local
 from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
+from corteviral.publish import (NETWORKS, PublishConfig, PublishError, PublishStore, apply_callback,
+                                publish_clips, setup_account, test_connection)
 from corteviral.metadata import generate_posts
 from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
@@ -49,7 +52,7 @@ def default_pipeline(source: str, settings: Settings, on_progress: StageProgress
 
 
 class JobRequest(BaseModel):
-    kind: Literal["ingest", "analyze", "render", "export", "posts"] = "ingest"
+    kind: Literal["ingest", "analyze", "render", "export", "posts", "publish"] = "ingest"
     source: str | None = None       # ingest
     project: str | None = None      # analyze
     n: int | None = Field(default=None, ge=1, le=50)
@@ -65,6 +68,7 @@ class JobRequest(BaseModel):
     language: Literal["auto", "pt", "en"] | None = None
     cookies_from_browser: str | None = None
     cookies_file: str | None = None
+    callback_url: str | None = Field(default=None, exclude=True)  # preenchido pelo servidor (publish/export)
 
     @model_validator(mode="after")
     def _check(self):
@@ -73,7 +77,7 @@ class JobRequest(BaseModel):
         if (self.min_seconds is None) != (self.max_seconds is None) or (
                 self.min_seconds is not None and self.max_seconds - self.min_seconds < 5):
             raise ValueError("duração inválida: informe mínimo e máximo, com o máximo ao menos 5 s maior")
-        if self.kind in ("analyze", "render", "export", "posts") and not self.project:
+        if self.kind in ("analyze", "render", "export", "posts", "publish") and not self.project:
             raise ValueError("project é obrigatório para analyze/render/export")
         return self
 
@@ -108,6 +112,23 @@ class StreamerBody(BaseModel):
     streamer: str = Field(min_length=1, max_length=80)
 
 
+class PublishConfigBody(BaseModel):
+    webhook_url: str
+    networks: dict[str, bool]
+    youtube_privacy: Literal["private", "unlisted", "public"] = "private"
+    auto_send: bool = False
+
+
+class AccountBody(BaseModel):
+    fields: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _limit(self):
+        if len(self.fields) > 10 or any(len(k) > 40 or len(v) > 4000 for k, v in self.fields.items()):
+            raise ValueError("dados da conta grandes demais")
+        return self
+
+
 class _Jobs:
     def __init__(self):
         self.lock = threading.Lock()
@@ -128,6 +149,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     yt_profile = data_dir / "session-profile"
     yt_cookies = data_dir / "session-cookies.txt"
     yt_status = data_dir / "session-status.json"
+    publish_store = PublishStore(data_dir)
+    n8n_proc: dict = {"p": None}
 
     def _yt_sync() -> dict:
         info = export_cookies(yt_profile, yt_cookies)
@@ -199,6 +222,20 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                                  "unauthorized": res["unauthorized"], "errors": res["errors"],
                                  "files": [{"id": f["id"], "mp4": str(f["mp4"]), "txt": str(f["txt"])}
                                            for f in res["files"]]}
+                cfg = publish_store.load()
+                if cfg.auto_send and cfg.enabled() and res["files"] and req.callback_url:
+                    try:  # envio automático para postar: falhar aqui não desfaz a exportação
+                        job["result"]["publish"] = publish_clips(
+                            project, s, publish_store, [f["id"] for f in res["files"]], req.callback_url,
+                            on_progress=lambda f, m: progress("publish", f, m))
+                    except PublishError as e:
+                        job["result"]["publish"] = {"sent": 0, "errors": [{"id": "-", "error": str(e)}]}
+                    job["stage"] = "export"
+            elif req.kind == "publish":
+                project = Project.load(_project_dir(req.project))
+                job.update(stage="publish", project=project.dir.name)
+                job["result"] = publish_clips(project, s, publish_store, req.ids, req.callback_url or "",
+                                              force=req.force, on_progress=lambda f, m: progress("publish", f, m))
             elif req.kind == "render":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="render", project=project.dir.name)
@@ -218,7 +255,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             else:
                 project = pipeline(req.source, s, progress)
             job.update(status="done", project=project.dir.name, progress=1.0, message="concluído")
-        except (IngestError, FFmpegError, FileNotFoundError) as e:
+        except (IngestError, FFmpegError, FileNotFoundError, PublishError) as e:
             job.update(status="error", error=str(e))
         except Exception as e:  # noqa: BLE001 — mostra qualquer falha na interface
             job.update(status="error", error=f"erro inesperado: {e!r}")
@@ -233,7 +270,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         return (STATIC / "index.html").read_text(encoding="utf-8")
 
     @app.post("/api/jobs")
-    def create_job(req: JobRequest):
+    def create_job(req: JobRequest, request: Request):
+        req.callback_url = str(request.base_url) + "api/publish/callback"  # nunca vem do cliente
         with jobs.lock:
             if jobs.running:
                 raise HTTPException(409, "já existe uma tarefa em andamento")
@@ -321,6 +359,80 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         if os.name == "nt":
             os.startfile(d)  # noqa: S606 — abre a pasta de exportação no Explorer
         return {"ok": True, "folder": str(d)}
+
+    # --- contas conectadas (postagem pelo n8n) ---------------------------
+    def _n8n_state() -> dict:
+        cfg = publish_store.load()
+        base = cfg.webhook_url.split("/webhook")[0]
+        local = base.startswith(("http://127.0.0.1:5678", "http://localhost:5678"))
+        return {"installed": n8n_local.n8n_bin(settings.paths.n8n_dir) is not None, "local": local,
+                "online": n8n_local.online(base), "editor_url": base}
+
+    def _public_cfg() -> dict:
+        return publish_store.load().model_dump(exclude={"token"})
+
+    @app.get("/api/publish")
+    def get_publish():
+        return {"config": _public_cfg(), "n8n": _n8n_state(), "recent": publish_store.recent(),
+                "networks": {k: v[0] for k, v in NETWORKS.items()}}
+
+    @app.put("/api/publish/config")
+    def put_publish_config(body: PublishConfigBody):
+        try:
+            cfg = PublishConfig.model_validate(body.model_dump())
+        except ValueError as e:
+            raise HTTPException(422, str(e).splitlines()[-1])
+        publish_store.save(cfg)
+        return {"config": _public_cfg()}
+
+    @app.post("/api/publish/test")
+    def post_publish_test():
+        try:
+            return {"ok": True, "reply": test_connection(publish_store.load().webhook_url)}
+        except PublishError as e:
+            return {"ok": False, "error": str(e)}
+
+    @app.post("/api/publish/account/{network}")
+    def post_publish_account(network: str, body: AccountBody):
+        try:
+            return setup_account(publish_store.load().webhook_url, network, body.fields)
+        except PublishError as e:
+            raise HTTPException(422, str(e))
+
+    @app.post("/api/publish/callback")
+    def post_publish_callback(body: dict):
+        try:
+            return {"ok": True, **apply_callback(publish_store, body)}
+        except PublishError as e:
+            raise HTTPException(403 if "token" in str(e) else 422, str(e))
+
+    @app.get("/api/projects/{name}/publish")
+    def get_project_publish(name: str):
+        return publish_store.status(_project_dir(name).name)
+
+    @app.post("/api/n8n/start")
+    def post_n8n_start():
+        state = _n8n_state()
+        if state["online"]:
+            return {"ok": True, "already": True}
+        if not state["installed"]:
+            raise HTTPException(409, "o n8n ainda não foi instalado neste PC (veja o README)")
+        p = n8n_proc["p"]
+        if p is None or p.poll() is not None:
+            try:  # primeira vez (ou fluxo atualizado): importa e publica antes de ligar
+                n8n_local.ensure_workflow(settings.paths.n8n_dir, data_dir)
+            except (RuntimeError, OSError) as e:
+                raise HTTPException(500, f"não consegui preparar o fluxo no n8n: {e}")
+            n8n_proc["p"] = n8n_local.start(settings.paths.n8n_dir, data_dir,
+                                            (projects_dir, Path(settings.paths.exports_dir)))
+        return {"ok": True, "starting": True}
+
+    @app.post("/api/n8n/open")
+    def post_n8n_open():
+        url = _n8n_state()["editor_url"]
+        if os.name == "nt":
+            os.startfile(url)  # noqa: S606 — abre o editor do n8n no navegador padrão
+        return {"ok": True, "url": url}
 
     @app.get("/api/caption-style")
     def get_caption_style():

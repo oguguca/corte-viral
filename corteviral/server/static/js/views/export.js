@@ -6,10 +6,23 @@ import { openLayout } from "../sheets/layout.js";
 import { state } from "../state.js";
 import { confirmAction, toast } from "../ui.js";
 
+const NET_SHORT = { youtube: "YT", tiktok: "TT", instagram: "IG" };
+
+function pubBadges(entries) {  // status por rede: publicado / enviado / falhou
+  return Object.entries(entries || {}).map(([net, e]) => {
+    const cls = e.status === "published" ? "good" : e.status === "error" ? "bad" : "info";
+    const sym = e.status === "published" ? "✓" : e.status === "error" ? "⚠" : "→";
+    const tip = e.status === "error" ? e.error : e.status === "published" ? "publicado" : "enviado ao n8n";
+    const badge = `<span class="badge ${cls}" title="${esc(tip || "")}">${sym} ${NET_SHORT[net] || esc(net)}</span>`;
+    return e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${badge}</a>` : badge;
+  }).join("");
+}
+
 export async function renderExport(root, name, project, ctx = {}) {
   const P = projectApi(name);
-  let d = null, chk = null;
+  let d = null, chk = null, pub = {}, pcfg = null;
   try { d = await api(P("/moments")); } catch (e) { /* sem momentos */ }
+  try { [pub, pcfg] = await Promise.all([api(P("/publish")), api("/api/publish")]); } catch (e) { /* sem postagem */ }
   try { chk = await api(P("/export-check")); } catch (e) { if (d) toast("Não consegui checar a exportação: " + e.message, "bad"); }
   if (!d) {
     root.innerHTML = `<div class="card"><div class="empty"><div class="big">📦</div>Encontre e aprove momentos antes de exportar.
@@ -18,6 +31,7 @@ export async function renderExport(root, name, project, ctx = {}) {
     return;
   }
   const approved = d.moments.filter((m) => m.status === "approved").sort((a, b) => b.score - a.score);
+  const netsOn = pcfg ? Object.entries(pcfg.config.networks).filter(([, on]) => on).map(([k]) => pcfg.networks[k]) : [];
   const noTexts = approved.filter((m) => !m.meta).length;
   root.innerHTML = `
     <div class="grid-2">
@@ -28,7 +42,8 @@ export async function renderExport(root, name, project, ctx = {}) {
             <b class="num" style="width:26px">${String(i + 1).padStart(2, "0")}</b>
             <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc((m.meta && m.meta.posts && m.meta.posts.tiktok && m.meta.posts.tiktok.title) || (m.meta && m.meta.hook) || m.description || m.reason || m.id)}</span>
             <span class="t-small num">${Math.round(m.end - m.start)} s</span>
-            ${m.meta ? '<span class="badge info">textos ✓</span>' : '<span class="badge">sem textos</span>'}</li>`).join("")}</ul>`
+            ${m.meta ? '<span class="badge info">textos ✓</span>' : '<span class="badge">sem textos</span>'}
+            ${pubBadges(pub[m.id])}</li>`).join("")}</ul>`
           : `<div class="empty"><div class="big">☑︎</div>Nenhum clipe aprovado ainda.<button class="btn" id="toClips">Revisar clipes</button></div>`}
       </section>
       <section class="stack">
@@ -46,6 +61,14 @@ export async function renderExport(root, name, project, ctx = {}) {
           <button class="btn plain" id="openDir">Abrir pasta de exportação</button>
           <div id="result"></div>
         </section>
+        <section class="card pad stack">
+          <h2 class="t-head">Postar nas redes</h2>
+          ${netsOn.length ? `<div class="muted">Envia os aprovados ao n8n, que posta em <b>${esc(netsOn.join(", "))}</b>.
+              ${pcfg.config.auto_send ? "Também acontece sozinho a cada exportação." : ""}</div>
+            <button class="btn primary" id="pubBtn" ${approved.length ? "" : "disabled"}>Enviar ${approved.length} clipe(s) para postar</button>`
+          : `<div class="muted">Nenhuma rede ligada ainda. Conecte YouTube, TikTok e Instagram em <b>Contas conectadas</b>.</div>`}
+          <a class="btn plain" href="#/contas">Contas conectadas ›</a>
+        </section>
       </section>
     </div>`;
   $("#toClips", root)?.addEventListener("click", () => go(name, "clips"));
@@ -61,12 +84,20 @@ export async function renderExport(root, name, project, ctx = {}) {
     delete state.exportResults[name];
     await startJob({ kind: "export", project: name });  // ao terminar, a tela é redesenhada e mostra o resultado
   };
+  $("#pubBtn", root)?.addEventListener("click", async () => {
+    const already = approved.filter((m) => Object.values(pub[m.id] || {}).some((e) => e.status === "published")).length;
+    let force = false;
+    if (already) force = confirmAction(`${already} clipe(s) já foram publicados em alguma rede. Publicar de novo nessas redes também?\n(OK = publicar de novo · Cancelar = só onde ainda não saiu)`);
+    await startJob({ kind: "publish", project: name, ids: approved.map((m) => m.id), force });
+  });
   if (state.exportResults[name]) showResult(state.exportResults[name]);
   function showResult(job) {
     const r = job.result || {};
     $("#result", root).innerHTML = `<div class="note ${(r.errors || []).length ? "warn" : "good"}"><span>${(r.errors || []).length ? "⚠" : "✓"}</span>
       <span>${(r.files || []).length} clipe(s) exportado(s)${(r.errors || []).length ? ` · ${r.errors.length} falharam:` : "."}
       ${(r.errors || []).map((e) => `<br>• ${esc(e.id)}: ${esc(e.error)}`).join("")}
+      ${r.publish ? `<br>Postagem: ${r.publish.sent || 0} clipe(s) entregues ao n8n${(r.publish.errors || []).length
+        ? ` · ${r.publish.errors.length} falharam: ${esc(r.publish.errors[0].error)}` : ""}.` : ""}
       <br><button class="btn small" id="openRes" style="margin-top:8px">Abrir pasta</button></span></div>`;
     $("#openRes", root).onclick = openDir;
   }
