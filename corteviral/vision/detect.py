@@ -17,6 +17,7 @@ YUNET_URL = ("https://github.com/opencv/opencv_zoo/raw/main/models/face_detectio
              "face_detection_yunet_2023mar.onnx")
 CAM_W, CAM_H, FACE_Y = 3.5, 2.2, 0.45  # câmera ≈ 3,5× a largura e 2,2× a altura do rosto
 N_FRAMES = 24
+INSET = 0.01
 
 
 def _clamp_rect(x: float, y: float, w: float, h: float) -> list[float]:
@@ -86,7 +87,8 @@ def motion_region(frames: list[np.ndarray], mask_rects: list[list[float]] | None
     x, y, w, h, area = stats[i]
     if w * h < 0.15 * H * W:
         return None
-    return _clamp_rect(x / W, y / H, w / W, h / H)
+    # recua um pouco para dentro: a borda/moldura do overlay não entra no recorte
+    return _clamp_rect(x / W + INSET, y / H + INSET, w / W - 2 * INSET, h / H - 2 * INSET)
 
 
 def _yunet(models_dir: Path) -> Path | None:

@@ -1,0 +1,108 @@
+"""Renderização dos clipes verticais 9:16 (corte + layout + codificação NVENC/x264), com cache por clipe."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+from pathlib import Path
+from typing import Callable
+
+from corteviral import ffmpeg
+from corteviral.config import Settings
+from corteviral.ffmpeg import FFmpegError
+from corteviral.pipeline.layout import build_filter
+from corteviral.presets import LayoutPreset, resolve_layout
+from corteviral.project import Project
+from corteviral.utils import params_hash, write_json_atomic
+from corteviral.vision.frames import grab, video_size
+
+log = logging.getLogger(__name__)
+ProgressFn = Callable[[float, str], None]
+CLIPS = "clips"
+_BROKEN_ENCODERS: set[str] = set()  # codificadores que já falharam nesta execução (ex.: NVENC x driver)
+
+
+def _encoder_args(encoder: str, cq: int, preview: bool) -> list[str]:
+    if encoder == "libx264":
+        return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(28 if preview else 21)]
+    return ["-c:v", encoder, "-preset", "p5", "-rc", "vbr", "-cq", str(30 if preview else cq), "-b:v", "0"]
+
+
+def _face_track(video: Path, start: float, end: float, models_dir: Path) -> list[tuple[float, float]]:
+    """Centro horizontal do maior rosto a cada 1 s do trecho (tempo relativo ao início do clipe)."""
+    from corteviral.vision.detect import _detector
+
+    times = [start + i for i in range(int(end - start) + 1)]
+    frames = grab(video, times, width=640)
+    if not frames:
+        return []
+    H, W = frames[0].shape[:2]
+    det = _detector(models_dir, (W, H))
+    track = []
+    for t, f in zip(times, frames):
+        faces = det(f)
+        if faces:
+            x, _, w, _, _ = max(faces, key=lambda b: b[2] * b[3])
+            track.append((round(t - start, 2), (x + w / 2) / W))
+    return track
+
+
+def render_clip(project: Project, moment: dict, settings: Settings, preview: bool = False,
+                preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None) -> Path:
+    rs = settings.render
+    video = Path(project.data["video_path"])
+    preset = preset or resolve_layout(project, settings)
+    det = project.data.get("layout_detect") or {}
+    src = tuple(det.get("source") or video_size(video))
+    start, end = float(moment["start"]), float(moment["end"])
+
+    out_dir = project.path(CLIPS)
+    out_dir.mkdir(exist_ok=True)
+    out = out_dir / f"{moment['id']}{'.preview' if preview else ''}.mp4"
+    meta_file = out.with_suffix(".json")
+    key = params_hash({"v": 1, "start": start, "end": end, "preset": preset.model_dump(),
+                       "render": rs.model_dump(mode="json"), "preview": preview})
+    if out.exists() and meta_file.exists():
+        if json.loads(meta_file.read_text(encoding="utf-8")).get("hash") == key:
+            return out
+
+    track = _face_track(video, start, end, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
+    graph = build_filter(preset, src, rs, track=track, preview=preview)
+    tmp = out.with_name(out.stem + ".tmp.mp4")
+    base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video),
+            "-filter_complex", graph, "-map", "[v]", "-map", "0:a?"]
+    tail = ["-c:a", "aac", "-b:a", rs.audio_bitrate, "-ac", "2", "-movflags", "+faststart", str(tmp)]
+
+    if on_progress:
+        on_progress(0.0, f"renderizando {moment['id']}")
+    used = "libx264" if rs.encoder in _BROKEN_ENCODERS else rs.encoder
+    try:
+        ffmpeg.run(base + _encoder_args(used, rs.cq, preview) + tail)
+    except FFmpegError as e:
+        if used == "libx264":
+            raise
+        log.warning("Codificador %s falhou (%s); usando libx264 (CPU).", used, str(e)[-200:])
+        _BROKEN_ENCODERS.add(used)
+        used = "libx264"
+        ffmpeg.run(base + _encoder_args("libx264", rs.cq, preview) + tail)
+
+    if tmp.exists():
+        os.replace(tmp, out)
+    write_json_atomic(meta_file, {"hash": key, "layout": preset.layout, "encoder": used, "start": start,
+                                  "end": end, "preview": preview, "preset": preset.model_dump()})
+    if on_progress:
+        on_progress(1.0, f"{moment['id']} pronto")
+    return out
+
+
+def render_all(project: Project, settings: Settings, moments: list[dict], preview: bool = False,
+               on_progress: ProgressFn | None = None) -> list[Path]:
+    preset = resolve_layout(project, settings)
+    outs = []
+    for i, m in enumerate(moments):
+        if on_progress:
+            on_progress(i / max(1, len(moments)), f"renderizando clipe {i + 1} de {len(moments)}")
+        outs.append(render_clip(project, m, settings, preview=preview, preset=preset))
+    if on_progress:
+        on_progress(1.0, f"{len(outs)} clipes prontos")
+    return outs

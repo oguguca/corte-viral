@@ -61,3 +61,16 @@ def test_grab_returns_frames_from_sample_video(sample_video):
     imgs = grab(sample_video, [1.0, 4.0, 99.0], width=320)
     assert len(imgs) == 2
     assert imgs[0].shape == (180, 320, 3)
+
+
+def test_motion_region_is_inset_to_skip_border():
+    rng = np.random.default_rng(1)
+    H, W = 180, 320
+    frames = []
+    for _ in range(10):
+        img = np.full((H, W, 3), 120, np.uint8)
+        img[27:171, 32:256] = rng.integers(0, 255, (144, 224, 3), dtype=np.uint8)
+        frames.append(img)
+    x, y, w, h = motion_region(frames)
+    assert x > 0.10 and y > 0.15  # recuado para dentro da borda
+    assert x + w < 0.80 and y + h < 0.95

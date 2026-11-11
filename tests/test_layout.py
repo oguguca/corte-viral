@@ -55,3 +55,20 @@ def test_face_follow_filter_uses_expression():
 def test_preview_scales_to_540x960():
     f = build_filter(LayoutPreset(facecam=[0.84, 0.18, 0.13, 0.18]), SRC, RenderSettings(), preview=True)
     assert "scale=540:288" in f and "pad=540:292" in f and "scale=540:668" in f  # alturas sempre pares
+
+
+def test_cover_crop_anchor_keeps_face_area():
+    region = (1617, 201, 253, 196)  # câmera: rosto fica a ~45 % da altura
+    _, y_center, _, h = cover_crop(region, 1080 / 576)
+    _, y_anch, _, h2 = cover_crop(region, 1080 / 576, anchor_y=0.42)
+    assert h == h2 and y_anch < y_center  # sobe o recorte para não cortar a cabeça
+    face_y = 201 + 0.42 * 196
+    assert y_anch <= face_y - 0.4 * h2
+
+
+def test_split_anchors_facecam_near_face():
+    f = build_filter(LayoutPreset(facecam=[0.8, 0.2, 0.15, 0.2]), SRC, RenderSettings())
+    cam_crop = re.search(r"\[a\]crop=(\d+):(\d+):(\d+):(\d+)", f).groups()
+    w, h, x, y = map(int, cam_crop)
+    region_top, region_h = int(0.2 * 1080), int(0.2 * 1080)
+    assert y < region_top + (region_h - h) // 2  # acima do centro

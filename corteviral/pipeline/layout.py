@@ -6,6 +6,7 @@ from corteviral.presets import LayoutPreset
 
 DEADZONE = 0.04   # fração da largura: movimento menor que isso não mexe o recorte
 ALPHA = 0.3       # suavização (média móvel exponencial) do acompanhamento do rosto
+FACE_ANCHOR = 0.42  # o rosto fica ~45 % abaixo do topo da câmera: centraliza um pouco acima
 
 
 def _even(v: float) -> int:
@@ -20,8 +21,9 @@ def _px(region: list[float] | None, src: tuple[int, int]) -> tuple[int, int, int
     return int(x * sw), int(y * sh), int(w * sw), int(h * sh)
 
 
-def cover_crop(region: tuple[int, int, int, int], aspect: float) -> tuple[int, int, int, int]:
-    """Maior recorte com o aspecto dado, centrado na região (dimensões pares)."""
+def cover_crop(region: tuple[int, int, int, int], aspect: float,
+               anchor_y: float = 0.5) -> tuple[int, int, int, int]:
+    """Maior recorte com o aspecto dado dentro da região (pares); anchor_y = altura que fica no centro."""
     x, y, w, h = region
     if w / h > aspect:
         ch = h - h % 2
@@ -32,7 +34,8 @@ def cover_crop(region: tuple[int, int, int, int], aspect: float) -> tuple[int, i
         ch = _even(min(h, cw / aspect))
         ch = min(ch, h - h % 2)
     cx = x + (w - cw) // 2
-    cy = y + (h - ch) // 2
+    cy = int(round(y + anchor_y * h - ch / 2))
+    cy = min(max(cy, y), y + h - ch)
     return cx, cy, cw, ch
 
 
@@ -70,7 +73,7 @@ def build_filter(preset: LayoutPreset, src: tuple[int, int], rs: RenderSettings,
         cam_h = _even(H * rs.facecam_ratio)
         div = _even(rs.divider_px * k) if rs.divider_px else 0
         game_h = H - cam_h - div
-        cam = cover_crop(_px(preset.facecam, src), W / cam_h)
+        cam = cover_crop(_px(preset.facecam, src), W / cam_h, anchor_y=FACE_ANCHOR)
         game = cover_crop(_px(preset.gameplay, src), W / game_h)
         color = rs.divider_color.replace("#", "0x")
         return (f"[0:v]split=2[a][b];"
