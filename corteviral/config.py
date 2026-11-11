@@ -49,10 +49,21 @@ class AnalysisSettings(_Strict):
     fetch_chat: bool = True
 
 
+class LLMSettings(_Strict):
+    provider: Literal["none", "gemini", "anthropic"] = "gemini"
+    model: str | None = None  # None = padrão do provedor
+    batch_size: int = 8
+    timeout: int = 90
+    # O Google não informa a cota grátis pela API: confira em AI Studio → Rate limits e ajuste aqui
+    daily_request_limit: int = 1000
+    daily_token_limit: int = 1_000_000
+
+
 class Settings(_Strict):
     paths: PathsSettings = Field(default_factory=PathsSettings)
     download: DownloadSettings = Field(default_factory=DownloadSettings)
     analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
