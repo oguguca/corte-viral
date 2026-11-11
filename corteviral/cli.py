@@ -27,6 +27,8 @@ def _cmd_ingest(args) -> int:
         settings.whisper.model = args.model
     if args.language:
         settings.whisper.language = args.language
+    if args.cookies_from_browser:
+        settings.download.cookies_from_browser = args.cookies_from_browser
 
     if args.force:
         from corteviral.pipeline.ingest import is_url
@@ -75,6 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", help="modelo whisper (tiny|base|small|medium|large-v3)")
     p.add_argument("--language", choices=["auto", "pt", "en"])
     p.add_argument("--force", action="store_true", help="refaz tudo, ignorando o cache")
+    p.add_argument("--cookies-from-browser", metavar="NAVEGADOR",
+                   help="usa o login do navegador (firefox|edge|chrome) p/ vídeos com restrição")
     p.set_defaults(func=_cmd_ingest)
 
     p = sub.add_parser("info", help="mostra o estado de um projeto")

@@ -107,3 +107,10 @@ def write_cfg(tmp_path):
     models = (tmp_path / "models").as_posix()
     cfg.write_text(f"paths:\n  projects_dir: '{projects}'\n  models_dir: '{models}'\n", encoding="utf-8")
     return cfg
+
+
+@pytest.fixture(autouse=True)
+def _no_real_gpu_preflight(monkeypatch, request):
+    """Os testes rápidos nunca carregam o modelo real para testar a GPU."""
+    if "slow" not in request.keywords:
+        monkeypatch.setattr("corteviral.pipeline.transcribe._gpu_preflight", lambda settings: True)

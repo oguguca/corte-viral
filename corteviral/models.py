@@ -27,6 +27,8 @@ class Transcript(BaseModel):
     duration: float
     words: list[Word]
     segments: list[Segment]
+    model: str = ""   # modelo realmente usado (pode ser o de fallback)
+    device: str = ""  # cuda | cpu (realmente usado)
 
     def save(self, path: Path) -> None:
         write_json_atomic(Path(path), self.model_dump())
