@@ -38,6 +38,8 @@ def _tag(raw: str) -> str:
 
 
 def normalize_hashtags(tags) -> list[str]:
+    if isinstance(tags, str):
+        tags = re.split(r"[\s,;]+", tags)
     out, seen = [], set()
     for t in tags or []:
         tag = _tag(t)
@@ -57,7 +59,8 @@ def _credit_line(credit: str | None) -> str:
 def normalize_post(post: dict, platform: str, credit: str | None) -> dict:
     title = str(post.get("title") or "")
     if platform == "shorts":
-        title = fit(title.replace("#shorts", "").strip(), TITLE_MAX["shorts"] - len(" #shorts")) + " #shorts"
+        base = re.sub(r"#shorts", "", title, flags=re.IGNORECASE).strip()
+        title = (fit(base, TITLE_MAX["shorts"] - len(" #shorts")) + " #shorts") if base else ""
     else:
         title = fit(title, TITLE_MAX[platform])
     credit_line = _credit_line(credit)

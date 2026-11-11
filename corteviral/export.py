@@ -56,7 +56,14 @@ class HistoryStore:
 
 
 def _meta(moment: dict, streamer: str | None, credit: str | None) -> dict:
-    return moment.get("meta") or fallback_posts(moment, streamer, credit)
+    """Textos salvos, completando o que estiver vazio com os textos simples (nunca exporta título em branco)."""
+    fb = fallback_posts(moment, streamer, credit)
+    meta = moment.get("meta") or {}
+    posts = {}
+    for plat, fpost in fb["posts"].items():
+        post = (meta.get("posts") or {}).get(plat) or {}
+        posts[plat] = {k: (post.get(k) or fpost[k]) for k in ("title", "description", "hashtags")}
+    return {"hook": meta.get("hook") or fb["hook"], "ai": bool(meta.get("ai")), "posts": posts}
 
 
 def posts_txt(moment: dict, streamer: str | None = None, credit: str | None = None) -> str:
@@ -76,7 +83,11 @@ def _history(settings: Settings) -> HistoryStore:
 def _approved(project: Project) -> list[dict]:
     from corteviral.pipeline.analyze import load_moments
     data = load_moments(project) or {}
-    return sorted([m for m in data.get("moments", []) if m.get("status") == "approved"], key=lambda m: -m["score"])
+    by_id = {}
+    for m in data.get("moments", []) + data.get("all", []):  # aprovados fora da seleção atual também
+        if m.get("status") == "approved" and m["id"] not in by_id:
+            by_id[m["id"]] = m
+    return sorted(by_id.values(), key=lambda m: -m["score"])
 
 
 def _source(project: Project) -> str:
@@ -110,20 +121,27 @@ def export_approved(project: Project, settings: Settings, on_progress: ProgressF
         title = (meta["posts"].get("tiktok") or {}).get("title") or meta.get("hook") or m["id"]
         base = f"{i:02d}-{slugify(title, 50)}"
         name, n = base, 2
-        while name in used:
-            name, n = f"{base}-{n}", n + 1
+        while name in used or (folder / f"{name}.mp4").exists() or (folder / f"{name}.txt").exists():
+            name, n = f"{base}-{n}", n + 1  # nunca sobrescreve uma exportação anterior
         used.add(name)
         mp4, txt = folder / f"{name}.mp4", folder / f"{name}.txt"
-        tmp = folder / f".{name}.part.mp4"
+        tmp_mp4, tmp_txt = folder / f".{name}.part.mp4", folder / f".{name}.part.txt"
+        created = []
         try:
             clip = render_clip(project, m, settings)
-            shutil.copyfile(clip, tmp)
-            os.replace(tmp, mp4)
-            txt.write_text(posts_txt(m, streamer, credit), encoding="utf-8")
+            shutil.copyfile(clip, tmp_mp4)
+            tmp_txt.write_text(posts_txt(m, streamer, credit), encoding="utf-8")
+            os.replace(tmp_mp4, mp4)
+            created.append(mp4)
+            os.replace(tmp_txt, txt)
+            created.append(txt)
         except Exception as e:  # noqa: BLE001 — um clipe com problema não impede os outros
             log.warning("Falha ao exportar %s: %s", m["id"], e)
-            for f in (tmp, mp4, txt):
-                f.unlink(missing_ok=True)
+            for f in (tmp_mp4, tmp_txt, *created):  # só apaga o que esta tentativa criou
+                try:
+                    f.unlink(missing_ok=True)
+                except OSError:
+                    pass
             errors.append({"id": m["id"], "error": str(e)[:300]})
             continue
         _history(settings).add(_source(project), m["start"], m["end"], str(mp4))

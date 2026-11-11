@@ -93,7 +93,7 @@ CREDIT_SIZE = 36
 
 
 def _overlay_events(style: CaptionStyle, hook: str | None, credit: str | None, duration: float | None,
-                    layout: str, sx: float, sy: float) -> list[str]:
+                    layout: str, sx: float, sy: float, hook_top: float | None = None) -> list[str]:
     out = []
     x = round((SAFE_LEFT + (1080 - SAFE_RIGHT)) / 2 * sx)
     safe_w = (1080 - SAFE_LEFT - SAFE_RIGHT) * sx
@@ -103,12 +103,13 @@ def _overlay_events(style: CaptionStyle, hook: str | None, credit: str | None, d
         est = len(text) * size * CHAR_W
         scale = min(100, int(2 * safe_w / est * 100)) if est else 100  # cabe em até 2 linhas
         fit = rf"\fscx{scale}\fscy{scale}" if scale < 100 else ""
-        top = round(HOOK_TOP.get(layout, HOOK_TOP["default"]) * sy)
+        top = round((hook_top if hook_top is not None else HOOK_TOP.get(layout, HOOK_TOP["default"])) * sy)
         end = min(HOOK_SECONDS, duration) if duration else HOOK_SECONDS
         out.append(f"Dialogue: 1,{ass_time(0)},{ass_time(end)},Hook,,0,0,0,,"
                    "{" + rf"\an8\pos({x},{top}){fit}" + "}" + ass_escape(text))
-    if credit and credit.strip() and duration:
-        handle = credit.strip() if credit.strip().startswith("@") else "@" + credit.strip()
+    credit = " ".join((credit or "").split())  # sem quebras de linha (não pode criar linhas novas no .ass)
+    if credit and duration:
+        handle = credit if credit.startswith("@") else "@" + credit
         right = round((1080 - SAFE_RIGHT) * sx)
         out.append(f"Dialogue: 1,{ass_time(0)},{ass_time(duration)},Credit,,0,0,0,,"
                    "{" + rf"\an3\pos({right},{round(SAFE_BOTTOM * sy)})" + "}" + ass_escape(handle))
@@ -117,7 +118,7 @@ def _overlay_events(style: CaptionStyle, hook: str | None, credit: str | None, d
 
 def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height: int = 1920,
               hook: str | None = None, credit: str | None = None, duration: float | None = None,
-              layout: str = "split") -> str:
+              layout: str = "split", hook_top: float | None = None) -> str:
     sx, sy = width / 1080, height / 1920
     size = style.size * sy
     x = round((SAFE_LEFT + (1080 - SAFE_RIGHT)) / 2 * sx)
@@ -125,10 +126,11 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height:
     # ancorada pela base (\an2): a linha inteira — não só o centro — fica dentro da zona segura
     bottom = style.position * height + size / 2
     bottom = max(bottom, SAFE_TOP * sy + size)
-    bottom = round(min(bottom, SAFE_BOTTOM * sy))
+    limit = SAFE_BOTTOM - (CREDIT_SIZE + 12 if (credit or "").strip() else 0)  # não encosta no crédito
+    bottom = round(min(bottom, limit * sy))
     hl, prim = ass_color(style.highlight), ass_color(style.color)
     lines = [_header(style, width, height)]
-    lines += _overlay_events(style, hook, credit, duration, layout, sx, sy)
+    lines += _overlay_events(style, hook, credit, duration, layout, sx, sy, hook_top)
     chunks = chunk_words(words, style.max_words, style.max_chars)
     for ci, chunk in enumerate(chunks):
         nxt = chunks[ci + 1][0]["start"] if ci + 1 < len(chunks) else None

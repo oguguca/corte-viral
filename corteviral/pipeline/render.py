@@ -66,6 +66,17 @@ def _caption_words(project: Project, moment: dict, start: float, end: float) -> 
     return clip_words(Transcript.load(tpath).words, start, end)
 
 
+def hook_top_for(layout: str, has_cam: bool, rs) -> int:
+    """Topo do gancho (em 1920): logo abaixo da câmera no split; topo da faixa 16:9 no fundo desfocado."""
+    if layout == "split" and has_cam:
+        cam_h = max(2, int(round(1920 * rs.facecam_ratio / 2)) * 2)
+        return cam_h + (rs.divider_px or 0) + 40
+    if layout == "face-follow":
+        return 300
+    band = 1080 * 9 / 16
+    return int((1920 - band) / 2) + 30
+
+
 def captions_wanted(moment: dict, captions: bool | None, style) -> bool:
     """Por clipe > pedido de geração > estilo (config/interface)."""
     if moment.get("captions") is not None:
@@ -93,12 +104,13 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     style = load_style(settings)
     words = _caption_words(project, moment, start, end) if captions_wanted(moment, captions, style) else []
     hook_on = moment["hook_on"] if moment.get("hook_on") is not None else style.hook
-    hook = ((moment.get("meta") or {}).get("hook") or "") if hook_on else ""
+    hook = ((moment.get("meta") or {}).get("hook") or moment.get("hook") or "") if hook_on else ""
     credit = preset.credit_handle if (style.credit and preset.credit_handle) else ""
     ass_text = None
     if words or hook or credit:
         ass_text = build_ass(words, style, hook=hook or None, credit=credit or None,
-                             duration=end - start, layout=preset.layout)
+                             duration=end - start, layout=preset.layout,
+                             hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs))
     key = params_hash({"v": 2, "start": start, "end": end, "preset": preset.model_dump(),
                        "render": rs.model_dump(mode="json"), "preview": preview,
                        "captions": params_hash({"ass": ass_text}) if ass_text else None})

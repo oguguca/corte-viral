@@ -68,6 +68,9 @@ def apply_patch(project: Project, moment_id: str, patch: dict, settings: Setting
             _validate_cut(project, start, end)
             changes.update(start=round(start, 3), end=round(end, 3),
                            text=" ".join(w["w"] for w in _words(project, start, end)))
+            if m0.get("caption_words") and patch.get("caption_text") is None:
+                old_text = " ".join(w["w"] for w in m0["caption_words"])
+                changes["caption_words"] = realign(_words(project, start, end), old_text)
         for key in ("captions", "hook_on"):
             if patch.get(key) is not None:
                 changes[key] = bool(patch[key])
@@ -75,6 +78,9 @@ def apply_patch(project: Project, moment_id: str, patch: dict, settings: Setting
             start, end = changes.get("start", m0["start"]), changes.get("end", m0["end"])
             changes["caption_words"] = realign(_words(project, start, end), patch["caption_text"])
         if patch.get("meta") is not None:
+            posts = patch["meta"].get("posts") if isinstance(patch["meta"], dict) else None
+            if not isinstance(patch["meta"], dict) or (posts is not None and not isinstance(posts, dict)):
+                raise ReviewError("textos em formato inválido")
             preset = load_preset(settings.render.presets_dir, project.data.get("streamer"))
             changes["meta"] = _normalize_meta(patch["meta"], preset.credit_handle if preset else None,
                                               m0.get("meta"))

@@ -544,7 +544,10 @@ async function openProject(name) {
     $("rvFilter").onchange = () => loadMoments(name);
     $("rvPosts").onclick = () => {
       const ap = currentMoments.filter((m) => m.status === "approved").map((m) => m.id);
-      startPosts(name, ap.length ? ap : currentMoments.map((m) => m.id));
+      const ids = ap.length ? ap : currentMoments.map((m) => m.id);
+      const withTexts = currentMoments.filter((m) => ids.includes(m.id) && m.meta).length;
+      if (withTexts && !confirm(`${withTexts} clipe(s) já têm textos (talvez editados por você). A IA vai substituir. Continuar?`)) return;
+      startPosts(name, ids);
     };
     $("rvExport").onclick = () => startExport(name);
     $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
@@ -890,6 +893,7 @@ async function loadMoments(name) {
                      : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais`
                      : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
                      + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");
+  const openRv = new Set([...ul.querySelectorAll("details.rv[open]")].map((el) => el.dataset.rv));
   ul.innerHTML = d.moments.map((m) => `
     <li data-start="${m.start}" data-end="${m.end}" data-id="${esc(m.id)}" class="${esc(m.status || "pending")}">
       <div class="score">${m.score}<small>nota</small></div>
@@ -957,6 +961,7 @@ async function loadMoments(name) {
     </li>`).join("");
   ul.querySelectorAll("[data-render]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); startRender(name, [b.dataset.render]); });
   ul.querySelectorAll("[data-watch]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); openClip(name, b.dataset.watch); });
+  ul.querySelectorAll("details.rv").forEach((el) => { if (openRv.has(el.dataset.rv)) el.open = true; });  // mantém abertos
   const patch = (id, body) => api(`/api/projects/${encodeURIComponent(name)}/moments/${encodeURIComponent(id)}`,
                                    { method: "PUT", body: JSON.stringify(body) });
   ul.querySelectorAll("[data-capon]").forEach((c) => {
