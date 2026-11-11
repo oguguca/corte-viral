@@ -93,3 +93,15 @@
 - [ ] Ver falhar → implementar → ver passar → commit `feat: analisa momentos pela CLI e pela interface`.
 - [ ] Verificação real: rodar no VOD do usuário (`react-gta-6-…`) com `gemini` e com `none`; conferir na UI que os 10 momentos fazem sentido; anotar tempo e uso do Gemini.
 - [ ] Revisão final (code-reviewer, modelo mais capaz) → correções → push.
+
+### Task 6: Uso de tokens da IA em tempo real (pedido do usuário)
+
+**Files:** Create `corteviral/usage.py`, `tests/test_usage.py`; Modify `corteviral/llm.py` (registrar cada chamada), `config.py` (`LLMSettings.daily_request_limit: int = 1000`, `daily_token_limit: int = 1_000_000` — o Google não expõe a cota grátis por API; o usuário confere em AI Studio → Rate limits), `server/app.py` (`GET /api/usage`), `index.html` (card "Uso da IA hoje").
+
+**Interfaces:**
+- `UsageTracker(path: Path)`: `record(provider, model, input_tokens, output_tokens, ok: bool, rate_limited: bool=False)`; `today() -> {requests, input_tokens, output_tokens, total_tokens, rate_limited, per_minute:[{t, tokens}] (últimos 60 min)}`. Persistido em `data/usage.json` por dia (fuso local), thread-safe, escrita atômica; dias antigos mantidos por 30 dias.
+- `/api/usage` → `today()` + limites + `% = max(requests/limite_req, tokens/limite_tok)`.
+- UI: barra de % do limite diário (cor muda em 70 % e 90 %), números de tokens/requisições, gráfico de barras dos tokens por minuto (últimos 60 min) atualizado a cada 2 s durante uma análise e a cada 15 s parado; selo "limite atingido" após 429.
+
+- [ ] Testes: `test_record_accumulates_today`; `test_new_day_resets`; `test_per_minute_buckets_last_hour`; `test_rate_limited_flag`; `test_api_usage_percent`; `test_gemini_client_records_usage_from_usageMetadata`.
+- [ ] Ver falhar → implementar → ver passar → commit `feat: painel de uso de tokens da IA em tempo real`.
