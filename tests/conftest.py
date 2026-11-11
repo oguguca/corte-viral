@@ -98,3 +98,12 @@ def project_with_audio(settings_tmp):
     p.data["duration"] = 8.0
     p.save()
     return p
+
+
+def write_cfg(tmp_path):
+    """config.yaml mínimo apontando projects/models para dentro de tmp_path."""
+    cfg = tmp_path / "config.yaml"
+    projects = (tmp_path / "projects").as_posix()
+    models = (tmp_path / "models").as_posix()
+    cfg.write_text(f"paths:\n  projects_dir: '{projects}'\n  models_dir: '{models}'\n", encoding="utf-8")
+    return cfg
