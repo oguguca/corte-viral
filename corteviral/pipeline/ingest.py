@@ -162,6 +162,7 @@ def ingest(source: str, settings: Settings, on_progress: ProgressFn | None = Non
         if project is None:
             project = Project.create(projects_dir, key, info.get("title") or "video")
             project.data["url"] = source.strip()
+            project.data["streamer"] = info.get("channel") or info.get("uploader") or None
             project.save()
         video = _download(source.strip(), project, settings, on_progress)
     else:

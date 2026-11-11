@@ -59,11 +59,25 @@ class LLMSettings(_Strict):
     daily_token_limit: int = 1_000_000
 
 
+class RenderSettings(_Strict):
+    width: int = 1080
+    height: int = 1920
+    fps: int = 30
+    facecam_ratio: float = 0.30
+    divider_px: int = 6
+    divider_color: str = "#000000"
+    encoder: str = "h264_nvenc"   # cai para libx264 se a GPU não puder codificar
+    cq: int = 23
+    audio_bitrate: str = "160k"
+    presets_dir: Path = Path("presets/streamers")
+
+
 class Settings(_Strict):
     paths: PathsSettings = Field(default_factory=PathsSettings)
     download: DownloadSettings = Field(default_factory=DownloadSettings)
     analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    render: RenderSettings = Field(default_factory=RenderSettings)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
