@@ -27,3 +27,10 @@ llm:
   batch_size: 8
   daily_request_limit: 1000   # confira sua cota em AI Studio → Rate limits
   daily_token_limit: 1000000
+
+deep:                       # a IA assiste o vídeo dos melhores candidatos (Gemini)
+  enabled: true
+  top_k: 15                 # quantos trechos ela assiste por análise
+  margin: 15                # segundos de folga antes/depois do momento
+  weights: {gancho: 0.25, emocao: 0.25, visual: 0.15, final: 0.20, contexto: 0.15}
+  max_examples: 6           # exemplos 👍/👎 usados para calibrar

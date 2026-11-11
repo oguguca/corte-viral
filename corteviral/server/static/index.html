@@ -95,6 +95,18 @@
   .modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
   .modal video { height: min(80vh, 760px); aspect-ratio: 9 / 16; background: #000; border-radius: 8px; }
   .modal .row { justify-content: space-between; align-items: center; }
+  /* avaliação por critério */
+  .tag.video { border-color: #3987e5; color: var(--text); }
+  .m-desc { margin-top: 3px; color: var(--text); }
+  .m-risk { margin-top: 3px; font-size: 12px; color: #fab219; }
+  .crit { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 8px; max-width: 520px; }
+  .crit div { font-size: 11px; color: var(--muted); }
+  .crit .bar { height: 6px; background: var(--panel); border-radius: 99px; margin-top: 3px; overflow: hidden; }
+  .crit .bar > i { display: block; height: 100%; background: #c98500; border-radius: 99px; }
+  .crit b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .m-actions button.fb { min-width: 38px; }
+  .m-actions button.fb.on { border-color: var(--accent); background: #2a2610; }
+  .m-actions .sp { flex: 1; }
   /* uso da IA */
   .usage-hero { display: flex; align-items: baseline; gap: 8px; }
   .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -380,6 +392,7 @@ async function openProject(name) {
       <div class="f"><label for="aProvider">IA</label>
         <select id="aProvider"><option value="gemini">Gemini (grátis)</option><option value="none">Sem IA (só sinais)</option><option value="anthropic">Claude (pago)</option></select></div>
       <button class="primary" id="aStart">Encontrar momentos</button>
+      <button id="aForce" title="Ignora o resultado salvo e avalia tudo de novo (gasta cota da IA)">Reavaliar do zero</button>
       <div class="f" style="min-width:110px;margin-left:12px"><label for="rN">Clipes a gerar</label>
         <input id="rN" type="number" min="1" max="30" value="5" title="Gera os N momentos de maior nota"></div>
       <button id="rAll" title="Gera o MP4 vertical dos momentos de maior nota">Gerar os melhores</button>
@@ -423,6 +436,7 @@ async function openProject(name) {
   $("q").oninput = (e) => search(e.target.value);
   if (t) {
     $("aStart").onclick = () => startAnalyze(name);
+    $("aForce").onclick = () => startAnalyze(name, true);
     $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
     $("rAll").onclick = () => {
       const n = Math.max(1, parseInt($("rN").value, 10) || 1);
@@ -437,6 +451,8 @@ async function openProject(name) {
 
 // ---- momentos ------------------------------------------------------------------
 let lastRenderIds = null;
+const CRIT = [["gancho", "Gancho"], ["emocao", "Emoção"], ["visual", "Visual"], ["final", "Final"], ["contexto", "Contexto"]];
+const fbOf = (d, id) => (d.feedback || {})[id] || null;
 let currentMoments = [];
 async function startRender(name, ids) {
   lastRenderIds = ids;
@@ -576,10 +592,10 @@ async function saveLayout(name) {
   } catch (e) { $("lyNote").className = "note warn"; $("lyNote").textContent = "Não salvou: " + e.message; }
 }
 
-async function startAnalyze(name) {
+async function startAnalyze(name, force = false) {
   try {
     const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
-      kind: "analyze", project: name, profile: $("aProfile").value,
+      kind: "analyze", project: name, profile: $("aProfile").value, force,
       n: parseInt($("aN").value, 10) || 10, provider: $("aProvider").value }) });
     watch(job.id);
   } catch (e) { showJobError(e.message); }
@@ -599,11 +615,14 @@ async function loadMoments(name) {
   if (!d) { note.className = "note"; note.textContent = "Clique em “Encontrar momentos” para achar os melhores trechos deste vídeo."; ul.innerHTML = ""; return; }
   if ($("aProfile")) $("aProfile").value = d.profile || "viral";
   const s = d.stats || {};
+  const dv = (s.deep || {});
   const parts = [`${d.moments.length} momentos de ${d.candidates ?? "?"} candidatos`,
+                 dv.video ? `IA assistiu ${dv.video}` : null,
                  d.provider === "none" ? "sem IA" : `IA avaliou ${s.ai ?? 0}`,
                  d.has_chat ? "com chat" : "sem chat"];
   note.className = "note" + (s.rate_limited || s.errors ? " warn" : "");
-  note.textContent = parts.join(" · ") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
+  note.textContent = parts.filter(Boolean).join(" · ")
+                     + (dv.rate_limited ? " · ⚠ cota acabou durante a revisão em vídeo" : "") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
                      : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais`
                      : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
                      + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");
@@ -613,17 +632,39 @@ async function loadMoments(name) {
       <div>
         <div class="m-top"><span class="time">${fmt(m.start)} – ${fmt(m.end)}</span>
           <span>${Math.round(m.end - m.start)} s</span>
-          <span class="tag ${m.ai ? "ai" : ""}">${m.ai ? "IA" : "sinais"}</span></div>
+          <span class="tag ${m.ai === "video" ? "video" : m.ai ? "ai" : ""}">${m.ai === "video" ? "IA assistiu" : m.ai ? "IA (texto)" : "sinais"}</span>
+          ${m.ai === "video" && m.triage_score != null ? `<span title="nota da triagem só pelo texto">triagem ${m.triage_score}</span>` : ""}</div>
+        ${m.description ? `<div class="m-desc">${esc(m.description)}</div>` : ""}
         <div class="m-reason">${esc(m.reason || "")}</div>
+        ${m.risk && !/^nenhum/i.test(m.risk) ? `<div class="m-risk">⚠ ${esc(m.risk)}</div>` : ""}
         ${m.hook ? `<div class="m-hook">Gancho: “${esc(m.hook)}”</div>` : ""}
+        ${m.criteria ? `<div class="crit">${CRIT.map(([k, label]) => `<div>${label} <b>${m.criteria[k] ?? "–"}</b>
+            <div class="bar"><i style="width:${Math.max(0, Math.min(100, m.criteria[k] || 0))}%"></i></div></div>`).join("")}</div>` : ""}
         <div class="m-actions">
           <button data-render="${esc(m.id)}">${(d.clips || {})[m.id]?.final ? "Gerar de novo" : "Gerar clipe"}</button>
           ${(d.clips || {})[m.id]?.final ? `<button data-watch="${esc(m.id)}">Ver clipe</button>` : ""}
+          <span class="sp"></span>
+          <button class="fb ${fbOf(d, m.id) === "good" ? "on" : ""}" data-fb="good" data-id="${esc(m.id)}" title="Bom momento — a IA aprende com isso" aria-label="Bom momento" aria-pressed="${fbOf(d, m.id) === "good"}">👍</button>
+          <button class="fb ${fbOf(d, m.id) === "bad" ? "on" : ""}" data-fb="bad" data-id="${esc(m.id)}" title="Momento ruim — a IA aprende com isso" aria-label="Momento ruim" aria-pressed="${fbOf(d, m.id) === "bad"}">👎</button>
         </div>
       </div>
     </li>`).join("");
   ul.querySelectorAll("[data-render]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); startRender(name, [b.dataset.render]); });
   ul.querySelectorAll("[data-watch]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); openClip(name, b.dataset.watch); });
+  ul.querySelectorAll("[data-fb]").forEach((b) => b.onclick = async (e) => {
+    e.stopPropagation();
+    const id = b.dataset.id, label = fbOf(d, id) === b.dataset.fb ? null : b.dataset.fb;  // clicar de novo desmarca
+    try {
+      await api(`/api/projects/${encodeURIComponent(name)}/moments/${encodeURIComponent(id)}/feedback`,
+                { method: "POST", body: JSON.stringify({ label }) });
+      d.feedback = { ...(d.feedback || {}) };
+      if (label) d.feedback[id] = label; else delete d.feedback[id];
+      ul.querySelectorAll(`[data-id="${CSS.escape(id)}"]`).forEach((x) => {
+        const on = x.dataset.fb === label;
+        x.classList.toggle("on", on); x.setAttribute("aria-pressed", on);
+      });
+    } catch (err) { showJobError(err.message); }
+  });
   ul.querySelectorAll("li").forEach((li) => li.onclick = () => {
     ul.querySelectorAll("li").forEach((el) => el.classList.toggle("playing", el === li));
     seek(parseFloat(li.dataset.start));

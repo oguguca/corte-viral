@@ -22,6 +22,7 @@ from corteviral.browser_session import (BrowserSessionError, edge_path, export_c
                                         open_login_window, profile_in_use)
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
+from corteviral.feedback import FeedbackStore
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
@@ -48,6 +49,7 @@ class JobRequest(BaseModel):
     n: int | None = Field(default=None, ge=1, le=50)
     ids: list[str] | None = None    # render
     preview: bool = False           # render
+    force: bool = False             # analyze: ignora o cache e reavalia
     profile: Literal["viral", "monetizacao"] | None = None
     provider: Literal["none", "gemini", "anthropic"] | None = None
     model: str | None = None
@@ -62,6 +64,10 @@ class JobRequest(BaseModel):
         if self.kind in ("analyze", "render") and not self.project:
             raise ValueError("project é obrigatório para analyze/render")
         return self
+
+
+class FeedbackBody(BaseModel):
+    label: Literal["good", "bad"] | None
 
 
 class StreamerBody(BaseModel):
@@ -79,6 +85,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     pipeline = pipeline or default_pipeline
     analyzer = analyzer or analyze
     usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
+    feedback = FeedbackStore(Path(settings.paths.data_dir) / "feedback.json")
     app = FastAPI(title="Corte Viral")
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
@@ -151,6 +158,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                            on_progress=lambda f, m: progress("render", f, m))
             elif req.kind == "analyze":
                 project = Project.load(_project_dir(req.project))
+                if req.force:
+                    project.invalidate_from("scoring")
                 job.update(stage="analyze", project=project.dir.name)
                 analyzer(project, s, n=req.n, profile=req.profile,
                          on_progress=lambda f, m: progress("analyze", f, m))
@@ -232,7 +241,18 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             if final.exists() or prev.exists():
                 clips[m["id"]] = {"final": final.exists(), "preview": prev.exists()}
         data["clips"] = clips
+        data["feedback"] = feedback.labels(name)
         return data
+
+    @app.post("/api/projects/{name}/moments/{moment_id}/feedback")
+    def post_feedback(name: str, moment_id: str, body: FeedbackBody):
+        project = Project.load(_project_dir(name))
+        data = load_moments(project) or {}
+        moment = next((m for m in data.get("moments", []) + data.get("all", []) if m["id"] == moment_id), None)
+        if moment is None:
+            raise HTTPException(404, "momento não encontrado")
+        feedback.add(name, project.data.get("streamer"), moment, body.label)
+        return {"ok": True, "label": body.label}
 
     @app.get("/api/projects/{name}/clips/{clip_id}")
     def get_clip(name: str, clip_id: str, preview: bool = False):

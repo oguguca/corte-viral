@@ -293,3 +293,42 @@ def test_api_layout_reports_duration(settings_tmp, sample_video):
     p = _video_project(settings_tmp, sample_video)
     r = TestClient(create_app(settings_tmp)).get(f"/api/projects/{p.dir.name}/layout").json()
     assert r["duration"] == 8.0
+
+
+def _analyzed_project(settings_tmp):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    p = Project.create(settings_tmp.paths.projects_dir, "https://youtu.be/f", "F")
+    p.data.update(streamer="Flow")
+    p.save()
+    write_json_atomic(p.path(MOMENTS), {"profile": "viral", "moments": [
+        {"id": "m1", "start": 1.0, "end": 20.0, "score": 80, "reason": "r", "ai": "video", "description": "explode",
+         "criteria": {"gancho": 90}}]})
+    return p
+
+
+def test_api_feedback_saves_label(settings_tmp):
+    from corteviral.feedback import FeedbackStore
+    p = _analyzed_project(settings_tmp)
+    c = TestClient(create_app(settings_tmp))
+    r = c.post(f"/api/projects/{p.dir.name}/moments/m1/feedback", json={"label": "good"})
+    assert r.status_code == 200
+    fb = FeedbackStore(settings_tmp.paths.data_dir / "feedback.json")
+    assert fb.label_for(p.dir.name, "m1") == "good" and fb.examples("Flow")[0]["description"] == "explode"
+    assert c.get(f"/api/projects/{p.dir.name}/moments").json()["feedback"] == {"m1": "good"}
+    assert c.post(f"/api/projects/{p.dir.name}/moments/zz/feedback", json={"label": "good"}).status_code == 404
+    assert c.post(f"/api/projects/{p.dir.name}/moments/m1/feedback", json={"label": "otimo"}).status_code == 422
+
+
+def test_api_analyze_force_recomputes(settings_tmp):
+    seen = []
+
+    def fake_analyze(project, settings, n=None, profile=None, on_progress=None):
+        seen.append("scoring" in project.data["stages"])
+        return []
+
+    p = _analyzed_project(settings_tmp)
+    p.mark_stage("scoring", {"x": 1})
+    c = TestClient(create_app(settings_tmp, analyzer=fake_analyze))
+    _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "force": True}).json()["id"])
+    assert seen == [False]

@@ -70,6 +70,13 @@ Abra um projeto transcrito, escolha o perfil (**Viral** 15–60 s ou **Monetiza�
 61–120 s), quantos momentos e a IA, e clique em **Encontrar momentos**. Cada momento
 mostra nota de 0 a 100, justificativa e uma sugestão de gancho; clicar toca o trecho.
 
+- **Duas etapas:** a triagem lê a transcrição de todos os candidatos; depois a IA **assiste**
+  (vídeo + áudio, em baixa resolução) os 15 melhores e dá nota por critério — **Gancho**,
+  **Emoção**, **Visual**, **Final** e **Contexto** — sugere onde cortar e explica o que acontece,
+  por que funciona e o risco (ex.: violência que pode ser moderada). Selo **"IA assistiu"**.
+- **👍 / 👎** em cada momento: a IA usa seus exemplos (até 6) para calibrar as próximas avaliações.
+  **Reavaliar do zero** ignora o resultado salvo.
+- Custo: cerca de 6–8 mil tokens por trecho assistido (~120 mil por VOD de 30 min).
 - A nota combina sinais locais (picos de volume, palavras de reação como "MEU DEUS"
   e "kkkk", ritmo de fala, picos de chat) com a avaliação da IA.
 - **IA grátis:** crie uma chave em aistudio.google.com e coloque no `.env` como

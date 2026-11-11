@@ -72,7 +72,12 @@ REVIEW_INSTRUCTIONS = """Você é editor de cortes virais de lives de games (pri
 ASSISTA e OUÇA o vídeo anexo (um trecho de live com {pre:.0f} s de folga antes e depois do momento escolhido) e
 avalie o potencial de virar um clipe curto viral (TikTok, Shorts, Reels). Perfil "{profile}": {profile_hint}
 
-Dê notas de 0 a 100, sendo exigente (80+ só para o que é realmente forte):
+Calibração (use a escala inteira e diferencie os trechos entre si):
+- 90–100: viral quase certo; raro (cerca de 1 em cada 20 trechos de uma live).
+- 70–89: bom, vale postar.  - 50–69: mediano, só se faltar coisa melhor.  - abaixo de 50: fraco.
+Numa live típica a maioria dos trechos fica entre 40 e 75. Não dê a mesma nota para tudo.
+
+Dê notas de 0 a 100:
 - gancho: os 3 primeiros segundos do corte sugerido prendem quem está rolando o feed?
 - emocao: humor, tensão, susto, raiva, euforia; reação forte dos streamers (gritos, risadas).
 - visual: o que acontece na tela é forte (ação, explosão, perseguição, cena marcante)?

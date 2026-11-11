@@ -82,3 +82,9 @@ def test_review_video_missing_fields_is_llm_error(monkeypatch):
         {"candidates": [{"content": {"parts": [{"text": json.dumps({"gancho": 50})}]}}]}).encode()))
     with pytest.raises(LLMError):
         GeminiClient("k", "m", 5).review_video(b"x", {"profile": "viral", "transcript": "", "window": [0, 1], "examples": []})
+
+
+def test_review_prompt_has_calibration_anchors():
+    from corteviral.llm import _review_prompt
+    text = _review_prompt({"profile": "viral", "transcript": "x", "window": [0, 60], "examples": []})
+    assert "Calibração" in text and "90" in text and "50" in text
