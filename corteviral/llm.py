@@ -151,6 +151,8 @@ Para cada clipe, escreva os textos de postagem em {lang}:
   de nicho do momento, e o nome do streamer sem espaços).
 - Adapte o tom: tiktok/kwai mais informal e com gírias; shorts direto e com palavra-chave no início do título
   (bom para busca); reels mais visual e com emoji.
+- Hashtags do jogo devem ser do jogo certo: se for GTA 6 (trailer, gameplay ou react de GTA VI), use #gta6
+  e nunca #gtav; se não der para saber a versão, use só #gta.
 - Não invente fatos que não estão na descrição/transcrição. Não use o nome de pessoas reais além do streamer.
 Clipes:
 """

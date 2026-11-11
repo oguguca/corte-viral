@@ -4,8 +4,8 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** Fases 1–4 concluídas (download, transcrição, melhores momentos, clipes verticais 9:16 e legendas animadas).
-> Próxima: Fase 5 — título, descrição, hashtags, gancho e exportação em lote.
+> **Status:** Fases 1–5 concluídas: do link da live até a pasta com clipes 9:16 legendados e os textos
+> de postagem para TikTok, Shorts, Reels e Kwai.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
 Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum.
@@ -115,6 +115,23 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
 - Em cada momento: chave **Legenda** (só aquele clipe) e **Editar legenda** para corrigir
   palavras que a transcrição errou (os tempos são reaproveitados). Depois, **Gerar de novo**.
 - Linha de comando: `render ... --no-captions` / `--captions`.
+
+### Revisar e exportar
+
+1. Em cada momento: **Aprovar** / **Descartar** (clicar de novo desfaz) e **Revisar corte e textos**:
+   - ajuste início/fim (±1 s ou "= player", usando o ponto atual do vídeo) e **Salvar corte**;
+   - **gancho** — frase escrita nos 3 primeiros segundos do vídeo (desligável por clipe);
+   - abas **TikTok / Shorts / Reels / Kwai** com título, descrição e hashtags editáveis e **Copiar tudo**.
+2. **Gerar textos com IA** escreve gancho, títulos, descrições e hashtags de cada rede (para os aprovados;
+   sem nenhum aprovado, para todos). Sem IA, o app gera textos simples.
+3. **Exportar aprovados** gera em `exports/<projeto>/` um MP4 final (1080x1920) e um `.txt` com os textos de
+   cada rede por clipe (`01-titulo.mp4`, `01-titulo.txt`, …) e abre a pasta.
+   - Avisa se o streamer não está marcado como autorizado (Layout do vertical → "Tenho autorização") e se o
+     trecho já foi exportado antes (`data/history.json`).
+   - Com **Crédito** preenchido no layout, o vídeo mostra "@streamer" discreto no canto e a descrição termina
+     com "Créditos: @streamer".
+
+Linha de comando: `.venv\Scripts\python -m corteviral export projects\<pasta-do-projeto>`
 
 ### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
 

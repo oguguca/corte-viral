@@ -46,3 +46,5 @@ captions:                   # legendas animadas (também ajustáveis na interfac
   max_words: 3              # palavras por vez
   position: 0.70            # altura do centro da legenda (fração da tela)
   pop: true
+  hook: true                # gancho escrito nos 3 primeiros segundos
+  credit: true              # "@streamer" no canto (se o layout tiver crédito)

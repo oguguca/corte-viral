@@ -26,6 +26,7 @@ from corteviral.caption_style import load_style, save_style
 from corteviral.config import CaptionStyle
 from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
+from corteviral.metadata import generate_posts
 from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
@@ -47,7 +48,7 @@ def default_pipeline(source: str, settings: Settings, on_progress: StageProgress
 
 
 class JobRequest(BaseModel):
-    kind: Literal["ingest", "analyze", "render", "export"] = "ingest"
+    kind: Literal["ingest", "analyze", "render", "export", "posts"] = "ingest"
     source: str | None = None       # ingest
     project: str | None = None      # analyze
     n: int | None = Field(default=None, ge=1, le=50)
@@ -66,7 +67,7 @@ class JobRequest(BaseModel):
     def _check(self):
         if self.kind == "ingest" and not self.source:
             raise ValueError("source é obrigatório para ingest")
-        if self.kind in ("analyze", "render", "export") and not self.project:
+        if self.kind in ("analyze", "render", "export", "posts") and not self.project:
             raise ValueError("project é obrigatório para analyze/render/export")
         return self
 
@@ -174,7 +175,12 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             job.update(stage=stage, progress=round(frac, 4), message=msg)
 
         try:
-            if req.kind == "export":
+            if req.kind == "posts":
+                project = Project.load(_project_dir(req.project))
+                job.update(stage="posts", project=project.dir.name, message="IA escrevendo os textos")
+                ids = req.ids or [m["id"] for m in (load_moments(project) or {}).get("moments", [])]
+                job["result"] = generate_posts(project, ids, s)
+            elif req.kind == "export":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="export", project=project.dir.name)
                 res = export_approved(project, s, on_progress=lambda f, m: progress("export", f, m))

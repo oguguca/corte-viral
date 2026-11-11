@@ -121,6 +121,29 @@
                        border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
   .cap-edit .row { justify-content: flex-start; }
   .cap-edit .row > * { flex: 0 0 auto; }
+  /* revisão e exportação */
+  .rv-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; }
+  .rv-bar select { width: auto; }
+  .rv-bar .grow { flex: 1; }
+  #moments li.approved { box-shadow: inset 3px 0 0 #0ca30c; }
+  #moments li.discarded { opacity: .55; }
+  .st { font-size: 11px; border-radius: 99px; padding: 0 8px; border: 1px solid var(--line); }
+  .st.approved { border-color: #0ca30c; color: var(--text); }
+  .st.discarded { border-color: #d03b3b; color: var(--text); }
+  details.rv { margin-top: 8px; }
+  details.rv > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .rv-grid { display: grid; gap: 10px; margin-top: 8px; }
+  .rv-cut { display: flex; gap: 6px; flex-wrap: wrap; align-items: end; }
+  .rv-cut .f { display: flex; flex-direction: column; width: 110px; }
+  .rv-cut label, .rv-text label { margin: 0 0 4px; }
+  .rv-cut button { padding: 6px 8px; font-size: 12px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tabs button { padding: 4px 10px; font-size: 12px; }
+  .tabs button.on { border-color: var(--accent); }
+  .rv-text { display: grid; gap: 6px; }
+  .rv-text textarea { width: 100%; min-height: 70px; background: var(--panel); color: var(--text);
+                      border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+  .export-res { margin-top: 8px; font-size: 13px; }
   /* uso da IA */
   .usage-hero { display: flex; align-items: baseline; gap: 8px; }
   .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -265,7 +288,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let playUntil = null;
-const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos", render: "Gerando clipes" };
+const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos", render: "Gerando clipes", posts: "Escrevendo textos", export: "Exportando" };
 let current = null;      // projeto aberto
 let words = [];          // palavras do projeto aberto
 let wordEls = [];
@@ -349,7 +372,8 @@ async function watch(id) {
     if (job.status !== "running") {
       $("start").disabled = false;
       await loadProjects();
-      if (job.project && (job.stage === "analyze" || job.stage === "render") && current === job.project) {
+      if (job.stage === "export" && job.status === "done") showExportResult(job);
+      if (job.project && ["analyze", "render", "posts", "export"].includes(job.stage) && current === job.project) {
         await loadMoments(job.project);
         if (job.stage === "render" && job.status === "done" && lastRenderIds && lastRenderIds.length === 1) openClip(job.project, lastRenderIds[0]);
       }
@@ -411,6 +435,15 @@ async function openProject(name) {
         <input id="rN" type="number" min="1" max="30" value="5" title="Gera os N momentos de maior nota"></div>
       <button id="rAll" title="Gera o MP4 vertical dos momentos de maior nota">Gerar os melhores</button>
     </div>
+    <div class="rv-bar">
+      <label for="rvFilter" style="margin:0">Mostrar</label>
+      <select id="rvFilter"><option value="all">Todos</option><option value="pending">A revisar</option>
+        <option value="approved">Aprovados</option><option value="discarded">Descartados</option></select>
+      <span class="grow"></span>
+      <button id="rvPosts" title="A IA escreve gancho, título, descrição e hashtags para cada rede">Gerar textos com IA</button>
+      <button class="primary" id="rvExport" style="width:auto;margin:0">Exportar aprovados</button>
+    </div>
+    <div id="rvNote" class="note"></div>
     <div id="mNote" class="note"></div>
     <ul id="moments"></ul>
     <details class="ly" id="lyBox">
@@ -435,6 +468,7 @@ async function openProject(name) {
           <select id="lyLayout"><option value="split">Câmera + gameplay</option>
             <option value="face-follow">Seguir o rosto</option><option value="fallback">Vídeo com fundo desfocado</option></select></div>
         <div class="f"><label for="lyCredit">Crédito (opcional)</label><input id="lyCredit" placeholder="@canal"></div>
+        <label class="m-cap" style="font-size:13px;color:var(--text)"><input type="checkbox" id="lyAuth"> Tenho autorização deste streamer para postar cortes</label>
         <button class="primary" id="lySave" style="width:auto;margin:0">Salvar layout deste streamer</button>
       </div>
       <div class="note" id="lyNote" style="margin-top:6px"></div>
@@ -476,6 +510,12 @@ async function openProject(name) {
       if (confirm("Reavaliar do zero refaz toda a análise, incluindo a IA assistindo os vídeos. " +
                   "Leva alguns minutos e gasta cerca de 120 mil tokens da cota grátis. Continuar?")) startAnalyze(name, true);
     };
+    $("rvFilter").onchange = () => loadMoments(name);
+    $("rvPosts").onclick = () => {
+      const ap = currentMoments.filter((m) => m.status === "approved").map((m) => m.id);
+      startPosts(name, ap.length ? ap : currentMoments.map((m) => m.id));
+    };
+    $("rvExport").onclick = () => startExport(name);
     $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
     $("rAll").onclick = () => {
       const n = Math.max(1, parseInt($("rN").value, 10) || 1);
@@ -491,6 +531,40 @@ async function openProject(name) {
 
 // ---- momentos ------------------------------------------------------------------
 let lastRenderIds = null;
+const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], ["kwai", "Kwai"]];
+const matchesFilter = (m) => { const f = ($("rvFilter") || {}).value || "all"; return f === "all" || (m.status || "pending") === f; };
+
+async function startPosts(name, ids) {
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "posts", project: name, ids }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+
+async function startExport(name) {
+  let chk;
+  try { chk = await api(`/api/projects/${encodeURIComponent(name)}/export-check`); } catch (e) { showJobError(e.message); return; }
+  if (!chk.approved) { $("rvNote").className = "note warn"; $("rvNote").textContent = "Aprove pelo menos um momento antes de exportar."; return; }
+  if (chk.unauthorized && !confirm("Este streamer não está marcado como autorizado (Layout do vertical → “Tenho autorização”). " +
+      "Postar cortes sem autorização pode gerar derrubada do vídeo ou desmonetização. Exportar mesmo assim?")) return;
+  if (chk.duplicates.length && !confirm(`${chk.duplicates.length} trecho(s) já foram exportados antes. Exportar de novo?`)) return;
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "export", project: name }) });
+    lastExportJob = job.id;
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+let lastExportJob = null;
+
+function showExportResult(job) {
+  const r = job.result || {};
+  const n = (r.files || []).length;
+  $("rvNote").className = "note" + ((r.errors || []).length ? " warn" : "");
+  $("rvNote").innerHTML = `✓ ${n} clipe(s) exportado(s) com os textos de cada rede. ` +
+    ((r.errors || []).length ? `⚠ ${r.errors.length} falharam. ` : "") +
+    `<button id="rvOpen" style="padding:2px 8px">Abrir pasta</button>`;
+  $("rvOpen").onclick = () => api(`/api/projects/${encodeURIComponent(job.project)}/open-exports`, { method: "POST" });
+}
 let capStyle = { enabled: true };
 let capFonts = [];
 
@@ -609,6 +683,7 @@ async function loadLayout(name) {
   $("lyStreamer").value = r.streamer || "";
   $("lyLayout").value = r.preset.layout;
   $("lyCredit").value = r.preset.credit_handle || "";
+  $("lyAuth").checked = !!r.preset.authorized;
   $("camList").innerHTML = r.detected.cams.map((c, i) =>
     `<button data-cam="${i}">Câmera ${i + 1}</button>`).join("") +
     (r.detected.cams.length ? "" : '<span class="hint" style="margin:0">Nenhuma câmera detectada — desenhe a área ou use outro layout.</span>');
@@ -705,7 +780,7 @@ async function saveLayout(name) {
   try {
     if (streamer) await api(`/api/projects/${encodeURIComponent(name)}/streamer`, { method: "PUT", body: JSON.stringify({ streamer }) });
     const body = { layout: lyState.layout, facecam: lyState.layout === "split" ? R(lyState.cam) : null,
-                   gameplay: R(lyState.game), credit_handle: $("lyCredit").value.trim() };
+                   gameplay: R(lyState.game), credit_handle: $("lyCredit").value.trim(), authorized: $("lyAuth").checked };
     const r = await api(`/api/projects/${encodeURIComponent(name)}/layout`, { method: "PUT", body: JSON.stringify(body) });
     $("lyNote").className = "note";
     $("lyNote").textContent = `✓ Salvo para “${r.streamer}”. Os próximos VODs desse streamer já usam este layout.`;
@@ -727,6 +802,7 @@ async function loadMoments(name) {
   try { d = await api(`/api/projects/${encodeURIComponent(name)}/moments`); } catch (e) { /* ainda não analisado */ }
   const ul = $("moments"), note = $("mNote");
   currentMoments = d ? d.moments : [];
+  if ($("rvExport") && d) $("rvExport").textContent = `Exportar aprovados (${d.moments.filter((m) => m.status === "approved").length})`;
   if ($("rN") && d) {
     $("rN").max = d.moments.length;
     if (+$("rN").value > d.moments.length) $("rN").value = d.moments.length;
@@ -750,11 +826,12 @@ async function loadMoments(name) {
                      : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
                      + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");
   ul.innerHTML = d.moments.map((m) => `
-    <li data-start="${m.start}" data-end="${m.end}">
+    <li data-start="${m.start}" data-end="${m.end}" data-id="${esc(m.id)}" class="${esc(m.status || "pending")}">
       <div class="score">${m.score}<small>nota</small></div>
       <div>
         <div class="m-top"><span class="time">${fmt(m.start)} – ${fmt(m.end)}</span>
           <span>${Math.round(m.end - m.start)} s</span>
+          ${m.status === "approved" ? '<span class="st approved">✓ aprovado</span>' : m.status === "discarded" ? '<span class="st discarded">descartado</span>' : ""}
           <span class="tag ${m.ai === "video" ? "video" : m.ai ? "ai" : ""}">${m.ai === "video" ? "IA assistiu" : m.ai ? "IA (texto)" : "sinais"}</span>
           ${m.ai === "video" && m.triage_score != null ? `<span title="nota da triagem só pelo texto">triagem ${m.triage_score}</span>` : ""}</div>
         ${m.description ? `<div class="m-desc">${esc(m.description)}</div>` : ""}
@@ -772,6 +849,39 @@ async function loadMoments(name) {
           <button class="fb ${fbOf(d, m.id) === "good" ? "on" : ""}" data-fb="good" data-id="${esc(m.id)}" title="Bom momento — a IA aprende com isso" aria-label="Bom momento" aria-pressed="${fbOf(d, m.id) === "good"}">👍</button>
           <button class="fb ${fbOf(d, m.id) === "bad" ? "on" : ""}" data-fb="bad" data-id="${esc(m.id)}" title="Momento ruim — a IA aprende com isso" aria-label="Momento ruim" aria-pressed="${fbOf(d, m.id) === "bad"}">👎</button>
         </div>
+        <div class="m-actions">
+          <button data-status="approved" data-id="${esc(m.id)}">${m.status === "approved" ? "✓ Aprovado" : "Aprovar"}</button>
+          <button data-status="discarded" data-id="${esc(m.id)}">${m.status === "discarded" ? "Descartado" : "Descartar"}</button>
+        </div>
+        <details class="rv" data-rv="${esc(m.id)}">
+          <summary>Revisar corte e textos de postagem ${m.meta ? (m.meta.ai ? "· textos da IA" : "· textos simples") : "· sem textos ainda"}</summary>
+          <div class="rv-grid">
+            <div class="rv-cut">
+              <div class="f"><label>Início (s)</label><input type="number" step="0.1" data-cut="start" value="${m.start}"></div>
+              <button data-nudge="start:-1">−1 s</button><button data-nudge="start:1">+1 s</button>
+              <button data-here="start" title="Usa o ponto atual do player">Início = player</button>
+              <div class="f"><label>Fim (s)</label><input type="number" step="0.1" data-cut="end" value="${m.end}"></div>
+              <button data-nudge="end:-1">−1 s</button><button data-nudge="end:1">+1 s</button>
+              <button data-here="end" title="Usa o ponto atual do player">Fim = player</button>
+              <button data-cutsave>Salvar corte</button>
+            </div>
+            <div class="rv-text">
+              <label>Gancho (texto nos 3 primeiros segundos do vídeo)</label>
+              <div class="row"><input data-hook value="${esc((m.meta && m.meta.hook) || m.hook || "")}">
+                <label class="m-cap" style="flex:0 0 auto"><input type="checkbox" data-hookon ${(m.hook_on ?? capStyle.hook ?? true) ? "checked" : ""}> no vídeo</label></div>
+              <div class="tabs">${PLATS.map(([k, label], i) => `<button data-tab="${k}" class="${i === 0 ? "on" : ""}">${label}</button>`).join("")}</div>
+              ${PLATS.map(([k], i) => { const p = (m.meta && m.meta.posts && m.meta.posts[k]) || {}; return `
+              <div data-pane="${k}" ${i === 0 ? "" : "hidden"} class="rv-text">
+                <label>Título</label><input data-f="title" value="${esc(p.title || "")}">
+                <label>Descrição</label><textarea data-f="description">${esc(p.description || "")}</textarea>
+                <label>Hashtags</label><input data-f="hashtags" value="${esc((p.hashtags || []).join(" "))}">
+                <div class="row" style="justify-content:flex-start"><button data-copy="${k}" style="flex:0 0 auto">Copiar tudo</button></div>
+              </div>`; }).join("")}
+              <div class="row" style="justify-content:flex-start"><button data-textsave style="flex:0 0 auto">Salvar textos</button>
+                <button data-posts="${esc(m.id)}" style="flex:0 0 auto">Gerar com IA só este</button></div>
+            </div>
+          </div>
+        </details>
         <div class="cap-edit" data-capbox="${esc(m.id)}" hidden>
           <textarea aria-label="Texto da legenda deste clipe">${esc(m.caption_text || "")}</textarea>
           <div class="row"><button data-capsave="${esc(m.id)}">Salvar legenda</button>
@@ -803,6 +913,48 @@ async function loadMoments(name) {
   ul.querySelectorAll("[data-capreset]").forEach((b) => b.onclick = async () => {
     try { await patch(b.dataset.capreset, { reset_caption: true }); await loadMoments(name); }
     catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("details.rv, [data-status]").forEach((el) => el.addEventListener("click", (e) => e.stopPropagation()));
+  ul.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
+    const m = d.moments.find((x) => x.id === b.dataset.id);
+    const status = m.status === b.dataset.status ? "pending" : b.dataset.status;  // clicar de novo desfaz
+    try { await patch(m.id, { status }); m.status = status; await loadMoments(name); }
+    catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("details.rv").forEach((box) => {
+    const id = box.dataset.rv, li = box.closest("li");
+    const cut = (k) => box.querySelector(`[data-cut="${k}"]`);
+    box.querySelectorAll("[data-nudge]").forEach((b) => b.onclick = () => {
+      const [k, dlt] = b.dataset.nudge.split(":");
+      cut(k).value = Math.max(0, (+cut(k).value + +dlt)).toFixed(1);
+    });
+    box.querySelectorAll("[data-here]").forEach((b) => b.onclick = () => { cut(b.dataset.here).value = $("video").currentTime.toFixed(1); });
+    box.querySelector("[data-cutsave]").onclick = async () => {
+      try { await patch(id, { start: +cut("start").value, end: +cut("end").value }); await loadMoments(name); }
+      catch (err) { showJobError(err.message); }
+    };
+    box.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => {
+      box.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+      box.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.tab; });
+    });
+    box.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
+      const pane = box.querySelector(`[data-pane="${b.dataset.copy}"]`);
+      const v = (f) => pane.querySelector(`[data-f="${f}"]`).value;
+      const text = [v("title"), "", v("description"), "", v("hashtags")].join(String.fromCharCode(10));
+      try { await navigator.clipboard.writeText(text); b.textContent = "Copiado ✓"; } catch (err) { b.textContent = "Não copiou"; }
+    });
+    box.querySelector("[data-hookon]").onchange = (e) => patch(id, { hook_on: e.target.checked }).catch((err) => showJobError(err.message));
+    box.querySelector("[data-textsave]").onclick = async (e) => {
+      const posts = {};
+      box.querySelectorAll("[data-pane]").forEach((p) => {
+        const v = (f) => p.querySelector(`[data-f="${f}"]`).value;
+        posts[p.dataset.pane] = { title: v("title"), description: v("description"), hashtags: v("hashtags").split(/[ ,]+/).filter(Boolean) };
+      });
+      try { await patch(id, { meta: { hook: box.querySelector("[data-hook]").value, posts } }); e.target.textContent = "Salvo ✓"; }
+      catch (err) { showJobError(err.message); }
+    };
+    box.querySelector("[data-posts]").onclick = () => startPosts(name, [id]);
+    li.hidden = !matchesFilter(d.moments.find((x) => x.id === id));
   });
   ul.querySelectorAll("[data-fb]").forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();

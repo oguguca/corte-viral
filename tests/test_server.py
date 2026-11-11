@@ -392,3 +392,20 @@ def test_api_render_job_captions_flag(settings_tmp):
     finally:
         appmod.render_all = real
     assert seen == {"captions": False}
+
+
+def test_api_posts_job(settings_tmp, monkeypatch):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    seen = {}
+
+    def fake_generate(project, ids, settings, client=None):
+        seen["ids"] = ids
+        return {"ai": len(ids), "fallback": 0}
+
+    monkeypatch.setattr("corteviral.server.app.generate_posts", fake_generate)
+    p = Project.create(settings_tmp.paths.projects_dir, "x.mp4", "X")
+    write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "m1", "start": 0, "end": 9, "score": 1}]})
+    c = TestClient(create_app(settings_tmp))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "posts", "project": p.dir.name, "ids": ["m1"]}).json()["id"])
+    assert job["status"] == "done" and seen["ids"] == ["m1"] and job["result"] == {"ai": 1, "fallback": 0}
