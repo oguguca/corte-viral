@@ -11,7 +11,7 @@ from corteviral.models import Transcript
 from corteviral.pipeline.boundaries import PROFILE_RANGES, select, snap_bounds
 from corteviral.pipeline.candidates import find_candidates
 from corteviral.pipeline.scoring import score_candidates
-from corteviral.pipeline.signals import compute_signals
+from corteviral.pipeline.signals import compute_signals, signals_params
 from corteviral.project import Project
 from corteviral.utils import write_json_atomic
 
@@ -36,7 +36,8 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
     provider = s.llm.provider
     model = (s.llm.model or DEFAULT_MODELS.get(provider)) if provider != "none" else None
     params = {"v": 1, "n": n, "profile": s.analysis.profile, "provider": provider, "model": model,
-              "max_candidates": s.analysis.max_candidates, "batch": s.llm.batch_size}
+              "max_candidates": s.analysis.max_candidates, "batch": s.llm.batch_size,
+              "signals": signals_params(project, s)}
     saved = load_moments(project)
     if project.is_stage_done("scoring", params) and saved:
         prog(1.0, "momentos já calculados")
@@ -60,11 +61,18 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
         m["text"] = " ".join(w.w for w in transcript.words if m["start"] <= w.start < m["end"])
     chosen = select(moments, n)
 
+    # Só vira cache se a IA avaliou tudo que devia: senão a próxima execução tenta de novo
+    complete = provider == "none" or (llm is not None and not stats["rate_limited"] and not stats["errors"])
     write_json_atomic(project.path(MOMENTS), {
         "created_at": time.time(), "profile": s.analysis.profile, "n": n, "provider": provider,
         "model": model, "has_chat": signals.chat is not None, "candidates": len(candidates),
-        "stats": stats, "moments": chosen,
+        "stats": stats, "complete": complete, "ai_missing": provider != "none" and llm is None,
+        "moments": chosen,
     })
-    project.mark_stage("scoring", params)
+    if complete:
+        project.mark_stage("scoring", params)
+    else:
+        project.data["stages"].pop("scoring", None)
+        project.save()
     prog(1.0, "momentos prontos")
     return chosen

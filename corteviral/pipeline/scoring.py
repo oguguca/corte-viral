@@ -47,7 +47,8 @@ def _signal_reason(c: Candidate) -> str:
 
 
 def _valid(item: dict, ids: set[str]) -> bool:
-    return (isinstance(item, dict) and item.get("id") in ids and isinstance(item.get("score"), int)
+    return (isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"] in ids
+            and isinstance(item.get("score"), int) and not isinstance(item["score"], bool)
             and 0 <= item["score"] <= 100 and isinstance(item.get("reason"), str) and item["reason"].strip() != "")
 
 

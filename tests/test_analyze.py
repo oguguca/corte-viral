@@ -58,3 +58,55 @@ def test_analyze_is_cached_and_profile_change_recomputes(settings_tmp, monkeypat
     m = analyze(p, settings_tmp, n=3, profile="monetizacao")
     assert len(calls) == 2
     assert all(61 <= x["end"] - x["start"] <= 120 for x in m)
+
+
+def test_new_transcript_invalidates_moments(settings_tmp, monkeypatch):
+    from corteviral.models import Transcript, Word, Segment
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    settings_tmp.llm.provider = "none"
+    p = make_project(settings_tmp)
+    p.mark_stage("transcribe", {"model": "medium"})
+    first = analyze(p, settings_tmp, n=3)
+    # retranscrição com outro modelo: momentos/sinais antigos não podem voltar do cache
+    p.mark_stage("transcribe", {"model": "small"})
+    calls = []
+    import corteviral.pipeline.analyze as mod
+    real = mod.find_candidates
+    monkeypatch.setattr(mod, "find_candidates", lambda *a, **k: calls.append(1) or real(*a, **k))
+    analyze(p, settings_tmp, n=3)
+    assert calls == [1]
+
+
+def test_signal_settings_change_recomputes(settings_tmp, monkeypatch):
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    settings_tmp.llm.provider = "none"
+    p = make_project(settings_tmp)
+    analyze(p, settings_tmp, n=3)
+    settings_tmp.analysis.extra_reactions = {"fala": 2.0}
+    calls = []
+    import corteviral.pipeline.analyze as mod
+    real = mod.find_candidates
+    monkeypatch.setattr(mod, "find_candidates", lambda *a, **k: calls.append(1) or real(*a, **k))
+    analyze(p, settings_tmp, n=3)
+    assert calls == [1]
+
+
+def test_partial_ai_result_is_not_cached(settings_tmp, monkeypatch):
+    from corteviral.llm import LLMRateLimited
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    p = make_project(settings_tmp)
+
+    class Limited:
+        def score(self, items, profile, language):
+            raise LLMRateLimited("429")
+
+    analyze(p, settings_tmp, n=3, client=Limited())
+    assert not p.is_stage_done("scoring", {}) and "scoring" not in p.data["stages"]
+
+
+def test_missing_key_result_is_not_cached(settings_tmp, monkeypatch):
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    settings_tmp.llm.provider = "gemini"
+    p = make_project(settings_tmp)
+    analyze(p, settings_tmp, n=3, client=None)
+    assert "scoring" not in p.data["stages"]

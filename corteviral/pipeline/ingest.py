@@ -177,6 +177,7 @@ def ingest(source: str, settings: Settings, on_progress: ProgressFn | None = Non
     project.data["video_path"] = str(video)
     project.data["duration"] = round(ffmpeg.probe_duration(video), 3)
     project.data["ingest_params"] = params
+    project.invalidate_from("transcribe")  # áudio novo: tudo que veio dele precisa ser refeito
     project.mark_stage("ingest", params)
     if on_progress:
         on_progress(1.0, "ingest concluído")

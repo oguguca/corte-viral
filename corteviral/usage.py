@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,14 +10,23 @@ from typing import Callable
 
 from corteviral.utils import write_json_atomic
 
+log = logging.getLogger(__name__)
 KEEP_DAYS = 30
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Path) -> threading.Lock:
+    key = str(Path(path).resolve()).lower()
+    with _LOCKS_GUARD:
+        return _LOCKS.setdefault(key, threading.Lock())
 
 
 class UsageTracker:
     def __init__(self, path: Path, now: Callable[[], datetime] = datetime.now):
         self.path = Path(path)
         self.now = now
-        self._lock = threading.Lock()
+        self._lock = _lock_for(self.path)
 
     def _load(self) -> dict:
         try:
@@ -28,6 +38,12 @@ class UsageTracker:
                ok: bool, rate_limited: bool = False) -> None:
         now = self.now()
         day_key, minute_key = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+        try:
+            self._record(now, day_key, minute_key, provider, model, input_tokens, output_tokens, ok, rate_limited)
+        except OSError as e:  # contabilidade nunca pode derrubar a análise
+            log.warning("Não consegui salvar o uso da IA: %s", e)
+
+    def _record(self, now, day_key, minute_key, provider, model, input_tokens, output_tokens, ok, rate_limited):
         with self._lock:
             data = self._load()
             day = data["days"].setdefault(day_key, {

@@ -133,6 +133,7 @@ def test_gemini_429_raises_rate_limited_and_records(monkeypatch, tmp_path):
         raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", {}, None)
 
     monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", boom)
+    monkeypatch.setattr("corteviral.llm.time.sleep", lambda s: None)
     tracker = UsageTracker(tmp_path / "u.json")
     c = GeminiClient(api_key="k", model="m", timeout=5, tracker=tracker)
     with pytest.raises(LLMRateLimited):
@@ -187,3 +188,54 @@ def test_gemini_gives_up_after_retries(monkeypatch):
     monkeypatch.setattr("corteviral.llm.time.sleep", lambda s: None)
     with pytest.raises(LLMError, match="503"):
         GeminiClient("k", "m", 5).score([{"id": "a", "text": "x", "signals": ""}], "viral", "pt")
+
+
+def test_weird_items_do_not_crash():
+    s = Settings()
+
+    class Weird:
+        def score(self, items, profile, language):
+            return [{"id": ["lista"], "score": 50, "reason": "x"}, {"id": items[0]["id"], "score": True, "reason": "x"},
+                    "texto solto", {"id": items[1]["id"], "score": 70, "reason": "ok", "hook": "h"}]
+    moments, stats = score_candidates([_cand(1), _cand(2)], s, Weird())
+    by = {m["id"]: m for m in moments}
+    assert not by["m00001"]["ai"] and by["m00002"]["ai"]
+
+
+def test_gemini_non_json_body_is_llm_error(monkeypatch):
+    import io
+
+    from corteviral.llm import GeminiClient
+
+    class Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", lambda req, timeout: Resp(b"<html>erro</html>"))
+    with pytest.raises(LLMError):
+        GeminiClient("k", "m", 5).score([{"id": "a", "text": "x", "signals": ""}], "viral", "pt")
+
+
+def test_gemini_429_waits_once_then_succeeds(monkeypatch):
+    import io
+    import json
+    import urllib.error
+
+    from corteviral.llm import GeminiClient
+    calls, sleeps = [], []
+
+    class Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def per_minute_limit(req, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many", {"Retry-After": "7"}, None)
+        return Resp(json.dumps({"candidates": [{"content": {"parts": [{"text": json.dumps(
+            [{"id": "a", "score": 60, "reason": "r", "hook": "h", "standalone": True}])}]}}]}).encode())
+
+    monkeypatch.setattr("corteviral.llm.urllib.request.urlopen", per_minute_limit)
+    monkeypatch.setattr("corteviral.llm.time.sleep", lambda s: sleeps.append(s))
+    out = GeminiClient("k", "m", 5).score([{"id": "a", "text": "x", "signals": ""}], "viral", "pt")
+    assert out[0]["score"] == 60 and sleeps == [7]

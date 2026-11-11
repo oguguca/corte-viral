@@ -150,3 +150,11 @@ def test_gpu_still_broken_reuses_existing_cpu_transcript(project_with_audio, set
                    model_factory=FakeModel.cuda_fails_on_first_inference(created))
     assert created == [("medium", "cuda")]  # tentou a GPU, não refez na CPU
     assert t.device == "cpu" and len(t.words) == 3
+
+
+def test_transcribe_invalidates_downstream_stages(project_with_audio, settings_tmp):
+    project_with_audio.mark_stage("signals", {"x": 1})
+    project_with_audio.mark_stage("scoring", {"y": 1})
+    transcribe(project_with_audio, settings_tmp, model_factory=FakeModel.ok)
+    assert "signals" not in project_with_audio.data["stages"]
+    assert "scoring" not in project_with_audio.data["stages"]

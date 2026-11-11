@@ -50,6 +50,13 @@ ITEM_SCHEMA = {
 }
 
 
+def _retry_after(e: urllib.error.HTTPError, default: int = 20, cap: int = 60) -> int:
+    try:
+        return max(1, min(cap, int(float((e.headers or {}).get("Retry-After", default)))))
+    except (TypeError, ValueError):
+        return default
+
+
 class LLMError(Exception):
     pass
 
@@ -93,20 +100,29 @@ class GeminiClient:
             GEMINI_URL.format(model=self.model), data=json.dumps(body).encode("utf-8"),
             headers={"x-goog-api-key": self._key, "Content-Type": "application/json"}, method="POST",
         )
-        for attempt in range(len(RETRY_DELAYS) + 1):
+        waited_429 = False
+        for attempt in range(len(RETRY_DELAYS) + 2):
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout) as r:
                     payload = json.load(r)
                 break
             except urllib.error.HTTPError as e:
-                limited = e.code == 429
-                self._record(0, 0, ok=False, rate_limited=limited)
-                if limited:
+                if e.code == 429:
+                    if not waited_429:  # o plano grátis tem limite por minuto: espera e tenta de novo
+                        waited_429 = True
+                        self._record(0, 0, ok=False)
+                        time.sleep(_retry_after(e))
+                        continue
+                    self._record(0, 0, ok=False, rate_limited=True)
                     raise LLMRateLimited("limite do Gemini atingido (HTTP 429)") from e
+                self._record(0, 0, ok=False)
                 if e.code in _TRANSIENT and attempt < len(RETRY_DELAYS):
                     time.sleep(RETRY_DELAYS[attempt])
                     continue
                 raise LLMError(f"Gemini HTTP {e.code}") from e
+            except ValueError as e:  # corpo que não é JSON (página de erro de proxy etc.)
+                self._record(0, 0, ok=False)
+                raise LLMError("resposta do Gemini não é JSON") from e
             except (OSError, TimeoutError) as e:
                 self._record(0, 0, ok=False)
                 if attempt < len(RETRY_DELAYS):
@@ -163,7 +179,8 @@ class AnthropicClient:
             raise LLMError("a IA recusou avaliar estes trechos")
         text = next((b.text for b in resp.content if b.type == "text"), "")
         try:
-            return json.loads(text).get("moments", [])
+            data = json.loads(text)
+            return data.get("moments", []) if isinstance(data, dict) else []
         except json.JSONDecodeError as e:
             raise LLMError("resposta da Anthropic fora do formato esperado") from e
 

@@ -49,3 +49,18 @@ def test_rate_limited_flag(tmp_path):
     u.record("gemini", "m", 0, 0, ok=False, rate_limited=True)
     t = u.today()
     assert t["rate_limited"] is True and t["requests"] == 1 and t["errors"] == 1
+
+
+def test_record_never_raises_on_io_error(tmp_path, monkeypatch):
+    u = UsageTracker(tmp_path / "usage.json", now=Clock(datetime(2026, 11, 11, 10, 0)))
+
+    def locked(*a, **k):
+        raise PermissionError("arquivo em uso")
+    monkeypatch.setattr("corteviral.usage.write_json_atomic", locked)
+    u.record("gemini", "m", 1, 1, ok=True)  # não pode levantar
+
+
+def test_trackers_on_same_file_share_lock(tmp_path):
+    a = UsageTracker(tmp_path / "usage.json")
+    b = UsageTracker(tmp_path / "usage.json")
+    assert a._lock is b._lock

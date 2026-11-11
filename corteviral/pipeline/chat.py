@@ -68,7 +68,11 @@ def fetch_chat(project: Project, settings: Settings) -> list[float] | None:
         existing = [p for p in project.dir.glob("chat.*.json")]
     if not existing:
         return None
-    offsets = parse_chat_file(existing[0])
+    try:
+        offsets = parse_chat_file(existing[0])
+    except (ValueError, OSError, AttributeError, TypeError) as e:
+        log.warning("Arquivo de chat ilegível (%s); seguindo sem chat.", e)
+        return None
     if len(offsets) < 20:  # chat praticamente vazio não ajuda
         return None
     return per_second(offsets, duration)

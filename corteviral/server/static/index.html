@@ -199,6 +199,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+let playUntil = null;
 const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos" };
 let current = null;      // projeto aberto
 let words = [];          // palavras do projeto aberto
@@ -307,6 +308,7 @@ async function loadProjects() {
 
 async function openProject(name) {
   current = name;
+  playUntil = null;
   document.querySelectorAll("#projects li").forEach((li) => li.classList.toggle("active", li.dataset.name === name));
   const v = $("viewer");
   let t = null;
@@ -354,7 +356,6 @@ async function openProject(name) {
 }
 
 // ---- momentos ------------------------------------------------------------------
-let playUntil = null;
 async function startAnalyze(name) {
   try {
     const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
@@ -377,7 +378,9 @@ async function loadMoments(name) {
                  d.has_chat ? "com chat" : "sem chat"];
   note.className = "note" + (s.rate_limited || s.errors ? " warn" : "");
   note.textContent = parts.join(" · ") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
-                     : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais` : "");
+                     : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais`
+                     : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
+                     + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");
   ul.innerHTML = d.moments.map((m) => `
     <li data-start="${m.start}" data-end="${m.end}">
       <div class="score">${m.score}<small>nota</small></div>
@@ -391,8 +394,8 @@ async function loadMoments(name) {
     </li>`).join("");
   ul.querySelectorAll("li").forEach((li) => li.onclick = () => {
     ul.querySelectorAll("li").forEach((el) => el.classList.toggle("playing", el === li));
-    playUntil = parseFloat(li.dataset.end);
     seek(parseFloat(li.dataset.start));
+    playUntil = parseFloat(li.dataset.end);
   });
 }
 
@@ -427,7 +430,7 @@ function renderWords(t) {
   box.appendChild(frag);
 }
 
-function seek(t) { const v = $("video"); v.currentTime = t; v.play(); }
+function seek(t) { playUntil = null; const v = $("video"); v.currentTime = t; v.play(); }
 
 let lastNow = -1;
 function highlight(time) {
@@ -494,7 +497,7 @@ $("acctConnect").onclick = async () => {
 // ---- uso da IA -----------------------------------------------------------------
 const nf = new Intl.NumberFormat("pt-BR");
 function statusFor(pct, limited) {
-  if (limited) return { color: "#d03b3b", icon: "⛔", text: "limite atingido hoje (a IA volta amanhã)" };
+  if (limited) return { color: "#d03b3b", icon: "⛔", text: "limite do Gemini atingido — tente mais tarde" };
   if (pct >= 90) return { color: "#d03b3b", icon: "⚠", text: "quase no limite" };
   if (pct >= 70) return { color: "#fab219", icon: "⚠", text: "atenção: uso alto" };
   return { color: "#0ca30c", icon: "✓", text: "dentro do limite" };

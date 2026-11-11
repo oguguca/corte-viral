@@ -122,9 +122,16 @@ def speech_rate(words: list[Word], duration: int) -> list[float]:
     return counts
 
 
+def signals_params(project: Project, settings: Settings) -> dict:
+    a = settings.analysis
+    stages = project.data.get("stages", {})
+    return {"v": 1, "window": a.zscore_window, "extra": a.extra_reactions, "chat": a.fetch_chat,
+            "ingest": stages.get("ingest"), "transcribe": stages.get("transcribe")}
+
+
 def compute_signals(project: Project, settings: Settings) -> Signals:
     a = settings.analysis
-    params = {"v": 1, "window": a.zscore_window, "extra": a.extra_reactions, "chat": a.fetch_chat}
+    params = signals_params(project, settings)
     out = project.path("signals.json")
     if project.is_stage_done("signals", params) and out.exists():
         return Signals.model_validate(json.loads(out.read_text(encoding="utf-8")))

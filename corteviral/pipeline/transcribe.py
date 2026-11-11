@@ -215,6 +215,7 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
         model=used[0], device=used[1] if used[1] != "auto" else "cuda",
     )
     transcript.save(out)
+    project.invalidate_from("chat")  # sinais e momentos antigos não valem para a nova transcrição
     for leftover in (PARTIAL, RESUME_WAV):
         project.path(leftover).unlink(missing_ok=True)
     if used[0] == ws.model:

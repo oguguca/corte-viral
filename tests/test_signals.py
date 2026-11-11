@@ -96,3 +96,12 @@ def test_parse_twitch_rechat(tmp_path):
     offsets = parse_chat_file(f)
     assert offsets == [2.5, 2.9, 7.0]
     assert per_second(offsets, duration=8) == [0, 0, 2, 0, 0, 0, 0, 1]
+
+
+def test_corrupt_chat_file_returns_none(settings_tmp):
+    from corteviral.pipeline.chat import fetch_chat
+    p = Project.create(settings_tmp.paths.projects_dir, "https://youtu.be/q", "q")
+    p.data.update(url="https://youtu.be/q", duration=100)
+    p.save()
+    p.path("chat.live_chat.json").write_text('[{"content_offset_seconds": 1}, {"trunc', encoding="utf-8")
+    assert fetch_chat(p, settings_tmp) is None
