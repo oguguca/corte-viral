@@ -96,12 +96,21 @@ Transcrição do trecho (pode ter erros):
 """
 
 
+def _range_hint(ctx: dict) -> str:
+    rng = ctx.get("range")
+    if not rng:
+        return PROFILE_HINTS.get(ctx.get("profile", "viral"), "")
+    lo, hi = rng
+    arc = "; precisa de arco completo (preparação, clímax e reação)" if lo > 60 else "; precisa prender rápido"
+    return f"clipe de {lo:.0f} a {hi:.0f} s{arc}. O corte sugerido (inicio/fim) deve respeitar essa duração."
+
+
 def _review_prompt(ctx: dict) -> str:
     w0, w1 = ctx.get("window", [0, 0])
     text = REVIEW_INSTRUCTIONS.format(
         pre=ctx.get("pre", ctx.get("margin", 15)), post=ctx.get("post", ctx.get("margin", 15)),
         profile=ctx.get("profile", "viral"),
-        profile_hint=PROFILE_HINTS.get(ctx.get("profile", "viral"), ""),
+        profile_hint=_range_hint(ctx),
         streamer=ctx.get("streamer") or "desconhecido", transcript=(ctx.get("transcript") or "")[:4000])
     examples = ctx.get("examples") or []
     if examples:

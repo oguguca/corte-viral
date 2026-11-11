@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DEFAULT_CONFIG_PATH = Path("config.yaml")
 
@@ -48,6 +48,16 @@ class AnalysisSettings(_Strict):
     extra_reactions: dict[str, float] = Field(default_factory=dict)
     zscore_window: int = 60
     fetch_chat: bool = True
+    # duração personalizada do clipe (s); vazio = faixa do perfil (viral 15–60, monetização 61–120)
+    min_seconds: float | None = Field(default=None, ge=5, le=180)
+    max_seconds: float | None = Field(default=None, ge=5, le=180)
+
+    @model_validator(mode="after")
+    def _check_range(self):
+        if self.min_seconds is not None and self.max_seconds is not None:
+            if self.max_seconds - self.min_seconds < 5:
+                raise ValueError("a duração máxima precisa ser pelo menos 5 s maior que a mínima")
+        return self
 
 
 class LLMSettings(_Strict):

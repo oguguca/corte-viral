@@ -23,7 +23,7 @@ from corteviral.browser_session import (BrowserSessionError, edge_path, export_c
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.caption_style import load_style, save_style
-from corteviral.config import CaptionStyle
+from corteviral.config import AnalysisSettings, CaptionStyle
 from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
 from corteviral.metadata import generate_posts
@@ -52,6 +52,8 @@ class JobRequest(BaseModel):
     source: str | None = None       # ingest
     project: str | None = None      # analyze
     n: int | None = Field(default=None, ge=1, le=50)
+    min_seconds: float | None = Field(default=None, ge=5, le=180)   # analyze: duração personalizada
+    max_seconds: float | None = Field(default=None, ge=5, le=180)
     ids: list[str] | None = None    # render
     preview: bool = False           # render
     force: bool = False             # analyze: ignora o cache e reavalia
@@ -67,6 +69,9 @@ class JobRequest(BaseModel):
     def _check(self):
         if self.kind == "ingest" and not self.source:
             raise ValueError("source é obrigatório para ingest")
+        if (self.min_seconds is None) != (self.max_seconds is None) or (
+                self.min_seconds is not None and self.max_seconds - self.min_seconds < 5):
+            raise ValueError("duração inválida: informe mínimo e máximo, com o máximo ao menos 5 s maior")
         if self.kind in ("analyze", "render", "export", "posts") and not self.project:
             raise ValueError("project é obrigatório para analyze/render/export")
         return self
@@ -160,6 +165,10 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
 
         if req.provider:
             s.llm.provider = req.provider
+        if req.min_seconds is not None:
+            s.analysis = AnalysisSettings.model_validate({
+                **s.analysis.model_dump(), "min_seconds": req.min_seconds, "max_seconds": req.max_seconds,
+                "profile": req.profile or ("monetizacao" if req.min_seconds >= 61 else "viral")})
         # Sem escolha manual: usa a sessão de login do app (renovada agora; se falhar, a última salva)
         needs_web = is_url(req.source) if req.kind == "ingest" else req.kind == "analyze"
         if needs_web and not req.cookies_from_browser and not req.cookies_file and yt_profile.exists():

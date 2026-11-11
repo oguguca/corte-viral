@@ -10,9 +10,19 @@ from corteviral.config import Settings
 from corteviral.models import Transcript
 from corteviral.pipeline.signals import Signals
 
-# janela inicial em volta do pico (antes, depois) por perfil — fronteiras finas vêm depois
-PROFILE_WINDOWS = {"viral": (25, 12), "monetizacao": (60, 30)}
-SIGNAL_WEIGHTS = {"audio": 0.30, "reaction": 0.55, "chat": 0.15}
+
+def window_for(settings) -> tuple[float, float]:
+    """Janela inicial (antes, depois do pico) proporcional à duração escolhida; o ajuste fino vem depois."""
+    from corteviral.pipeline.boundaries import duration_range
+    lo, hi = duration_range(settings)
+    pre, post = round(hi * 0.45), round(hi * 0.25)
+    if pre + post < lo + 5:
+        k = (lo + 5) / (pre + post)
+        pre, post = round(pre * k), round(post * k)
+    return pre, post
+
+
+SIGNAL_WEIGHTS ={"audio": 0.30, "reaction": 0.55, "chat": 0.15}
 MIN_PEAK_DISTANCE = 20  # s
 MIN_WORDS = 8
 PEAK_THRESHOLD = 0.12
@@ -59,7 +69,7 @@ def find_candidates(signals: Signals, transcript: Transcript, settings: Settings
     w = weights_for(signals.chat is not None)
     combined = sum(w[k] * curves[k] for k in curves)
 
-    pre, post = PROFILE_WINDOWS[settings.analysis.profile]
+    pre, post = window_for(settings)
     starts = [wd.start for wd in transcript.words]
     limit = settings.analysis.max_candidates
 

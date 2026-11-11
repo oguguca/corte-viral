@@ -8,6 +8,14 @@ from corteviral.models import Transcript
 PAUSE = 0.3          # s de silêncio que conta como pausa natural
 SEARCH = 10.0        # s que o início/fim pode andar para achar uma fronteira
 PROFILE_RANGES = {"viral": (15, 60), "monetizacao": (61, 120)}
+
+
+def duration_range(settings) -> tuple[float, float]:
+    """Faixa de duração do clipe: a personalizada (se houver) ou a do perfil."""
+    a = settings.analysis
+    if a.min_seconds is not None and a.max_seconds is not None:
+        return a.min_seconds, a.max_seconds
+    return PROFILE_RANGES[a.profile]
 _SENTENCE_END = (".", "!", "?", "…")
 
 

@@ -11,7 +11,7 @@ from corteviral.config import Settings
 from corteviral.feedback import FeedbackStore
 from corteviral.llm import DEFAULT_MODELS, make_client
 from corteviral.models import Transcript
-from corteviral.pipeline.boundaries import PROFILE_RANGES, select, snap_bounds
+from corteviral.pipeline.boundaries import duration_range, select, snap_bounds
 from corteviral.pipeline.candidates import find_candidates
 from corteviral.pipeline.deep_review import deep_review
 from corteviral.pipeline.scoring import score_candidates
@@ -41,7 +41,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
     model = (s.llm.model or DEFAULT_MODELS.get(provider)) if provider != "none" else None
     params = {"v": 3, "profile": s.analysis.profile, "provider": provider, "model": model,
               "max_candidates": s.analysis.max_candidates, "batch": s.llm.batch_size,
-              "signals": signals_params(project, s),
+              "signals": signals_params(project, s), "range": list(duration_range(s)),
               "deep": s.deep.model_dump() if provider == "gemini" else None}
     saved = load_moments(project)
     key = params_hash(params)
@@ -73,7 +73,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
             on_progress=lambda f, m: prog(0.2 + 0.4 * f, m))
         has_chat, n_candidates = signals.chat is not None, len(candidates)
         prog(0.61, "ajustando início e fim")
-        lo, hi = PROFILE_RANGES[s.analysis.profile]
+        lo, hi = duration_range(s)
         for m in moments:
             m["start"], m["end"] = snap_bounds(m["start"], m["end"], transcript, lo, hi)
             m["text"] = " ".join(w.w for w in transcript.words if m["start"] <= w.start < m["end"])
@@ -97,6 +97,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
     write_json_atomic(project.path(MOMENTS), {
         "created_at": time.time(), "profile": s.analysis.profile, "n": n, "provider": provider,
         "model": model, "has_chat": has_chat, "candidates": n_candidates, "params_hash": key,
+        "range": list(duration_range(s)),
         "stats": stats, "complete": complete, "ai_missing": provider != "none" and llm is None,
         "moments": chosen, "all": moments,
     })

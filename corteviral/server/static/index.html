@@ -144,6 +144,16 @@
   .rv-text textarea { width: 100%; min-height: 70px; background: var(--panel); color: var(--text);
                       border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
   .export-res { margin-top: 8px; font-size: 13px; }
+  /* barra rápida: duração e legenda */
+  .quick { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 2px 0 10px; font-size: 13px; }
+  .quick .grp { display: flex; gap: 6px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 6px 10px; font-size: 12px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .switch input { width: auto; }
+  #aCustom { display: none; gap: 6px; align-items: end; }
+  #aCustom input { width: 74px; }
   /* uso da IA */
   .usage-hero { display: flex; align-items: baseline; gap: 8px; }
   .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -424,8 +434,17 @@ async function openProject(name) {
       <div id="words">${t ? "" : '<span class="empty">Este projeto ainda não tem transcrição.</span>'}</div>
     </div>
     ${t ? `<div class="analyze">
-      <div class="f"><label for="aProfile">Perfil</label>
-        <select id="aProfile"><option value="viral">Viral (15–60 s)</option><option value="monetizacao">Monetização (61–120 s)</option></select></div>
+      <div class="f"><label for="aDur">Duração do clipe</label>
+        <select id="aDur">
+          <option value="15-30">15–30 s (curto)</option>
+          <option value="15-60" selected>15–60 s (viral)</option>
+          <option value="30-60">30–60 s</option>
+          <option value="61-90">61–90 s (monetização)</option>
+          <option value="61-120">61–120 s (monetização)</option>
+          <option value="custom">Personalizado…</option>
+        </select></div>
+      <div id="aCustom"><div class="f" style="min-width:0"><label for="aMin">Mín. (s)</label><input id="aMin" type="number" min="5" max="175" value="20"></div>
+        <div class="f" style="min-width:0"><label for="aMax">Máx. (s)</label><input id="aMax" type="number" min="10" max="180" value="45"></div></div>
       <div class="f" style="min-width:80px"><label for="aN">Momentos a encontrar</label><input id="aN" type="number" min="1" max="30" value="10"></div>
       <div class="f"><label for="aProvider">IA</label>
         <select id="aProvider"><option value="gemini">Gemini (grátis)</option><option value="none">Sem IA (só sinais)</option><option value="anthropic">Claude (pago)</option></select></div>
@@ -434,6 +453,14 @@ async function openProject(name) {
       <div class="f" style="min-width:110px;margin-left:12px"><label for="rN">Clipes a gerar</label>
         <input id="rN" type="number" min="1" max="30" value="5" title="Gera os N momentos de maior nota"></div>
       <button id="rAll" title="Gera o MP4 vertical dos momentos de maior nota">Gerar os melhores</button>
+    </div>
+    <div class="quick">
+      <div class="grp"><span>Legenda</span>
+        <label class="switch" title="Liga/desliga a legenda nos próximos clipes gerados"><input type="checkbox" id="qCapOn"> <span id="qCapOnTxt">ligada</span></label></div>
+      <div class="grp"><span>Posição</span>
+        <div class="seg" role="group" aria-label="Posição da legenda">
+          <button data-qpos="0.47">Em cima</button><button data-qpos="0.58">Meio</button><button data-qpos="0.70">Embaixo</button></div></div>
+      <span class="hint" id="qCapNote" style="margin:0">Vale para os próximos clipes gerados (“Gerar de novo” nos que já existem).</span>
     </div>
     <div class="rv-bar">
       <label for="rvFilter" style="margin:0">Mostrar</label>
@@ -506,6 +533,10 @@ async function openProject(name) {
   $("q").oninput = (e) => search(e.target.value);
   if (t) {
     $("aStart").onclick = () => startAnalyze(name);
+    $("aDur").onchange = () => { $("aCustom").style.display = $("aDur").value === "custom" ? "flex" : "none"; };
+    syncQuickCaptions();
+    $("qCapOn").onchange = () => saveQuickCaption({ enabled: $("qCapOn").checked });
+    document.querySelectorAll("[data-qpos]").forEach((b) => b.onclick = () => saveQuickCaption({ position: +b.dataset.qpos }));
     $("aForce").onclick = () => {
       if (confirm("Reavaliar do zero refaz toda a análise, incluindo a IA assistindo os vídeos. " +
                   "Leva alguns minutos e gasta cerca de 120 mil tokens da cota grátis. Continuar?")) startAnalyze(name, true);
@@ -531,6 +562,39 @@ async function openProject(name) {
 
 // ---- momentos ------------------------------------------------------------------
 let lastRenderIds = null;
+
+function durationRange() {
+  let lo, hi;
+  if ($("aDur").value === "custom") { lo = +$("aMin").value; hi = +$("aMax").value; }
+  else [lo, hi] = $("aDur").value.split("-").map(Number);
+  return { min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" };
+}
+
+function setDuration(lo, hi) {
+  const key = `${lo}-${hi}`;
+  const opt = [...$("aDur").options].find((o) => o.value === key);
+  $("aDur").value = opt ? key : "custom";
+  if (!opt) { $("aMin").value = lo; $("aMax").value = hi; }
+  $("aCustom").style.display = $("aDur").value === "custom" ? "flex" : "none";
+}
+
+function syncQuickCaptions() {
+  if (!$("qCapOn")) return;
+  $("qCapOn").checked = capStyle.enabled !== false;
+  $("qCapOnTxt").textContent = $("qCapOn").checked ? "ligada" : "desligada";
+  const pos = capStyle.position ?? 0.70;
+  document.querySelectorAll("[data-qpos]").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.qpos - pos) < 0.04));
+}
+
+async function saveQuickCaption(change) {
+  try {
+    const r = await api("/api/caption-style", { method: "PUT", body: JSON.stringify({ ...capStyle, ...change }) });
+    capStyle = r.style;
+    syncQuickCaptions();
+    if ($("capBox") && $("capBox").open) fillCapForm();
+    if (current) loadMoments(current);
+  } catch (e) { $("qCapNote").textContent = "Não salvou: " + e.message; }
+}
 const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], ["kwai", "Kwai"]];
 const matchesFilter = (m) => { const f = ($("rvFilter") || {}).value || "all"; return f === "all" || (m.status || "pending") === f; };
 
@@ -569,7 +633,7 @@ let capStyle = { enabled: true };
 let capFonts = [];
 
 async function loadCapStyle() {
-  try { const r = await api("/api/caption-style"); capStyle = r.style; capFonts = r.fonts; } catch (e) { /* mantém padrão */ }
+  try { const r = await api("/api/caption-style"); capStyle = r.style; capFonts = r.fonts; syncQuickCaptions(); } catch (e) { /* mantém padrão */ }
 }
 
 function fillCapForm() {
@@ -640,6 +704,7 @@ async function saveCapStyle() {
   try {
     const r = await api("/api/caption-style", { method: "PUT", body: JSON.stringify(capFromForm()) });
     capStyle = r.style;
+    syncQuickCaptions();
     $("capNote").className = "note";
     $("capNote").textContent = "✓ Estilo salvo. Vale para os próximos clipes gerados (use “Gerar de novo” nos que já existem).";
     $("capInfo").textContent = capStyle.enabled ? "· ligadas por padrão" : "· desligadas por padrão";
@@ -791,7 +856,7 @@ async function saveLayout(name) {
 async function startAnalyze(name, force = false) {
   try {
     const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
-      kind: "analyze", project: name, profile: $("aProfile").value, force,
+      kind: "analyze", project: name, ...durationRange(), force,
       n: parseInt($("aN").value, 10) || 10, provider: $("aProvider").value }) });
     watch(job.id);
   } catch (e) { showJobError(e.message); }
@@ -810,7 +875,7 @@ async function loadMoments(name) {
   }
   if (!ul) return;
   if (!d) { note.className = "note"; note.textContent = "Clique em “Encontrar momentos” para achar os melhores trechos deste vídeo."; ul.innerHTML = ""; return; }
-  if ($("aProfile")) $("aProfile").value = d.profile || "viral";
+  if ($("aDur") && d.range) setDuration(d.range[0], d.range[1]);
   const s = d.stats || {};
   const dv = (s.deep || {});
   const parts = [`${d.moments.length} momentos de ${d.candidates ?? "?"} candidatos`,

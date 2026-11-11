@@ -11,7 +11,7 @@ from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.llm import CRITERIA, LLMError, LLMRateLimited
 from corteviral.models import Transcript
-from corteviral.pipeline.boundaries import PROFILE_RANGES, snap_bounds
+from corteviral.pipeline.boundaries import duration_range, snap_bounds
 from corteviral.pipeline.deep import make_mini_clip, mini_window
 from corteviral.project import Project
 
@@ -55,7 +55,7 @@ def deep_review(project: Project, moments: list[dict], transcript: Transcript, s
         stats.update(skipped=True, reason="vídeo original não encontrado (foi movido ou apagado?)")
         return moments, stats
 
-    lo_hi = PROFILE_RANGES[settings.analysis.profile]
+    lo_hi = duration_range(settings)
     duration = float(project.data.get("duration") or transcript.duration or 0)
     top = sorted(moments, key=lambda m: -m["score"])[:cfg.top_k]
     reviewed = {m["id"]: m for m in top if m.get("ai") == "video"}  # já assistidos (retomada)
@@ -80,7 +80,8 @@ def deep_review(project: Project, moments: list[dict], transcript: Transcript, s
             clip.unlink(missing_ok=True)
         ctx = {"profile": settings.analysis.profile, "streamer": project.data.get("streamer"),
                "transcript": " ".join(words), "window": list(window), "examples": examples or [],
-               "margin": cfg.margin, "pre": m["start"] - window[0], "post": window[1] - m["end"]}
+               "margin": cfg.margin, "pre": m["start"] - window[0], "post": window[1] - m["end"],
+               "range": list(lo_hi)}
         for attempt in range(2):  # resposta inválida de modelo pequeno: tenta mais uma vez
             if stop.is_set():
                 return m["id"], None, "skip"
