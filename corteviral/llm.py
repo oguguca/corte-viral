@@ -4,6 +4,7 @@ As chaves vêm do .env / variáveis de ambiente e nunca vão para URL, log ou co
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -57,6 +58,65 @@ def _retry_after(e: urllib.error.HTTPError, default: int = 20, cap: int = 60) ->
         return default
 
 
+CRITERIA = ("gancho", "emocao", "visual", "final", "contexto")
+REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "descricao": {"type": "string"}, "motivo": {"type": "string"}, "risco": {"type": "string"},
+        **{c: {"type": "integer"} for c in CRITERIA},
+        "inicio": {"type": "number"}, "fim": {"type": "number"},
+    },
+    "required": ["descricao", "motivo", "risco", *CRITERIA, "inicio", "fim"],
+}
+REVIEW_INSTRUCTIONS = """Você é editor de cortes virais de lives de games (principalmente GTA), em português do Brasil.
+ASSISTA e OUÇA o vídeo anexo (um trecho de live com {pre:.0f} s de folga antes e depois do momento escolhido) e
+avalie o potencial de virar um clipe curto viral (TikTok, Shorts, Reels). Perfil "{profile}": {profile_hint}
+
+Dê notas de 0 a 100, sendo exigente (80+ só para o que é realmente forte):
+- gancho: os 3 primeiros segundos do corte sugerido prendem quem está rolando o feed?
+- emocao: humor, tensão, susto, raiva, euforia; reação forte dos streamers (gritos, risadas).
+- visual: o que acontece na tela é forte (ação, explosão, perseguição, cena marcante)?
+- final: o corte tem desfecho (punchline, reação, conclusão) ou termina no meio?
+- contexto: quem não viu a live entende sozinho?
+
+Sugira inicio e fim do corte em SEGUNDOS CONTADOS DESDE O INÍCIO DESTE VÍDEO: comece direto no gancho
+(sem enrolação) e termine logo depois da reação/desfecho.
+descricao: o que acontece (tela + áudio), 1–2 frases. motivo: por que funciona ou não, 1–2 frases.
+risco: o que pode atrapalhar (contexto, direitos autorais de música, parado) ou "nenhum".
+Escreva em português. Streamer: {streamer}.
+
+Transcrição do trecho (pode ter erros):
+{transcript}
+"""
+
+
+def _review_prompt(ctx: dict) -> str:
+    w0, w1 = ctx.get("window", [0, 0])
+    text = REVIEW_INSTRUCTIONS.format(
+        pre=ctx.get("margin", 15), profile=ctx.get("profile", "viral"),
+        profile_hint=PROFILE_HINTS.get(ctx.get("profile", "viral"), ""),
+        streamer=ctx.get("streamer") or "desconhecido", transcript=(ctx.get("transcript") or "")[:4000])
+    examples = ctx.get("examples") or []
+    if examples:
+        lines = [f"- [{'BOM' if e.get('label') == 'good' else 'RUIM'}] {e.get('description') or e.get('text', '')[:200]}"
+                 f" — {e.get('reason', '')}" for e in examples]
+        text += ("\nGosto do usuário (exemplos que ele já avaliou; use para calibrar as notas):\n"
+                 + "\n".join(lines) + "\n")
+    return text + f"\nDuração deste vídeo: {w1 - w0:.0f} s."
+
+
+def _valid_review(d) -> bool:
+    if not isinstance(d, dict):
+        return False
+    for c in CRITERIA:
+        v = d.get(c)
+        if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 100:
+            return False
+    if not all(isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool) for k in ("inicio", "fim")):
+        return False
+    return all(isinstance(d.get(k), str) for k in ("descricao", "motivo", "risco"))
+
+
 class LLMError(Exception):
     pass
 
@@ -96,6 +156,27 @@ class GeminiClient:
                 "temperature": 0.2,
             },
         }
+        data = self._post(body)
+        return data if isinstance(data, list) else []
+
+    def review_video(self, video_bytes: bytes, context: dict) -> dict:
+        """A IA assiste o mini-vídeo do trecho e devolve critérios, corte sugerido e textos."""
+        body = {
+            "contents": [{"parts": [
+                {"inline_data": {"mime_type": "video/mp4", "data": base64.b64encode(video_bytes).decode("ascii")}},
+                {"text": _review_prompt(context)},
+            ]}],
+            "generationConfig": {
+                "responseMimeType": "application/json", "responseSchema": REVIEW_SCHEMA,
+                "mediaResolution": "MEDIA_RESOLUTION_LOW", "temperature": 0.2,
+            },
+        }
+        data = self._post(body)
+        if not _valid_review(data):
+            raise LLMError("revisão em vídeo veio incompleta")
+        return data
+
+    def _post(self, body: dict):
         req = urllib.request.Request(
             GEMINI_URL.format(model=self.model), data=json.dumps(body).encode("utf-8"),
             headers={"x-goog-api-key": self._key, "Content-Type": "application/json"}, method="POST",
@@ -134,10 +215,9 @@ class GeminiClient:
         self._record(meta.get("promptTokenCount", 0), out_tokens, ok=True)
         try:
             text = payload["candidates"][0]["content"]["parts"][0]["text"]
-            data = json.loads(text)
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            return json.loads(text)
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
             raise LLMError("resposta do Gemini fora do formato esperado") from e
-        return data if isinstance(data, list) else []
 
 
 class AnthropicClient:

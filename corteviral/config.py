@@ -59,6 +59,16 @@ class LLMSettings(_Strict):
     daily_token_limit: int = 1_000_000
 
 
+class DeepSettings(_Strict):
+    enabled: bool = True          # IA assiste o vídeo dos melhores candidatos (só Gemini)
+    top_k: int = 15
+    margin: float = 15.0          # s de folga antes/depois do momento no mini-vídeo
+    model: str | None = None      # None = mesmo modelo do llm
+    weights: dict[str, float] = Field(default_factory=lambda: {
+        "gancho": 0.25, "emocao": 0.25, "visual": 0.15, "final": 0.20, "contexto": 0.15})
+    max_examples: int = 6
+
+
 class RenderSettings(_Strict):
     width: int = 1080
     height: int = 1920
@@ -78,6 +88,7 @@ class Settings(_Strict):
     analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     render: RenderSettings = Field(default_factory=RenderSettings)
+    deep: DeepSettings = Field(default_factory=DeepSettings)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
