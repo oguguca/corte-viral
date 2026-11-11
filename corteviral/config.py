@@ -39,9 +39,20 @@ class DownloadSettings(_Strict):
     concurrent_fragments: int = 4
 
 
+class AnalysisSettings(_Strict):
+    profile: Literal["viral", "monetizacao"] = "viral"
+    n_clips: int = 10
+    max_candidates: int = 60
+    # termos extras de reação (regex -> peso), somados ao léxico padrão
+    extra_reactions: dict[str, float] = Field(default_factory=dict)
+    zscore_window: int = 60
+    fetch_chat: bool = True
+
+
 class Settings(_Strict):
     paths: PathsSettings = Field(default_factory=PathsSettings)
     download: DownloadSettings = Field(default_factory=DownloadSettings)
+    analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
