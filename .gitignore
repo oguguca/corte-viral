@@ -1,0 +1,68 @@
+# --- Segredos ---
+.env
+.env.*
+!.env.example
+
+# --- Vídeos, áudios e saídas geradas ---
+projects/
+output/
+exports/
+clips/
+downloads/
+*.mp4
+*.mkv
+*.webm
+*.mov
+*.flv
+*.ts
+*.m4a
+*.mp3
+*.wav
+*.aac
+*.opus
+*.ass
+*.srt
+*.vtt
+!tests/fixtures/**
+
+# --- Modelos de IA e caches ---
+models/
+*.bin
+*.onnx
+*.pt
+*.pth
+*.safetensors
+*.tflite
+*.task
+.cache/
+huggingface/
+
+# --- Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# --- Node / Electron ---
+node_modules/
+app/dist/
+app/out/
+app/release/
+*.log
+npm-debug.log*
+
+# --- SO / editores ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
