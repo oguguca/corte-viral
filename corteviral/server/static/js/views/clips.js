@@ -8,7 +8,7 @@ import { confirmAction, scoreClass, toast } from "../ui.js";
 import { aiTag, critBars } from "./moments.js";
 
 const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], ["kwai", "Kwai"]];
-const POS = [["0.47", "Em cima"], ["0.58", "Meio"], ["0.70", "Embaixo"]];
+const POS = [["0.35", "Em cima"], ["0.55", "Meio"], ["0.85", "Embaixo"]];
 const title = (m) => (m.meta && m.meta.hook) || m.hook || m.description || m.reason || "Momento";
 
 export async function renderClips(root, name, project, ctx = {}) {
@@ -108,6 +108,56 @@ export async function renderClips(root, name, project, ctx = {}) {
     });
   }
 
+  // faixa "LEGENDA" arrastável sobre o vídeo: posição livre, salva só neste clipe
+  function bindCapMarker(box, m) {
+    const mk = $("#capMarker", box), stage = mk.parentElement, info = $("#capPosInfo", box), reset = $("#capPosReset", box);
+    const LO = 0.02, HI = 0.98;
+    let pos = m.caption_pos ?? state.capStyle.position ?? 0.7, saveTimer = 0;
+    const paint = () => {
+      const media = stage.firstElementChild;  // vídeo ou quadro vazio: a faixa segue a área do vídeo 9:16
+      mk.style.left = media.offsetLeft + "px";
+      mk.style.width = media.offsetWidth + "px";
+      mk.style.top = media.offsetTop + pos * media.offsetHeight + "px";
+      mk.setAttribute("aria-valuenow", Math.round(pos * 100));
+      mk.setAttribute("aria-valuetext", `${Math.round(pos * 100)}% da altura`);
+      info.textContent = `Altura: ${Math.round(pos * 100)}% ${m.caption_pos != null ? "· só neste clipe" : "· padrão de Ajustes"}`;
+      reset.hidden = m.caption_pos == null;
+    };
+    const save = () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try { await patch(m.id, { caption_pos: +pos.toFixed(3) }); paint(); toast("Posição salva. “Gerar de novo” aplica no vídeo.", "good"); }
+        catch (err) { toast(err.message, "bad"); }
+      }, 250);
+    };
+    mk.onpointerdown = (e) => {
+      e.preventDefault();
+      mk.setPointerCapture(e.pointerId);
+      mk.classList.add("dragging");
+      const h = stage.firstElementChild.offsetHeight, y0 = e.clientY, p0 = pos;  // 1:1 a partir de onde foi pega
+      mk.onpointermove = (ev) => { pos = Math.min(HI, Math.max(LO, p0 + (ev.clientY - y0) / h)); paint(); };
+      mk.onpointerup = mk.onpointercancel = () => {
+        mk.onpointermove = mk.onpointerup = mk.onpointercancel = null;
+        mk.classList.remove("dragging");
+        if (pos !== p0) save();
+      };
+    };
+    mk.onkeydown = (e) => {
+      const step = e.shiftKey ? 0.05 : 0.01;
+      if (e.key === "ArrowUp") pos = Math.max(LO, pos - step);
+      else if (e.key === "ArrowDown") pos = Math.min(HI, pos + step);
+      else return;
+      e.preventDefault(); paint(); save();
+    };
+    reset.onclick = async () => {
+      try { await patch(m.id, { reset_caption_pos: true }); delete m.caption_pos; pos = state.capStyle.position ?? 0.7; paint(); }
+      catch (err) { toast(err.message, "bad"); }
+    };
+    const media = stage.firstElementChild;
+    if (media.tagName === "VIDEO") media.addEventListener("loadedmetadata", paint, { once: true });
+    requestAnimationFrame(paint);
+  }
+
   function renderDetail() {
     const box = $("#detail", root);
     const m = d.moments.find((x) => x.id === state.selected);
@@ -116,7 +166,7 @@ export async function renderClips(root, name, project, ctx = {}) {
     const capOn = m.captions ?? state.capStyle.enabled ?? true;
     const hookOn = m.hook_on ?? state.capStyle.hook ?? true;
     const posts = (m.meta && m.meta.posts) || {};
-    const capText = m.caption_words ? m.caption_words.map((w) => w.w).join(" ") : (m.text || "");
+    const capText = m.caption_words?.length ? m.caption_words.map((w) => w.w).join(" ") : (m.text || "");
     box.innerHTML = `
       <div class="row" style="align-items:flex-start;gap:14px">
         <div class="${scoreClass(m.score)}"><span class="num">${m.score}</span><small>nota</small></div>
@@ -130,10 +180,12 @@ export async function renderClips(root, name, project, ctx = {}) {
         <button class="btn primary" id="gen">${ready ? "Gerar de novo" : "Gerar clipe"}</button>
       </div>
       <div class="row" style="align-items:flex-start;gap:18px">
-        <div style="flex:none">${ready
+        <div class="cap-stage" style="flex:none">${ready
           ? `<video class="vertical" style="height:440px" controls preload="metadata" src="${P("/clips/")}${enc(m.id)}?t=${Date.now()}"></video>`
           : `<div class="preview-9x16 empty" style="height:440px;width:248px;background:var(--surface-2);color:var(--text-3)">
-               <div class="big">🎬</div>Clipe ainda não gerado</div>`}</div>
+               <div class="big">🎬</div>Clipe ainda não gerado</div>`}
+          <div class="cap-marker" id="capMarker" role="slider" tabindex="0" aria-label="Posição da legenda neste clipe"
+               aria-valuemin="2" aria-valuemax="98" ${ui.tab === "legenda" ? "" : "hidden"}><span>↕ LEGENDA</span></div></div>
         <div style="flex:1;min-width:260px">
           <div class="tabs" role="tablist">
             ${[["corte", "Corte"], ["textos", "Textos"], ["legenda", "Legenda"]].map(([k, l]) =>
@@ -167,6 +219,9 @@ export async function renderClips(root, name, project, ctx = {}) {
           </div>
           <div data-pane="legenda" ${ui.tab === "legenda" ? "" : "hidden"} class="stack">
             <label class="switch"><input type="checkbox" id="clipCap" ${capOn ? "checked" : ""}><span class="track"></span><span>Legenda neste clipe</span></label>
+            <div class="note info"><span>↕</span><span>Arraste a faixa <b>LEGENDA</b> em cima do vídeo para onde quiser (ou use ↑ ↓).
+              <br><span id="capPosInfo" class="num"></span>
+              <button class="btn small plain" id="capPosReset" ${m.caption_pos == null ? "hidden" : ""}>Usar o padrão de Ajustes</button></span></div>
             <div class="field"><label for="capText">Texto da legenda (corrija palavras; os tempos são reaproveitados)</label>
               <textarea class="textarea" id="capText" style="min-height:140px">${esc(capText)}</textarea></div>
             <div class="row"><button class="btn primary" id="saveCap">Salvar legenda</button>
@@ -181,7 +236,9 @@ export async function renderClips(root, name, project, ctx = {}) {
       ui.tab = b.dataset.tab;
       box.querySelectorAll("[data-tab]").forEach((x) => x.setAttribute("aria-selected", x === b));
       box.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== ui.tab; });
+      $("#capMarker", box).hidden = ui.tab !== "legenda";
     });
+    bindCapMarker(box, m);
     box.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
       const status = m.status === b.dataset.status ? "pending" : b.dataset.status;
       try { await patch(m.id, { status }); renderList(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }

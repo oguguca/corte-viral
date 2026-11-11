@@ -66,3 +66,21 @@ def test_api_patch_returns_422_on_invalid_trim(settings_tmp):
     r = c.put(f"/api/projects/{p.dir.name}/moments/m1", json={"status": "approved", "hook_on": False})
     assert r.status_code == 200 and r.json()["moment"]["hook_on"] is False
     assert c.put(f"/api/projects/{p.dir.name}/moments/zz", json={"status": "approved"}).status_code == 404
+
+
+def test_caption_position_per_clip(settings_tmp):
+    p = _project(settings_tmp)
+    apply_patch(p, "m1", {"caption_pos": 0.9}, settings_tmp)
+    assert load_moments(p)["moments"][0]["caption_pos"] == 0.9
+    with pytest.raises(ReviewError):
+        apply_patch(p, "m1", {"caption_pos": 1.5}, settings_tmp)
+    apply_patch(p, "m1", {"reset_caption_pos": True}, settings_tmp)  # volta ao padrão de Ajustes
+    assert "caption_pos" not in load_moments(p)["moments"][0]
+
+
+def test_blank_caption_text_restores_original(settings_tmp):
+    p = _project(settings_tmp)
+    apply_patch(p, "m1", {"caption_text": "oi"}, settings_tmp)
+    assert load_moments(p)["moments"][0]["caption_words"]
+    apply_patch(p, "m1", {"caption_text": "   "}, settings_tmp)  # caixa vazia = volta ao texto original
+    assert "caption_words" not in load_moments(p)["moments"][0]

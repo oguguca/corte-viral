@@ -6,6 +6,7 @@ from corteviral.config import CaptionStyle
 PAUSE = 0.35            # s de silêncio que quebra o grupo
 HOLD = 0.3              # s que o último grupo fica na tela depois da fala
 JOIN_GAP = 0.6          # grupos mais próximos que isso ficam colados (sem piscar)
+FRAME_PAD = 20  # px de folga para a legenda nunca encostar na borda do vídeo
 SAFE_TOP, SAFE_BOTTOM, SAFE_LEFT, SAFE_RIGHT = 210, 1440, 140, 140  # zona segura em 1080x1920 (simétrica: legenda centralizada e longe dos botões laterais)
 _SENTENCE_END = (".", "!", "?", "…")
 
@@ -92,8 +93,20 @@ HOOK_TOP = {"split": 640, "default": 300}  # topo da área da gameplay (abaixo d
 CREDIT_SIZE = 36
 
 
+def credit_y(caption_band: tuple[float, float] | None) -> float:
+    """Base do crédito (em 1080x1920). Fica no lugar de sempre; se a legenda estiver ali, sai da frente."""
+    cy = float(SAFE_BOTTOM)
+    if caption_band:
+        ctop, cbot = caption_band
+        if cy > ctop - 8 and cy - CREDIT_SIZE < cbot + 8:  # encostaria na legenda
+            below = cbot + 8 + CREDIT_SIZE
+            cy = below if below <= 1920 - FRAME_PAD else ctop - 8
+    return cy
+
+
 def _overlay_events(style: CaptionStyle, hook: str | None, credit: str | None, duration: float | None,
-                    layout: str, sx: float, sy: float, hook_top: float | None = None) -> list[str]:
+                    layout: str, sx: float, sy: float, hook_top: float | None = None,
+                    caption_band: tuple[float, float] | None = None) -> list[str]:
     out = []
     x = round((SAFE_LEFT + (1080 - SAFE_RIGHT)) / 2 * sx)
     safe_w = (1080 - SAFE_LEFT - SAFE_RIGHT) * sx
@@ -112,7 +125,7 @@ def _overlay_events(style: CaptionStyle, hook: str | None, credit: str | None, d
         handle = credit if credit.startswith("@") else "@" + credit
         right = round((1080 - SAFE_RIGHT) * sx)
         out.append(f"Dialogue: 1,{ass_time(0)},{ass_time(duration)},Credit,,0,0,0,,"
-                   "{" + rf"\an3\pos({right},{round(SAFE_BOTTOM * sy)})" + "}" + ass_escape(handle))
+                   "{" + rf"\an3\pos({right},{round(credit_y(caption_band) * sy)})" + "}" + ass_escape(handle))
     return out
 
 
@@ -123,14 +136,13 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height:
     size = style.size * sy
     x = round((SAFE_LEFT + (1080 - SAFE_RIGHT)) / 2 * sx)
     safe_w = (1080 - SAFE_LEFT - SAFE_RIGHT) * sx
-    # ancorada pela base (\an2): a linha inteira — não só o centro — fica dentro da zona segura
+    # ancorada pela base (\an2). Posição livre (o usuário escolhe), só não deixa a linha sair do vídeo.
     bottom = style.position * height + size / 2
-    bottom = max(bottom, SAFE_TOP * sy + size)
-    limit = SAFE_BOTTOM - (CREDIT_SIZE + 12 if (credit or "").strip() else 0)  # não encosta no crédito
-    bottom = round(min(bottom, limit * sy))
+    bottom = round(min(max(bottom, FRAME_PAD * sy + size), (1920 - FRAME_PAD) * sy))
     hl, prim = ass_color(style.highlight), ass_color(style.color)
     lines = [_header(style, width, height)]
-    lines += _overlay_events(style, hook, credit, duration, layout, sx, sy, hook_top)
+    band = (bottom / sy - style.size * 1.25, bottom / sy) if words else None  # faixa ocupada pela legenda
+    lines += _overlay_events(style, hook, credit, duration, layout, sx, sy, hook_top, band)
     chunks = chunk_words(words, style.max_words, style.max_chars)
     for ci, chunk in enumerate(chunks):
         nxt = chunks[ci + 1][0]["start"] if ci + 1 < len(chunks) else None

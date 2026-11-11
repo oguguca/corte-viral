@@ -74,9 +74,18 @@ def apply_patch(project: Project, moment_id: str, patch: dict, settings: Setting
         for key in ("captions", "hook_on"):
             if patch.get(key) is not None:
                 changes[key] = bool(patch[key])
+        if patch.get("caption_pos") is not None:
+            pos = float(patch["caption_pos"])
+            if not 0.0 <= pos <= 1.0:
+                raise ReviewError("posição da legenda precisa estar entre 0 e 1")
+            changes["caption_pos"] = round(pos, 4)
+        reset_caption = bool(patch.get("reset_caption"))
         if patch.get("caption_text") is not None:
-            start, end = changes.get("start", m0["start"]), changes.get("end", m0["end"])
-            changes["caption_words"] = realign(_words(project, start, end), patch["caption_text"])
+            if not patch["caption_text"].strip():
+                reset_caption = True  # caixa vazia = volta ao texto original (nunca uma legenda vazia)
+            else:
+                start, end = changes.get("start", m0["start"]), changes.get("end", m0["end"])
+                changes["caption_words"] = realign(_words(project, start, end), patch["caption_text"])
         if patch.get("meta") is not None:
             posts = patch["meta"].get("posts") if isinstance(patch["meta"], dict) else None
             if not isinstance(patch["meta"], dict) or (posts is not None and not isinstance(posts, dict)):
@@ -86,7 +95,9 @@ def apply_patch(project: Project, moment_id: str, patch: dict, settings: Setting
                                               m0.get("meta"))
         for m in targets:
             m.update(changes)
-            if patch.get("reset_caption"):
+            if reset_caption:
                 m.pop("caption_words", None)
+            if patch.get("reset_caption_pos"):
+                m.pop("caption_pos", None)
         write_json_atomic(project.path(MOMENTS), data)
         return targets[0]

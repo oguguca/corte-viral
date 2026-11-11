@@ -90,6 +90,8 @@ class MomentPatch(BaseModel):
     start: float | None = None
     end: float | None = None
     hook_on: bool | None = None
+    caption_pos: float | None = Field(default=None, ge=0.0, le=1.0)  # posição da legenda só neste clipe
+    reset_caption_pos: bool = False
     meta: dict | None = None
 
 

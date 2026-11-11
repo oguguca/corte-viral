@@ -56,13 +56,16 @@ def test_build_ass_one_event_per_word_with_highlight():
     assert "PlayResX: 1080" in ass and "PlayResY: 1920" in ass
 
 
-def test_build_ass_text_edges_inside_safe_zone():
-    for pos in (0.70, 0.75, 0.95, 0.02):
+def test_build_ass_position_is_free_but_inside_the_frame():
+    for pos in (0.70, 0.75, 0.95, 0.02, 0.0, 1.0):
         for size in (60, 90, 140):
             ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=pos, size=size))
             assert r"\an2" in ass  # ancorada pela base: se quebrar linha, cresce para cima
             bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
-            assert bottom <= 1440 and bottom - size >= 210  # topo e base dentro da zona segura
+            assert bottom <= 1900 and bottom - size >= 20  # sem trava de zona segura, mas nunca sai do vídeo
+    ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=0.90, size=90))
+    bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
+    assert abs(bottom - (0.90 * 1920 + 45)) < 2  # embaixo de verdade, onde o usuário pediu
     ass = build_ass([W("oi", 0.0, 0.3)], CaptionStyle(position=0.70, size=90))
     bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ass).group(1))
     assert abs(bottom - (0.70 * 1920 + 45)) < 2  # centro da linha na altura escolhida
@@ -126,3 +129,11 @@ def test_credit_event_whole_clip():
 def test_ass_without_words_but_with_hook_still_has_events():
     assert "Dialogue:" in build_ass([], CaptionStyle(), hook="oi", duration=5.0)
     assert "Dialogue:" not in build_ass([], CaptionStyle(), hook=None, credit=None, duration=5.0)
+
+
+def test_clip_caption_position_overrides_style():
+    from corteviral.pipeline.render import caption_style_for
+    style = CaptionStyle(position=0.70)
+    assert caption_style_for({"caption_pos": 0.9}, style).position == 0.9
+    assert caption_style_for({}, style).position == 0.70
+    assert style.position == 0.70  # o estilo global não muda

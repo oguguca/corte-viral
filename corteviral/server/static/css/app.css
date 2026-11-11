@@ -442,3 +442,14 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 .net-instagram { background: linear-gradient(45deg, #feda75, #fa7e1e 30%, #d62976 60%, #962fbf 80%, #4f5bd5); color: #fff; }
 .steps-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; line-height: 1.5; }
 .steps-list code { font-size: 11px; }
+
+/* faixa arrastável da legenda sobre o clipe */
+.cap-stage { position: relative; }
+.cap-marker { position: absolute; transform: translateY(-50%); height: 34px; display: grid; place-items: center; cursor: grab;
+              touch-action: none; border-top: 2px dashed var(--info); border-bottom: 2px dashed var(--info);
+              background: color-mix(in srgb, var(--info) 22%, transparent); z-index: 2; }
+.cap-marker span { font: 800 11px/1 var(--font); letter-spacing: 0.08em; color: #fff; background: var(--info);
+                   padding: 4px 8px; border-radius: 99px; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.cap-marker:hover, .cap-marker.dragging { background: color-mix(in srgb, var(--info) 34%, transparent); }
+.cap-marker.dragging { cursor: grabbing; }
+.cap-marker:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

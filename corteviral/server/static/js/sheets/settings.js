@@ -73,7 +73,7 @@ function captionSection() {
       <label class="switch"><input type="checkbox" id="cOn" ${s.enabled ? "checked" : ""}><span class="track"></span><span>Legendas ligadas por padrão</span></label>
       <div class="field"><label for="cFont">Fonte</label><select class="select" id="cFont">${(state.capFonts.length ? state.capFonts : [s.font]).map((f) => `<option ${f === s.font ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></div>
       <div class="field"><label for="cSize">Tamanho · <span id="cSizeV" class="num"></span></label><input type="range" id="cSize" min="50" max="140" step="2" value="${s.size}"></div>
-      <div class="field"><label for="cPos">Altura na tela · <span id="cPosV" class="num"></span></label><input type="range" id="cPos" min="0.11" max="0.75" step="0.01" value="${s.position}"></div>
+      <div class="field"><label for="cPos">Altura na tela · <span id="cPosV" class="num"></span></label><input type="range" id="cPos" min="0.02" max="0.98" step="0.01" value="${s.position}"></div>
       <div class="row"><div class="field"><label for="cWords">Palavras por vez</label><select class="select" id="cWords">${[1, 2, 3, 4, 5, 6].map((n) => `<option ${n === s.max_words ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div class="field"><label for="cColor">Texto</label><input type="color" id="cColor" value="${s.color}"></div>
         <div class="field"><label for="cHl">Palavra falada</label><input type="color" id="cHl" value="${s.highlight}"></div></div>
@@ -135,7 +135,7 @@ function drawCaption(b) {
   const safeW = (1080 - 2 * SAFE_X) * k;
   if (total > safeW) { px *= safeW / total; setFont(); space = g.measureText(" ").width; widths = words.map((w) => g.measureText(w).width);
                        total = widths.reduce((a, c) => a + c, 0) + space * (words.length - 1); }
-  const y = Math.min(Math.max(s.position * 1920 + s.size / 2, 210 + s.size), 1440) * k;
+  const y = Math.min(Math.max(s.position * 1920 + s.size / 2, 20 + s.size), 1900) * k;  // livre, igual a captions.py
   let x = 540 * k - total / 2;
   words.forEach((w, i) => {
     g.lineWidth = Math.max(2, 18 * k); g.strokeStyle = "#000"; g.strokeText(w, x, y);

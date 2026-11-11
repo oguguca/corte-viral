@@ -77,6 +77,13 @@ def hook_top_for(layout: str, has_cam: bool, rs) -> int:
     return int((1920 - band) / 2) + 30
 
 
+def caption_style_for(moment: dict, style):
+    """Estilo da legenda para um clipe: a posição escolhida no clipe vale mais que a de Ajustes."""
+    if moment.get("caption_pos") is None:
+        return style
+    return style.model_copy(update={"position": float(moment["caption_pos"])})
+
+
 def captions_wanted(moment: dict, captions: bool | None, style) -> bool:
     """Por clipe > pedido de geração > estilo (config/interface)."""
     if moment.get("captions") is not None:
@@ -101,7 +108,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     out = out_dir / f"{moment['id']}{'.preview' if preview else ''}.mp4"
     meta_file = out.with_suffix(".json")
 
-    style = load_style(settings)
+    style = caption_style_for(moment, load_style(settings))
     words = _caption_words(project, moment, start, end) if captions_wanted(moment, captions, style) else []
     hook_on = moment["hook_on"] if moment.get("hook_on") is not None else style.hook
     hook = ((moment.get("meta") or {}).get("hook") or moment.get("hook") or "") if hook_on else ""

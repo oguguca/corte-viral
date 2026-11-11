@@ -106,11 +106,18 @@ def test_approved_outside_current_selection_still_exported(settings_tmp):
 
 
 # --- M3 / M4 / M10: posições de gancho, crédito e legenda -----------------------------------
-def test_caption_lifted_above_credit():
-    ass = build_ass([{"w": "oi", "start": 0, "end": 1}], CaptionStyle(position=0.75), credit="flow", duration=5)
-    ev = next(l for l in ass.splitlines() if l.startswith("Dialogue: 0,"))
-    bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ev).group(1))
-    assert bottom <= 1440 - 36 - 10
+def test_credit_moves_out_of_the_caption_way():
+    # a legenda fica onde o usuário pôs; o crédito "@canal" é que sai da frente
+    for pos in (0.73, 0.75, 0.97):
+        ass = build_ass([{"w": "oi", "start": 0, "end": 1}], CaptionStyle(position=pos, size=90),
+                        credit="flow", duration=5)
+        ev = next(l for l in ass.splitlines() if l.startswith("Dialogue: 0,"))
+        bottom = int(re.search(r"\\pos\(\d+,(\d+)\)", ev).group(1))
+        assert abs(bottom - min(pos * 1920 + 45, 1900)) < 2
+        cr = next(l for l in ass.splitlines() if ",Credit," in l)
+        cy = int(re.search(r"\\pos\(\d+,(\d+)\)", cr).group(1))
+        assert cy <= bottom - 90 - 8 or cy - 36 >= bottom + 8, (pos, cy, bottom)  # sem sobrepor
+        assert 36 <= cy <= 1900
 
 
 def test_hook_top_follows_given_position():
