@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corte Viral</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --line: #2a2f3a;
+    --text: #e8eaf0; --muted: #8b93a7; --accent: #ffe600; --accent-ink: #111;
+    --ok: #3ddc84; --err: #ff5d5d; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 16px 24px;
+           border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  header small { color: var(--muted); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  input, select { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 9px 10px; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+           padding: 9px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; width: 100%; margin-top: 14px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .stack { display: grid; gap: 16px; align-content: start; }
+
+  #job { display: none; }
+  .stage { display: flex; justify-content: space-between; font-weight: 600; }
+  .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .error { background: #2a1416; border: 1px solid #5a2328; color: #ffb3b3; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; white-space: pre-wrap; }
+  .done { color: var(--ok); }
+
+  #projects { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
+  #projects li { padding: 9px 10px; border-radius: 8px; background: var(--panel-2); cursor: pointer; border: 1px solid transparent; }
+  #projects li:hover { border-color: var(--line); }
+  #projects li.active { border-color: var(--accent); }
+  #projects .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #projects .s { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  #viewer .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  #viewer .head h3 { margin: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+  .player { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 1200px) { .player { grid-template-columns: 1fr; } }
+  video { width: 100%; border-radius: 8px; background: #000; max-height: 60vh; }
+  #words { background: var(--panel-2); border-radius: 8px; padding: 12px; height: 60vh; overflow: auto; line-height: 1.9; }
+  #words .seg { margin-bottom: 8px; }
+  #words .ts { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 6px; cursor: pointer; }
+  #words .w { cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+  #words .w:hover { background: var(--line); }
+  #words .w.low { text-decoration: underline dotted var(--muted); }
+  #words .w.now { background: var(--accent); color: var(--accent-ink); }
+  #words mark { background: #4b3f00; color: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Corte <span>Viral</span></h1>
+  <small>Fase 1 · download + transcrição</small>
+</header>
+
+<main>
+  <div class="stack">
+    <section class="card">
+      <h2>Nova tarefa</h2>
+      <label for="source">Link (YouTube, Twitch, Kick) ou arquivo do PC</label>
+      <div class="row">
+        <input id="source" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
+        <button id="pick" style="flex:0" title="Escolher arquivo">📁</button>
+      </div>
+      <div class="row">
+        <div>
+          <label for="model">Modelo</label>
+          <select id="model">
+            <option value="medium">medium (padrão)</option>
+            <option value="small">small (2× mais rápido)</option>
+            <option value="base">base (teste rápido)</option>
+            <option value="tiny">tiny (só p/ testar)</option>
+          </select>
+        </div>
+        <div>
+          <label for="language">Idioma</label>
+          <select id="language">
+            <option value="pt">Português</option>
+            <option value="auto">Detectar</option>
+            <option value="en">Inglês</option>
+          </select>
+        </div>
+      </div>
+      <label for="cookies">Login do navegador</label>
+      <select id="cookies">
+        <option value="">Nenhum</option>
+        <option value="firefox">Firefox</option>
+        <option value="edge">Edge</option>
+        <option value="chrome">Chrome (feche-o antes)</option>
+        <option value="brave">Brave</option>
+        <option value="opera">Opera</option>
+      </select>
+      <div class="hint">Só para vídeos com restrição de idade, privados ou de membros.</div>
+      <button class="primary" id="start">Processar</button>
+    </section>
+
+    <section class="card" id="job">
+      <div class="stage"><span id="stage">—</span><span id="pct">0%</span></div>
+      <div class="bar"><div id="fill"></div></div>
+      <div class="meta"><span id="msg"></span><span id="eta"></span></div>
+      <div class="error" id="err"></div>
+    </section>
+
+    <section class="card">
+      <h2>Projetos</h2>
+      <ul id="projects"></ul>
+    </section>
+  </div>
+
+  <section class="card" id="viewer">
+    <div class="empty">Escolha um projeto à esquerda para ver o vídeo e a transcrição.</div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo" };
+let current = null;      // projeto aberto
+let words = [];          // palavras do projeto aberto
+let wordEls = [];
+
+const fmt = (s) => {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+};
+const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body?.detail || r.statusText);
+  return body;
+}
+
+// ---- nova tarefa ---------------------------------------------------------
+$("pick").onclick = async () => {
+  $("pick").disabled = true;
+  try { const { path } = await api("/api/pick-file", { method: "POST" }); if (path) $("source").value = path; }
+  finally { $("pick").disabled = false; }
+};
+
+$("start").onclick = async () => {
+  const source = $("source").value.trim();
+  if (!source) { $("source").focus(); return; }
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
+      source, model: $("model").value, language: $("language").value,
+      cookies_from_browser: $("cookies").value || null }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+};
+
+function showJobError(text) {
+  $("job").style.display = "block";
+  $("err").style.display = "block";
+  $("err").textContent = text;
+}
+
+function renderJob(job) {
+  $("job").style.display = "block";
+  $("stage").textContent = STAGES[job.stage] || job.stage;
+  const pct = Math.round(job.progress * 100);
+  $("pct").textContent = pct + "%";
+  $("fill").style.width = pct + "%";
+  $("msg").textContent = job.message || "";
+  const elapsed = (Date.now() / 1000) - job.started_at;
+  $("eta").textContent = "decorrido " + fmt(elapsed);
+  $("err").style.display = job.status === "error" ? "block" : "none";
+  $("err").textContent = job.error || "";
+  $("start").disabled = job.status === "running";
+  if (job.status === "done") { $("stage").innerHTML = '<span class="done">✓ Concluído</span>'; }
+}
+
+async function watch(id) {
+  $("start").disabled = true;
+  for (;;) {
+    const job = await api("/api/jobs/" + id);
+    renderJob(job);
+    if (job.status !== "running") {
+      $("start").disabled = false;
+      await loadProjects();
+      if (job.project) openProject(job.project);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+}
+
+// ---- projetos -----------------------------------------------------------
+async function loadProjects() {
+  const list = await api("/api/projects");
+  const ul = $("projects");
+  if (!list.length) { ul.innerHTML = '<li class="empty" style="cursor:default">Nenhum projeto ainda.</li>'; return; }
+  ul.innerHTML = list.map((p) => `
+    <li data-name="${esc(p.name)}" class="${p.name === current ? "active" : ""}">
+      <div class="t">${esc(p.title || p.name)}</div>
+      <div class="s">${fmt(p.duration)} · ${p.has_transcript ? "transcrito" : "sem transcrição"}</div>
+    </li>`).join("");
+  ul.querySelectorAll("li[data-name]").forEach((li) => li.onclick = () => openProject(li.dataset.name));
+}
+
+async function openProject(name) {
+  current = name;
+  document.querySelectorAll("#projects li").forEach((li) => li.classList.toggle("active", li.dataset.name === name));
+  const v = $("viewer");
+  let t = null;
+  try { t = await api(`/api/projects/${encodeURIComponent(name)}/transcript`); } catch (e) { /* sem transcrição */ }
+  v.innerHTML = `
+    <div class="head">
+      <h3>${esc(name)}</h3>
+      <div class="row" style="flex:0">
+        <input id="q" placeholder="Buscar na transcrição…" style="width:220px">
+        <button id="folder">Abrir pasta</button>
+      </div>
+    </div>
+    ${t ? `<div class="chips">
+      <span class="chip">idioma: ${esc(t.language)}</span>
+      <span class="chip">${t.words.length} palavras</span>
+      <span class="chip">modelo: ${esc(t.model || "?")} · ${esc(t.device || "?")}</span>
+      <span class="chip">duração: ${fmt(t.duration)}</span></div>` : ""}
+    <div class="player">
+      <video id="video" controls preload="metadata" src="/api/projects/${encodeURIComponent(name)}/video"></video>
+      <div id="words">${t ? "" : '<span class="empty">Este projeto ainda não tem transcrição.</span>'}</div>
+    </div>`;
+  $("folder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
+  words = t ? t.words : [];
+  if (t) renderWords(t);
+  const video = $("video");
+  video.ontimeupdate = () => highlight(video.currentTime);
+  $("q").oninput = (e) => search(e.target.value);
+}
+
+function renderWords(t) {
+  // agrupa palavras por segmento para ficar legível
+  const box = $("words");
+  const frag = document.createDocumentFragment();
+  wordEls = [];
+  let wi = 0;
+  for (const seg of t.segments) {
+    const div = document.createElement("div");
+    div.className = "seg";
+    const ts = document.createElement("span");
+    ts.className = "ts"; ts.textContent = fmt(seg.start);
+    ts.onclick = () => seek(seg.start);
+    div.appendChild(ts);
+    while (wi < words.length && words[wi].start < seg.end + 0.01) {
+      const w = words[wi];
+      const span = document.createElement("span");
+      span.className = "w" + (w.p < 0.5 ? " low" : "");
+      span.textContent = w.w;
+      span.title = `${w.start.toFixed(2)}s → ${w.end.toFixed(2)}s · confiança ${Math.round(w.p * 100)}%`;
+      span.onclick = () => seek(w.start);
+      div.appendChild(span);
+      div.appendChild(document.createTextNode(" "));
+      wordEls.push(span);
+      wi++;
+    }
+    frag.appendChild(div);
+  }
+  box.innerHTML = "";
+  box.appendChild(frag);
+}
+
+function seek(t) { const v = $("video"); v.currentTime = t; v.play(); }
+
+let lastNow = -1;
+function highlight(time) {
+  // busca binária da palavra atual
+  let lo = 0, hi = words.length - 1, idx = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (words[mid].start <= time) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+  if (idx === lastNow) return;
+  if (lastNow >= 0 && wordEls[lastNow]) wordEls[lastNow].classList.remove("now");
+  if (idx >= 0 && wordEls[idx] && time <= words[idx].end + 0.3) {
+    wordEls[idx].classList.add("now");
+    wordEls[idx].scrollIntoView({ block: "nearest" });
+  }
+  lastNow = idx;
+}
+
+function search(q) {
+  q = q.trim().toLowerCase();
+  let first = null;
+  wordEls.forEach((el, i) => {
+    const hit = q && words[i].w.toLowerCase().includes(q);
+    el.innerHTML = hit ? `<mark>${esc(words[i].w)}</mark>` : esc(words[i].w);
+    if (hit && !first) first = el;
+  });
+  if (first) first.scrollIntoView({ block: "center" });
+}
+
+// ---- inicialização --------------------------------------------------------
+(async () => {
+  await loadProjects();
+  const running = await api("/api/jobs");
+  if (running) watch(running.id);
+})();
+</script>
+</body>
+</html>

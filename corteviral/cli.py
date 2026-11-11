@@ -67,6 +67,40 @@ def _cmd_info(args) -> int:
     return 0
 
 
+def _open_window(url: str) -> None:
+    """Abre a interface numa janela própria (Edge em modo app); senão, no navegador padrão."""
+    import os
+    import subprocess
+    import webbrowser
+
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles")):
+        edge = Path(base or "") / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+        if base and edge.exists():
+            subprocess.Popen([str(edge), f"--app={url}", "--window-size=1400,900"])
+            return
+    webbrowser.open(url)
+
+
+def _cmd_ui(args) -> int:
+    import socket
+    import threading
+
+    import uvicorn
+
+    from corteviral.server.app import create_app
+
+    settings = load_settings(Path(args.config) if args.config else None)
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", args.port or 0))
+        port = s.getsockname()[1]
+    url = f"http://127.0.0.1:{port}/"
+    print(f"Corte Viral rodando em {url}  (feche esta janela para encerrar)")
+    if not args.no_window:
+        threading.Timer(1.0, _open_window, args=(url,)).start()
+    uvicorn.run(create_app(settings), host="127.0.0.1", port=port, log_level="warning")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="corteviral", description="Corte Viral — VOD → clipes verticais")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -84,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("info", help="mostra o estado de um projeto")
     p.add_argument("project", help="pasta do projeto")
     p.set_defaults(func=_cmd_info)
+
+    p = sub.add_parser("ui", help="abre a interface gráfica")
+    p.add_argument("--config", help="caminho do config.yaml")
+    p.add_argument("--port", type=int, help="porta fixa (padrão: livre aleatória)")
+    p.add_argument("--no-window", action="store_true", help="não abre a janela automaticamente")
+    p.set_defaults(func=_cmd_ui)
     return parser
 
 

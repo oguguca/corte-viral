@@ -4,7 +4,7 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** Fase 1 concluída (download + transcrição via linha de comando).
+> **Status:** Fase 1 concluída (download + transcrição, com interface básica de teste).
 > Próxima: Fase 2 — detecção e pontuação de momentos.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
@@ -58,6 +58,17 @@ Na primeira transcrição, o modelo Whisper é baixado para `models/`
 
 ## Uso
 
+### Interface (recomendado)
+
+Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela onde
+você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
+sincronizada com o vídeo (clique numa palavra para pular até ela).
+
+Vídeos com restrição de idade, privados ou de membros: escolha seu navegador em
+"Login do navegador" (você precisa estar logado nele).
+
+### Linha de comando
+
 ```powershell
 # Baixa/importa e transcreve
 .venv\Scripts\python -m corteviral ingest "https://www.twitch.tv/videos/123456789"
@@ -67,6 +78,7 @@ Na primeira transcrição, o modelo Whisper é baixado para `models/`
 #   --model small        modelo mais rápido (menos preciso)
 #   --language pt        força o idioma (padrão: detecção automática)
 #   --force              refaz tudo, ignorando o cache
+#   --cookies-from-browser firefox   usa o login do navegador (vídeos com restrição)
 
 # Estado de um projeto
 .venv\Scripts\python -m corteviral info projects\<pasta-do-projeto>
