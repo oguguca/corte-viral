@@ -24,12 +24,15 @@ Uso previsto: pessoal / pequena equipe de cortes (não é produto distribuído).
 Essas restrições motivam: transcrição local com modelo `medium` int8 (cabe em
 4 GB), análise semântica via API na nuvem (LLM local inviável), encode por NVENC.
 
+Medição real (VOD de 27 min, `medium`, GTX 1050 Ti): ~7 min ponta a ponta
+(≈ 15 min por hora de vídeo).
+
 ## 3. Decisões
 
 | Tema | Decisão | Motivo |
 |---|---|---|
 | Processamento | Híbrido: transcrição local, LLM via API | Custo zero de transcrição; qualidade alta de análise |
-| LLM | Anthropic Claude — Haiku para triagem, Sonnet para refino/títulos | Bom em PT-BR coloquial; barato na triagem |
+| LLM | **Plugável** (`llm.provider`): `none` (só sinais locais), `gemini` (padrão — `gemini-3.5-flash-lite`, plano gratuito), `anthropic` (quando houver crédito) | Usuário sem orçamento para API paga (2026-11-11); o pipeline funciona inteiro sem IA |
 | Interface | Electron + React (front) + Python FastAPI (backend local) | Visual moderno + player HTML5; Node já instalado |
 | Facecam | Detecção automática (MediaPipe) + ajuste manual + preset por streamer | Robusto a overlays; automático a partir do 2º VOD |
 | Legendas | ASS (libass) queimadas pelo FFmpeg | Destaque palavra a palavra sem renderizador extra |
