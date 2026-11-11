@@ -22,11 +22,12 @@ export function openSheet({ title, body, foot, width = 640, from = null, onClose
   if (foot) typeof foot === "string" ? ($(".sheet-foot", sheet).innerHTML = foot) : $(".sheet-foot", sheet).append(foot);
 
   // origem espacial: o painel cresce a partir do botão que o abriu
-  if (from && !reduced()) {
-    const r = from.getBoundingClientRect();
-    sheet.style.transformOrigin = `${r.left + r.width / 2 - innerWidth / 2 + width / 2}px ${r.top - innerHeight / 2 + 200}px`;
-  }
   document.body.append(scrim, sheet);
+  if (from && !reduced()) {  // medido depois de entrar na página: posição real do painel (sem a escala)
+    const r = from.getBoundingClientRect(), s = sheet.getBoundingClientRect(), k = 0.9;
+    const cx = s.left + s.width / 2, cy = s.top + s.height / 2, w = s.width / k, h = s.height / k;
+    sheet.style.transformOrigin = `${r.left + r.width / 2 - (cx - w / 2)}px ${r.top + r.height / 2 - (cy - h / 2)}px`;
+  }
   requestAnimationFrame(() => { scrim.classList.add("show"); sheet.classList.add("show"); });
 
   const close = () => {
@@ -40,7 +41,7 @@ export function openSheet({ title, body, foot, width = 640, from = null, onClose
   const onKey = (e) => {
     if (e.key === "Escape") close();
     if (e.key === "Tab") {  // foco preso dentro do painel
-      const f = [...sheet.querySelectorAll("button, input, select, textarea, [tabindex]:not([tabindex='-1'])")]
+      const f = [...sheet.querySelectorAll("a[href], summary, button, input, select, textarea, video[controls], [tabindex]:not([tabindex='-1'])")]
         .filter((x) => !x.disabled && x.offsetParent !== null);
       if (!f.length) return;
       if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }

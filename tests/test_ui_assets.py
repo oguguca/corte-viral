@@ -21,6 +21,10 @@ def test_static_assets_served(settings_tmp):
 def test_static_cannot_escape_folder(settings_tmp):
     c = TestClient(create_app(settings_tmp))
     assert c.get("/static/../app.py").status_code == 404
+    for path in ("/static/%2e%2e/app.py", "/static/%2e%2e%2fapp.py", "/static/..%5capp.py"):
+        r = c.get(path)
+        assert r.status_code == 404, path
+        assert b"create_app" not in r.content
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node não instalado")

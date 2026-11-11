@@ -4,7 +4,9 @@ export const STEPS = [
 ];
 
 export function parse() {
-  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  let parts;
+  try { parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent); }
+  catch (e) { return { view: "bad" }; }  // endereço malformado não deixa a tela em branco
   if (parts[0] === "p" && parts[1]) {
     const step = STEPS.some(([k]) => k === parts[2]) ? parts[2] : "video";
     return { view: "project", name: parts[1], step };

@@ -71,10 +71,10 @@ function captionSection() {
   return `<div class="row" style="align-items:flex-start;gap:20px">
     <div class="stack" style="flex:1;min-width:260px">
       <label class="switch"><input type="checkbox" id="cOn" ${s.enabled ? "checked" : ""}><span class="track"></span><span>Legendas ligadas por padrão</span></label>
-      <div class="field"><label for="cFont">Fonte</label><select class="select" id="cFont">${state.capFonts.map((f) => `<option ${f === s.font ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></div>
+      <div class="field"><label for="cFont">Fonte</label><select class="select" id="cFont">${(state.capFonts.length ? state.capFonts : [s.font]).map((f) => `<option ${f === s.font ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></div>
       <div class="field"><label for="cSize">Tamanho · <span id="cSizeV" class="num"></span></label><input type="range" id="cSize" min="50" max="140" step="2" value="${s.size}"></div>
       <div class="field"><label for="cPos">Altura na tela · <span id="cPosV" class="num"></span></label><input type="range" id="cPos" min="0.11" max="0.75" step="0.01" value="${s.position}"></div>
-      <div class="row"><div class="field"><label for="cWords">Palavras por vez</label><select class="select" id="cWords">${[1, 2, 3, 4].map((n) => `<option ${n === s.max_words ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <div class="row"><div class="field"><label for="cWords">Palavras por vez</label><select class="select" id="cWords">${[1, 2, 3, 4, 5, 6].map((n) => `<option ${n === s.max_words ? "selected" : ""}>${n}</option>`).join("")}</select></div>
         <div class="field"><label for="cColor">Texto</label><input type="color" id="cColor" value="${s.color}"></div>
         <div class="field"><label for="cHl">Palavra falada</label><input type="color" id="cHl" value="${s.highlight}"></div></div>
       <label class="switch"><input type="checkbox" id="cUpper" ${s.uppercase ? "checked" : ""}><span class="track"></span><span>Tudo em MAIÚSCULAS</span></label>
@@ -171,7 +171,11 @@ async function fillUsage(b) {
 }
 
 // ---------------- painel ----------------
+let settingsOpen = false;
+
 export async function openSettings(from, start = "appearance") {
+  if (settingsOpen) return;  // clique duplo não abre dois painéis
+  settingsOpen = true;
   await loadCapStyle();
   const body = document.createElement("div");
   const TABS = [["appearance", "Aparência"], ["accounts", "Contas"], ["captions", "Legenda"], ["usage", "Uso da IA"], ["about", "Sobre"]];
@@ -186,7 +190,11 @@ export async function openSettings(from, start = "appearance") {
     <div data-p="about" class="stack"><div class="t-head">Corte Viral</div>
       <div class="muted">Do link da live até a pasta com clipes 9:16 legendados e textos para TikTok, Shorts, Reels e Kwai.</div>
       <div class="t-small">Seus projetos, clipes e ajustes ficam nesta pasta do computador; nada é apagado pela interface.</div></div>`;
-  const s = openSheet({ title: "Ajustes", body, width: 860, from });
+  const s = openSheet({ title: "Ajustes", body, width: 860, from, onClose: () => {
+    settingsOpen = false;
+    clearInterval(usageTimer);
+    document.removeEventListener("themechange", paintCards);
+  } });
   let usageTimer = null;
   const show = (k) => {
     body.querySelectorAll("[data-t]").forEach((b) => b.setAttribute("aria-selected", b.dataset.t === k));
@@ -205,7 +213,11 @@ export async function openSettings(from, start = "appearance") {
     $("#" + id, body).addEventListener("change", () => drawCaption(body));
   });
   $("#cSave", body).onclick = async () => {
-    try { await saveCapStyle(readCaption(body)); toast("Estilo salvo. Vale para os próximos clipes gerados.", "good"); }
+    try {
+      await saveCapStyle(readCaption(body));
+      toast("Estilo salvo. Vale para os próximos clipes gerados.", "good");
+      document.dispatchEvent(new Event("capstylechange"));  // a barra rápida da etapa Clipes se atualiza
+    }
     catch (e) { toast("Não salvou: " + e.message, "bad"); }
   };
   show(start);

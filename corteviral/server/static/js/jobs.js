@@ -10,7 +10,6 @@ const listeners = new Set();
 let watching = null;
 
 export const onJobDone = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
-export const isBusy = () => watching !== null;
 
 function showPill(job) {
   const pill = $("#pill");
@@ -39,9 +38,16 @@ export async function startJob(body) {
 export async function watch(id) {
   watching = id;
   $("#pillClose").onclick = hidePill;
-  let job;
+  let job, fails = 0;
   for (;;) {
-    try { job = await api("/api/jobs/" + id); } catch (e) { await sleep(1500); continue; }
+    try { job = await api("/api/jobs/" + id); fails = 0; } catch (e) {
+      if (++fails >= 20) {  // ~30 s sem resposta do app: para de esperar em vez de travar as próximas tarefas
+        watching = null;
+        showPill({ status: "error", stage: "", error: "Perdi contato com o Corte Viral. Feche e abra o app de novo." });
+        return null;
+      }
+      await sleep(1500); continue;
+    }
     showPill(job);
     if (job.status !== "running") break;
     await sleep(700);

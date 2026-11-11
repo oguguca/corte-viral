@@ -28,8 +28,8 @@ try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.
   <main class="main" id="main" tabindex="-1"></main>
 </div>
 
-<div class="pill" id="pill" role="status" aria-live="polite">
-  <div class="top"><span class="spinner" id="pillSpin"></span><span class="stage" id="pillStage"></span>
+<div class="pill" id="pill">
+  <div class="top"><span class="spinner" id="pillSpin"></span><span class="stage" id="pillStage" role="status" aria-live="polite"></span>
     <span class="spacer"></span><span class="num t-small" id="pillPct"></span>
     <button class="btn plain small" id="pillClose" hidden>Fechar</button></div>
   <div class="msg" id="pillMsg"></div>

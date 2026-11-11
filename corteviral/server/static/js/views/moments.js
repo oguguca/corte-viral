@@ -103,6 +103,8 @@ export async function renderMoments(root, name) {
           <button class="btn plain small" data-fb="bad" aria-pressed="${fb[m.id] === "bad"}" aria-label="Momento ruim" title="Ruim — a IA aprende com isso">${fb[m.id] === "bad" ? "👎 ruim" : "👎"}</button></div>
         ${m.description ? `<div class="m-desc">${esc(m.description)}</div>` : ""}
         <div class="muted" style="margin-top:2px">${esc(m.reason || "")}</div>
+        ${m.hook || m.triage_score != null ? `<div class="m-meta">${m.hook ? `<span class="t-small">Gancho: “${esc(m.hook)}”</span>` : ""}
+          ${m.triage_score != null && m.triage_score !== m.score ? `<span class="t-small num">triagem ${m.triage_score}</span>` : ""}</div>` : ""}
         ${m.risk && !/^nenhum/i.test(m.risk) ? `<div class="m-meta"><span class="badge warn wrap">⚠ ${esc(m.risk)}</span></div>` : ""}
         ${critBars(m)}
       </div></div></li>`).join("");
@@ -115,7 +117,10 @@ export async function renderMoments(root, name) {
   };
   root.querySelectorAll(".moment").forEach((el) => {
     el.onclick = () => play(el);
-    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(el); } };
+    el.onkeydown = (e) => {
+      if (e.target !== el) return;  // Enter/Espaço nos botões 👍/👎 não disparam o vídeo
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(el); }
+    };
   });
   root.querySelectorAll("[data-fb]").forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();

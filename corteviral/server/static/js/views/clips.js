@@ -11,7 +11,7 @@ const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], [
 const POS = [["0.47", "Em cima"], ["0.58", "Meio"], ["0.70", "Embaixo"]];
 const title = (m) => (m.meta && m.meta.hook) || m.hook || m.description || m.reason || "Momento";
 
-export async function renderClips(root, name) {
+export async function renderClips(root, name, project, ctx = {}) {
   const P = projectApi(name);
   let d;
   try { d = await api(P("/moments")); } catch (e) {
@@ -20,7 +20,7 @@ export async function renderClips(root, name) {
     $("#toMoments", root).onclick = () => go(name, "moments");
     return;
   }
-  let filter = "all", tab = "corte", plat = "tiktok";
+  const ui = state.clipsUi;  // aba, filtro e rede sobrevivem aos redesenhos após tarefas
   const byScore = [...d.moments].sort((a, b) => b.score - a.score);
   if (!d.moments.some((m) => m.id === state.selected)) state.selected = byScore[0]?.id;
 
@@ -42,8 +42,8 @@ export async function renderClips(root, name) {
     <div class="grid-clips">
       <section class="stack">
         <div class="seg" role="group" aria-label="Filtrar">
-          <button data-f="all" aria-pressed="true">Todos</button><button data-f="pending" aria-pressed="false">A revisar</button>
-          <button data-f="approved" aria-pressed="false">Aprovados</button><button data-f="discarded" aria-pressed="false">Descartados</button></div>
+          ${[["all", "Todos"], ["pending", "A revisar"], ["approved", "Aprovados"], ["discarded", "Descartados"]].map(([k, l]) =>
+            `<button data-filter="${k}" aria-pressed="${ui.filter === k}">${l}</button>`).join("")}</div>
         <ul class="list" id="clipList" aria-label="Clipes"></ul>
       </section>
       <section class="card pad" id="detail"></section>
@@ -60,16 +60,16 @@ export async function renderClips(root, name) {
   root.querySelectorAll("[data-pos]").forEach((b) => b.onclick = async () => {
     try { await saveCapStyle({ position: +b.dataset.pos }); syncQuick(); toast("Posição da legenda: " + b.textContent + ".", "good"); } catch (err) { toast(err.message, "bad"); }
   });
-  $("#layoutBtn", root).onclick = (e) => openLayout(e.currentTarget, name);
+  $("#layoutBtn", root).onclick = (e) => openLayout(e.currentTarget, name, ctx.rerender);
   $("#genBest", root).onclick = () => {
     const n = Math.max(1, +$("#nBest", root).value || 1);
     const ids = byScore.filter((m) => m.status !== "discarded").slice(0, n).map((m) => m.id);
     startJob({ kind: "render", project: name, ids });
   };
   $("#next", root).onclick = () => go(name, "export");
-  root.querySelectorAll("[data-f]").forEach((b) => b.onclick = () => {
-    filter = b.dataset.f;
-    root.querySelectorAll("[data-f]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  root.querySelectorAll("[data-filter]").forEach((b) => b.onclick = () => {
+    ui.filter = b.dataset.filter;
+    root.querySelectorAll("[data-filter]").forEach((x) => x.setAttribute("aria-pressed", x === b));
     renderList();
   });
 
@@ -82,7 +82,7 @@ export async function renderClips(root, name) {
   };
 
   function renderList() {
-    const visible = d.moments.filter((m) => filter === "all" || (m.status || "pending") === filter);
+    const visible = d.moments.filter((m) => ui.filter === "all" || (m.status || "pending") === ui.filter);
     $("#clipList", root).innerHTML = visible.length ? visible.map((m) => `
       <li><div class="moment ${m.status === "discarded" ? "discarded" : ""}" role="button" tabindex="0" data-id="${esc(m.id)}"
           ${m.id === state.selected ? 'aria-current="true"' : ""} style="grid-template-columns:44px minmax(0,1fr);padding:10px 12px">
@@ -96,6 +96,15 @@ export async function renderClips(root, name) {
       const pick = () => { state.selected = el.dataset.id; renderList(); renderDetail(); };
       el.onclick = pick;
       el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+    });
+  }
+
+  function markStatus(box, m) {  // atualiza só os botões, sem recarregar os vídeos nem perder o que foi digitado
+    box.querySelectorAll("[data-status]").forEach((b) => {
+      const on = m.status === b.dataset.status;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on);
+      b.textContent = b.dataset.status === "approved" ? (on ? "✓ Aprovado" : "Aprovar") : (on ? "Descartado" : "Descartar");
     });
   }
 
@@ -128,10 +137,10 @@ export async function renderClips(root, name) {
         <div style="flex:1;min-width:260px">
           <div class="tabs" role="tablist">
             ${[["corte", "Corte"], ["textos", "Textos"], ["legenda", "Legenda"]].map(([k, l]) =>
-              `<button class="tab" role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}</button>`).join("")}
+              `<button class="tab" role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${l}</button>`).join("")}
           </div>
-          <div data-pane="corte" ${tab === "corte" ? "" : "hidden"} class="stack">
-            <video id="src" controls preload="metadata" src="${P("/video")}#t=${m.start}"></video>
+          <div data-pane="corte" ${ui.tab === "corte" ? "" : "hidden"} class="stack">
+            <video id="cutSrc" controls preload="metadata" src="${P("/video")}#t=${m.start}"></video>
             <div class="row">
               <div class="field" style="width:110px"><label for="cs">Início (s)</label><input class="input num" id="cs" type="number" step="0.1" value="${m.start}"></div>
               <button class="btn small" data-n="cs:-1">−1 s</button><button class="btn small" data-n="cs:1">+1 s</button>
@@ -143,11 +152,11 @@ export async function renderClips(root, name) {
             <div class="row"><button class="btn primary" id="saveCut">Salvar corte</button>
               <span class="t-small">Depois, “Gerar de novo” para aplicar.</span></div>
           </div>
-          <div data-pane="textos" ${tab === "textos" ? "" : "hidden"} class="stack">
+          <div data-pane="textos" ${ui.tab === "textos" ? "" : "hidden"} class="stack">
             <div class="field"><label for="hook">Gancho (texto nos 3 primeiros segundos)</label><input class="input" id="hook" value="${esc((m.meta && m.meta.hook) || m.hook || "")}"></div>
             <label class="switch"><input type="checkbox" id="hookOn" ${hookOn ? "checked" : ""}><span class="track"></span><span>Mostrar o gancho no vídeo</span></label>
-            <div class="seg" role="group" aria-label="Rede social">${PLATS.map(([k, l]) => `<button data-plat="${k}" aria-pressed="${k === plat}">${l}</button>`).join("")}</div>
-            ${PLATS.map(([k]) => { const p = posts[k] || {}; return `<div class="stack" data-platpane="${k}" ${k === plat ? "" : "hidden"}>
+            <div class="seg" role="group" aria-label="Rede social">${PLATS.map(([k, l]) => `<button data-plat="${k}" aria-pressed="${k === ui.plat}">${l}</button>`).join("")}</div>
+            ${PLATS.map(([k]) => { const p = posts[k] || {}; return `<div class="stack" data-platpane="${k}" ${k === ui.plat ? "" : "hidden"}>
               <div class="field"><label>Título</label><input class="input" data-f="title" value="${esc(p.title || "")}"></div>
               <div class="field"><label>Descrição</label><textarea class="textarea" data-f="description">${esc(p.description || "")}</textarea></div>
               <div class="field"><label>Hashtags</label><input class="input" data-f="hashtags" value="${esc((p.hashtags || []).join(" "))}"></div>
@@ -156,7 +165,7 @@ export async function renderClips(root, name) {
               <button class="btn" id="aiTexts">✨ Escrever com IA</button>
               ${m.meta ? `<span class="badge ${m.meta.ai ? "info" : ""}">${m.meta.ai ? "textos da IA" : "textos simples"}</span>` : '<span class="t-small">sem textos ainda</span>'}</div>
           </div>
-          <div data-pane="legenda" ${tab === "legenda" ? "" : "hidden"} class="stack">
+          <div data-pane="legenda" ${ui.tab === "legenda" ? "" : "hidden"} class="stack">
             <label class="switch"><input type="checkbox" id="clipCap" ${capOn ? "checked" : ""}><span class="track"></span><span>Legenda neste clipe</span></label>
             <div class="field"><label for="capText">Texto da legenda (corrija palavras; os tempos são reaproveitados)</label>
               <textarea class="textarea" id="capText" style="min-height:140px">${esc(capText)}</textarea></div>
@@ -168,14 +177,18 @@ export async function renderClips(root, name) {
       ${m.description || m.criteria ? `<div class="divider" style="margin:16px 0"></div>
         <div class="m-desc">${esc(m.description || "")}</div>${critBars(m)}` : ""}`;
 
-    box.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { tab = b.dataset.tab; renderDetail(); });
+    box.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => {  // troca de aba sem redesenhar (mantém o que foi digitado)
+      ui.tab = b.dataset.tab;
+      box.querySelectorAll("[data-tab]").forEach((x) => x.setAttribute("aria-selected", x === b));
+      box.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== ui.tab; });
+    });
     box.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
       const status = m.status === b.dataset.status ? "pending" : b.dataset.status;
-      try { await patch(m.id, { status }); renderList(); renderDetail(); } catch (err) { toast(err.message, "bad"); }
+      try { await patch(m.id, { status }); renderList(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }
     });
     $("#gen", box).onclick = () => startJob({ kind: "render", project: name, ids: [m.id] });
     // corte
-    const src = $("#src", box);
+    const src = $("#cutSrc", box);
     box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => {
       const [id, dlt] = b.dataset.n.split(":");
       $("#" + id, box).value = Math.max(0, +$("#" + id, box).value + +dlt).toFixed(1);
@@ -187,9 +200,9 @@ export async function renderClips(root, name) {
     };
     // textos
     box.querySelectorAll("[data-plat]").forEach((b) => b.onclick = () => {
-      plat = b.dataset.plat;
+      ui.plat = b.dataset.plat;
       box.querySelectorAll("[data-plat]").forEach((x) => x.setAttribute("aria-pressed", x === b));
-      box.querySelectorAll("[data-platpane]").forEach((p) => { p.hidden = p.dataset.platpane !== plat; });
+      box.querySelectorAll("[data-platpane]").forEach((p) => { p.hidden = p.dataset.platpane !== ui.plat; });
     });
     box.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
       const pane = box.querySelector(`[data-platpane="${b.dataset.copy}"]`);

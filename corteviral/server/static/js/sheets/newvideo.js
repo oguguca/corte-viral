@@ -8,13 +8,13 @@ export function openNewVideo(from) {
   const body = document.createElement("div");
   body.className = "stack";
   body.innerHTML = `
-    <div class="field"><label for="src">Link da live/VOD (YouTube, Twitch, Kick) ou arquivo do PC</label>
-      <div class="row" style="flex-wrap:nowrap"><input class="input lg" id="src" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
+    <div class="field"><label for="nvSrc">Link da live/VOD (YouTube, Twitch, Kick) ou arquivo do PC</label>
+      <div class="row" style="flex-wrap:nowrap"><input class="input lg" id="nvSrc" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
         <button class="btn large" id="pick" title="Escolher arquivo do computador">📁 Arquivo</button></div></div>
     <div class="row" style="gap:16px">
       <div class="field"><span class="label" id="mLbl">Qualidade da transcrição</span>
         <div class="seg" role="group" aria-labelledby="mLbl">
-          <button data-model="medium" aria-pressed="true">Melhor</button><button data-model="small" aria-pressed="false">Mais rápida</button>
+          <button data-model="medium" aria-pressed="true">Melhor</button><button data-model="small" aria-pressed="false">Mais rápida</button><button data-model="base" aria-pressed="false">Rascunho</button>
           <button data-model="tiny" aria-pressed="false">Teste</button></div></div>
       <div class="field"><span class="label" id="lLbl">Idioma</span>
         <div class="seg" role="group" aria-labelledby="lLbl">
@@ -34,15 +34,15 @@ export function openNewVideo(from) {
   body.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => { lang = b.dataset.lang; body.querySelectorAll("[data-lang]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
   $("#pick", body).onclick = async () => {
     const r = await api("/api/pick-file", { method: "POST" }).catch(() => null);
-    if (r && r.path) $("#src", body).value = r.path;
+    if (r && r.path) $("#nvSrc", body).value = r.path;
   };
   $("[data-cancel]", foot).onclick = s.close;
   const submit = () => {
-    const source = $("#src", body).value.trim();
-    if (!source) { $("#src", body).focus(); toast("Cole um link ou escolha um arquivo.", "bad"); return; }
+    const source = $("#nvSrc", body).value.trim();
+    if (!source) { $("#nvSrc", body).focus(); toast("Cole um link ou escolha um arquivo.", "bad"); return; }
     s.close();
     startJob({ kind: "ingest", source, model, language: lang, ...loginChoice(body) });
   };
   $("#go", foot).onclick = submit;
-  $("#src", body).onkeydown = (e) => { if (e.key === "Enter") submit(); };
+  $("#nvSrc", body).onkeydown = (e) => { if (e.key === "Enter") submit(); };
 }

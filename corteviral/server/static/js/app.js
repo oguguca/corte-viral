@@ -33,7 +33,7 @@ function homeView() {
   </div></div>`;
 }
 
-async function render() {
+async function render({ keepFocus = false } = {}) {
   const token = ++renderToken;
   const route = parse();
   const main = $("#main");
@@ -45,6 +45,7 @@ async function render() {
     $("#homeNew").onclick = (e) => openNewVideo(e.currentTarget);
     return;
   }
+  if (route.view === "bad") { main.innerHTML = '<div class="page"><div class="empty"><div class="big">🔍</div>Endereço inválido.</div></div>'; return; }
   const project = state.projects.find((p) => p.name === route.name);
   if (!project) { main.innerHTML = '<div class="page"><div class="empty"><div class="big">🔍</div>Projeto não encontrado.</div></div>'; return; }
   main.innerHTML = stepsBar(route.name, route.step, project) + '<div class="page" id="page"></div>';
@@ -54,8 +55,13 @@ async function render() {
       <h1 class="t-display">${esc(project.title || project.name)}</h1>
       <div class="sub">${fmt(project.duration)} de vídeo${project.has_moments ? " · momentos prontos" : ""}</div></div></header>
     <div id="stepBody"></div>`;
-  main.scrollTop = 0;
-  await VIEWS[route.step]($("#stepBody"), route.name, project);
+  if (!keepFocus) main.scrollTop = 0;
+  await VIEWS[route.step]($("#stepBody"), route.name, project, { rerender: () => render({ keepFocus: true }) });
+  if (!keepFocus) {  // orientação: o foco vai para o título da tela nova (o botão clicado deixou de existir)
+    const h1 = $("#page h1");
+    h1?.setAttribute("tabindex", "-1");
+    h1?.focus({ preventScroll: true });
+  }
 }
 
 function init() {
@@ -64,12 +70,20 @@ function init() {
   $("#newVideo").onclick = (e) => openNewVideo(e.currentTarget);
   $("#openSettings").onclick = (e) => openSettings(e.currentTarget);
   $("#usageMini").onclick = (e) => openSettings(e.currentTarget, "usage");
-  addEventListener("hashchange", render);
+  addEventListener("hashchange", () => render());
+  document.addEventListener("capstylechange", () => { if (parse().step === "clips") render({ keepFocus: true }); });
   onJobDone(async (job) => {
     renderUsageMini();
     if (job.status !== "done") return;
-    if (job.stage === "transcribe" || job.stage === "ingest") { await renderProjects(); if (job.project) go(job.project, "video"); return; }
-    if (job.project === state.current) render();
+    if (job.stage === "export" && job.project) state.exportResults[job.project] = job;  // a tela mostra depois de redesenhar
+    if (job.stage === "transcribe" || job.stage === "ingest") {
+      await renderProjects();
+      const r = parse();
+      if (r.view === "project" && r.name === job.project && r.step === "video") render();  // mesma rota: hashchange não dispara
+      else if (job.project) go(job.project, "video");
+      return;
+    }
+    if (job.project === state.current) render({ keepFocus: true });
   });
   loadCapStyle();
   renderUsageMini();

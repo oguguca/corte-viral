@@ -64,14 +64,16 @@ export async function renderVideo(root, name, project) {
     if (idx >= 0 && time <= words[idx].end + 0.3) { els[idx].classList.add("now"); els[idx].scrollIntoView({ block: "nearest" }); }
     last = idx;
   };
-  $("#q", root).oninput = (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    let first = null;
-    els.forEach((el, i) => {
-      const hit = q && words[i].w.toLowerCase().includes(q);
-      el.innerHTML = hit ? `<mark>${esc(words[i].w)}</mark>` : esc(words[i].w);
-      if (hit && !first) first = el;
-    });
-    first?.scrollIntoView({ block: "center" });
+  let searchTimer = 0, marked = [];
+  $("#q", root).oninput = (e) => {  // espera a digitação parar e só mexe nas palavras que mudam (VODs têm dezenas de milhares)
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = e.target.value.trim().toLowerCase();
+      marked.forEach((i) => { els[i].textContent = words[i].w; });
+      marked = [];
+      if (!q) return;
+      words.forEach((w, i) => { if (w.w.toLowerCase().includes(q)) { els[i].innerHTML = `<mark>${esc(w.w)}</mark>`; marked.push(i); } });
+      if (marked.length) els[marked[0]].scrollIntoView({ block: "center" });
+    }, 180);
   };
 }

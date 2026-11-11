@@ -1,14 +1,16 @@
 // Etapa ④ Exportar: resumo dos aprovados, avisos e exportação em lote.
-import { $, api, esc, fmt, projectApi } from "../api.js";
-import { onJobDone, startJob } from "../jobs.js";
+import { $, api, esc, projectApi } from "../api.js";
+import { startJob } from "../jobs.js";
 import { go } from "../router.js";
 import { openLayout } from "../sheets/layout.js";
+import { state } from "../state.js";
 import { confirmAction, toast } from "../ui.js";
 
-export async function renderExport(root, name) {
+export async function renderExport(root, name, project, ctx = {}) {
   const P = projectApi(name);
   let d = null, chk = null;
-  try { [d, chk] = await Promise.all([api(P("/moments")), api(P("/export-check"))]); } catch (e) { /* sem momentos */ }
+  try { d = await api(P("/moments")); } catch (e) { /* sem momentos */ }
+  try { chk = await api(P("/export-check")); } catch (e) { if (d) toast("Não consegui checar a exportação: " + e.message, "bad"); }
   if (!d) {
     root.innerHTML = `<div class="card"><div class="empty"><div class="big">📦</div>Encontre e aprove momentos antes de exportar.
       <button class="btn primary" id="toMoments">Ir para Momentos</button></div></div>`;
@@ -47,21 +49,25 @@ export async function renderExport(root, name) {
       </section>
     </div>`;
   $("#toClips", root)?.addEventListener("click", () => go(name, "clips"));
-  $("#auth", root)?.addEventListener("click", (e) => openLayout(e.currentTarget, name));
+  $("#auth", root)?.addEventListener("click", (e) => openLayout(e.currentTarget, name, ctx.rerender));
   $("#aiAll", root)?.addEventListener("click", () => startJob({ kind: "posts", project: name, ids: approved.map((m) => m.id) }));
-  $("#openDir", root).onclick = () => api(P("/open-exports"), { method: "POST" });
+  const openDir = () => api(P("/open-exports"), { method: "POST" }).catch((e) => toast(e.message, "bad"));
+  $("#openDir", root).onclick = openDir;
   $("#exp", root).onclick = async () => {
-    if (chk.unauthorized && !confirmAction("O streamer não está marcado como autorizado. Exportar mesmo assim?")) return;
-    if (chk.duplicates.length && !confirmAction(`${chk.duplicates.length} trecho(s) já foram exportados antes. Exportar de novo?`)) return;
-    const job = await startJob({ kind: "export", project: name });
-    if (job && job.status === "done") showResult(job);
+    let now;
+    try { now = await api(P("/export-check")); } catch (e) { toast(e.message, "bad"); return; }  // sempre a checagem atual
+    if (now.unauthorized && !confirmAction("O streamer não está marcado como autorizado. Exportar mesmo assim?")) return;
+    if (now.duplicates.length && !confirmAction(`${now.duplicates.length} trecho(s) já foram exportados antes. Exportar de novo?`)) return;
+    delete state.exportResults[name];
+    await startJob({ kind: "export", project: name });  // ao terminar, a tela é redesenhada e mostra o resultado
   };
+  if (state.exportResults[name]) showResult(state.exportResults[name]);
   function showResult(job) {
     const r = job.result || {};
     $("#result", root).innerHTML = `<div class="note ${(r.errors || []).length ? "warn" : "good"}"><span>${(r.errors || []).length ? "⚠" : "✓"}</span>
-      <span>${(r.files || []).length} clipe(s) exportado(s)${(r.errors || []).length ? ` · ${r.errors.length} falharam` : ""}.
-      <button class="btn small" id="openRes" style="margin-top:8px">Abrir pasta</button></span></div>`;
-    $("#openRes", root).onclick = () => api(P("/open-exports"), { method: "POST" });
-    toast("Exportação concluída.", "good");
+      <span>${(r.files || []).length} clipe(s) exportado(s)${(r.errors || []).length ? ` · ${r.errors.length} falharam:` : "."}
+      ${(r.errors || []).map((e) => `<br>• ${esc(e.id)}: ${esc(e.error)}`).join("")}
+      <br><button class="btn small" id="openRes" style="margin-top:8px">Abrir pasta</button></span></div>`;
+    $("#openRes", root).onclick = openDir;
   }
 }

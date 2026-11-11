@@ -12,7 +12,7 @@ function coverCrop([x, y, w, h], aspect, anchorY) {
   return [x + (w - cw) / 2, cy, cw, ch];
 }
 
-export async function openLayout(from, name) {
+export async function openLayout(from, name, onSaved = null) {
   const P = projectApi(name);
   const body = document.createElement("div");
   body.className = "stack";
@@ -47,7 +47,7 @@ export async function openLayout(from, name) {
       <div class="field" style="width:200px"><label for="streamer">Streamer</label><input class="input" id="streamer" value="${esc(r.streamer || "")}" placeholder="nome do canal"></div>
       <div class="field" style="width:170px"><label for="credit">Crédito no vídeo</label><input class="input" id="credit" value="${esc(r.preset.credit_handle || "")}" placeholder="@canal"></div>
     </div>
-    <label class="switch"><input type="checkbox" id="auth" ${r.preset.authorized ? "checked" : ""}><span class="track"></span>
+    <label class="switch"><input type="checkbox" id="lyAuth" ${r.preset.authorized ? "checked" : ""}><span class="track"></span>
       <span>Tenho autorização deste streamer para postar cortes</span></label>`;
 
   const img = $("#img", body), bCam = $("#bCam", body), bGame = $("#bGame", body);
@@ -114,9 +114,10 @@ export async function openLayout(from, name) {
       if (streamer) await api(P("/streamer"), { method: "PUT", body: { streamer } });
       const res = await api(P("/layout"), { method: "PUT", body: {
         layout: st.layout, facecam: st.layout === "split" ? R(st.cam) : null, gameplay: R(st.game),
-        credit_handle: $("#credit", body).value.trim(), authorized: $("#auth", body).checked } });
+        credit_handle: $("#credit", body).value.trim(), authorized: $("#lyAuth", body).checked } });
       toast(`Layout salvo para “${res.streamer}”. Próximos VODs desse canal já saem assim.`, "good");
       s.close();
+      onSaved?.();
     } catch (e) { toast("Não salvou: " + e.message, "bad"); }
   };
 }

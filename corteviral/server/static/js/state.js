@@ -7,6 +7,8 @@ export const state = {
   capStyle: { enabled: true, hook: true, position: 0.70 },
   capFonts: [],
   selected: null,       // momento selecionado na etapa Clipes
+  clipsUi: { tab: "corte", filter: "all", plat: "tiktok" },  // sobrevive aos redesenhos após tarefas
+  exportResults: {},    // último resultado de exportação por projeto
 };
 
 export async function loadCapStyle() {
