@@ -52,3 +52,21 @@ def test_cli_analyze(tmp_path, monkeypatch, capsys):
     assert main(["analyze", str(p.dir), "--config", str(cfg), "--n", "3", "--provider", "none"]) == 0
     out = capsys.readouterr().out
     assert "91" in out and "1:05" in out and "explodiu o carro" in out
+
+
+def test_cli_render(tmp_path, monkeypatch, capsys):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.project import Project
+    from corteviral.utils import write_json_atomic
+    cfg = write_cfg(tmp_path)
+    p = Project.create(tmp_path / "projects", "x.mp4", "x")
+    write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "m1", "start": 0, "end": 3}, {"id": "m2", "start": 5, "end": 9}]})
+    seen = {}
+
+    def fake_render_all(project, settings, moments, preview=False, on_progress=None):
+        seen.update(ids=[m["id"] for m in moments], preview=preview)
+        return [project.path("clips") / f"{m['id']}.mp4" for m in moments]
+    monkeypatch.setattr("corteviral.cli.render_all", fake_render_all)
+    assert main(["render", str(p.dir), "--config", str(cfg), "--ids", "m2", "--preview"]) == 0
+    assert seen == {"ids": ["m2"], "preview": True}
+    assert "m2.mp4" in capsys.readouterr().out

@@ -63,6 +63,38 @@
   .tag.ai { border-color: #c98500; color: var(--text); }
   .m-reason { margin-top: 3px; }
   .m-hook { margin-top: 3px; font-size: 12px; color: var(--muted); }
+  /* layout do vertical */
+  details.ly { margin-top: 16px; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+  details.ly > summary { cursor: pointer; font-weight: 600; }
+  details.ly > summary small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .ly-body { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; margin-top: 10px; }
+  @media (max-width: 1100px) { .ly-body { grid-template-columns: 1fr; } }
+  .ly-stage { position: relative; user-select: none; touch-action: none; line-height: 0; }
+  .ly-stage img { width: 100%; border-radius: 6px; display: block; }
+  .box { position: absolute; border: 2px solid; border-radius: 3px; cursor: move; box-sizing: border-box; }
+  .box.cam { border-color: #c98500; background: rgba(201,133,0,.12); }
+  .box.game { border-color: #3987e5; background: rgba(57,135,229,.10); }
+  .box b { position: absolute; left: 0; top: -20px; font: 600 11px/18px "Segoe UI", sans-serif; padding: 0 6px;
+           border-radius: 4px; color: #0b0b0b; white-space: nowrap; }
+  .box.cam b { background: #c98500; }
+  .box.game b { background: #3987e5; color: #fff; }
+  .box i { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 3px;
+           background: #fff; border: 2px solid #0b0b0b; cursor: nwse-resize; }
+  .box.hidden { display: none; }
+  .ly-side canvas { width: 180px; height: 320px; border-radius: 8px; background: #000; display: block; }
+  .ly-side .hint { margin-top: 6px; }
+  .ly-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 10px; line-height: 1.45; }
+  .ly-controls .f { display: flex; flex-direction: column; min-width: 140px; }
+  .ly-controls label { margin: 0 0 4px; }
+  .camlist { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; line-height: 1.45; }
+  .camlist button.on { border-color: #c98500; }
+  .m-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .m-actions button { padding: 4px 10px; font-size: 12px; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .modal.open { display: flex; }
+  .modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
+  .modal video { height: min(80vh, 760px); aspect-ratio: 9 / 16; background: #000; border-radius: 8px; }
+  .modal .row { justify-content: space-between; align-items: center; }
   /* uso da IA */
   .usage-hero { display: flex; align-items: baseline; gap: 8px; }
   .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -196,11 +228,18 @@
   </section>
 </main>
 <div class="tip" id="tip"></div>
+<div class="modal" id="clipModal" role="dialog" aria-modal="true" aria-label="Clipe vertical">
+  <div class="modal-card">
+    <div class="row"><b id="clipTitle"></b><span class="row" style="flex:0;gap:6px">
+      <button id="clipFolder">Abrir pasta</button><button id="clipClose">Fechar</button></span></div>
+    <video id="clipVideo" controls playsinline></video>
+  </div>
+</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let playUntil = null;
-const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos" };
+const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos", render: "Gerando clipes" };
 let current = null;      // projeto aberto
 let words = [];          // palavras do projeto aberto
 let wordEls = [];
@@ -284,7 +323,10 @@ async function watch(id) {
     if (job.status !== "running") {
       $("start").disabled = false;
       await loadProjects();
-      if (job.project && job.stage === "analyze" && current === job.project) loadMoments(job.project);
+      if (job.project && (job.stage === "analyze" || job.stage === "render") && current === job.project) {
+        await loadMoments(job.project);
+        if (job.stage === "render" && job.status === "done" && lastRenderIds && lastRenderIds.length === 1) openClip(job.project, lastRenderIds[0]);
+      }
       else if (job.project) openProject(job.project);
       return;
     }
@@ -309,6 +351,7 @@ async function loadProjects() {
 async function openProject(name) {
   current = name;
   playUntil = null;
+  lyState = null;
   document.querySelectorAll("#projects li").forEach((li) => li.classList.toggle("active", li.dataset.name === name));
   const v = $("viewer");
   let t = null;
@@ -337,9 +380,36 @@ async function openProject(name) {
       <div class="f"><label for="aProvider">IA</label>
         <select id="aProvider"><option value="gemini">Gemini (grátis)</option><option value="none">Sem IA (só sinais)</option><option value="anthropic">Claude (pago)</option></select></div>
       <button class="primary" id="aStart">Encontrar momentos</button>
+      <button id="rAll" title="Gera o MP4 vertical de todos os momentos da lista">Gerar todos os clipes</button>
     </div>
     <div id="mNote" class="note"></div>
-    <ul id="moments"></ul>` : ""}`;
+    <ul id="moments"></ul>
+    <details class="ly" id="lyBox">
+      <summary>Layout do vertical <small id="lyOrigin">carregando…</small></summary>
+      <div class="ly-body">
+        <div>
+          <div class="ly-stage" id="lyStage">
+            <img id="lyImg" alt="Quadro do vídeo para ajustar o recorte">
+            <div class="box game" id="boxGame"><b>Gameplay</b><i></i></div>
+            <div class="box cam" id="boxCam"><b>Câmera</b><i></i></div>
+          </div>
+          <div class="camlist" id="camList"></div>
+        </div>
+        <div class="ly-side">
+          <canvas id="lyPreview" width="360" height="640" aria-label="Prévia do vertical 9:16"></canvas>
+          <div class="hint">Prévia do recorte. Arraste os retângulos; o canto branco redimensiona.</div>
+        </div>
+      </div>
+      <div class="ly-controls">
+        <div class="f"><label for="lyStreamer">Streamer</label><input id="lyStreamer" placeholder="nome do canal"></div>
+        <div class="f"><label for="lyLayout">Layout</label>
+          <select id="lyLayout"><option value="split">Câmera + gameplay</option>
+            <option value="face-follow">Seguir o rosto</option><option value="fallback">Vídeo com fundo desfocado</option></select></div>
+        <div class="f"><label for="lyCredit">Crédito (opcional)</label><input id="lyCredit" placeholder="@canal"></div>
+        <button class="primary" id="lySave" style="width:auto;margin:0">Salvar layout deste streamer</button>
+      </div>
+      <div class="note" id="lyNote" style="margin-top:6px"></div>
+    </details>` : ""}`;
   $("folder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
   words = t ? t.words : [];
   if (t) renderWords(t);
@@ -351,11 +421,150 @@ async function openProject(name) {
   $("q").oninput = (e) => search(e.target.value);
   if (t) {
     $("aStart").onclick = () => startAnalyze(name);
+    $("rAll").onclick = () => startRender(name, null);
     loadMoments(name);
+    $("lyBox").addEventListener("toggle", () => { if ($("lyBox").open && !lyState) loadLayout(name); });
   }
 }
 
 // ---- momentos ------------------------------------------------------------------
+let lastRenderIds = null;
+async function startRender(name, ids) {
+  lastRenderIds = ids;
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "render", project: name, ids }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+
+function openClip(name, id) {
+  const v = $("clipVideo");
+  v.src = `/api/projects/${encodeURIComponent(name)}/clips/${encodeURIComponent(id)}?t=${Date.now()}`;
+  $("clipTitle").textContent = id;
+  $("clipFolder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
+  $("clipModal").classList.add("open");
+  v.play().catch(() => {});
+}
+function closeClip() { const v = $("clipVideo"); v.pause(); v.removeAttribute("src"); v.load(); $("clipModal").classList.remove("open"); }
+
+// ---- layout do vertical ------------------------------------------------------------
+let lyState = null;   // {cam:[x,y,w,h]|null, game:[x,y,w,h]|null, layout, det}
+const R = (a) => a ? a.map((v) => Math.round(v * 10000) / 10000) : null;
+
+async function loadLayout(name) {
+  $("lyOrigin").textContent = "detectando câmeras e gameplay…";
+  let r;
+  try { r = await api(`/api/projects/${encodeURIComponent(name)}/layout`); }
+  catch (e) { $("lyOrigin").textContent = "erro: " + e.message; return; }
+  lyState = { cam: r.preset.facecam || (r.detected.cams[0] && r.detected.cams[0].rect) || null,
+              game: r.preset.gameplay || r.detected.gameplay || [0, 0, 1, 1], layout: r.preset.layout, det: r.detected };
+  $("lyOrigin").textContent = { preset: "· salvo para este streamer", detected: "· detectado automaticamente",
+                                fallback: "· nenhuma câmera encontrada" }[r.origin] || "";
+  $("lyStreamer").value = r.streamer || "";
+  $("lyLayout").value = r.preset.layout;
+  $("lyCredit").value = r.preset.credit_handle || "";
+  $("camList").innerHTML = r.detected.cams.map((c, i) =>
+    `<button data-cam="${i}">Câmera ${i + 1}</button>`).join("") +
+    (r.detected.cams.length ? "" : '<span class="hint" style="margin:0">Nenhuma câmera detectada — desenhe a área ou use outro layout.</span>');
+  $("camList").querySelectorAll("[data-cam]").forEach((b) => b.onclick = () => {
+    lyState.cam = r.detected.cams[+b.dataset.cam].rect.slice(); placeBoxes(); markCam();
+  });
+  const img = $("lyImg");
+  img.onload = () => { placeBoxes(); markCam(); };
+  img.src = `/api/projects/${encodeURIComponent(name)}/frame?t=${Math.round(($("video").duration || 600) * 0.4)}`;
+  $("lyLayout").onchange = () => { lyState.layout = $("lyLayout").value; placeBoxes(); };
+  $("lySave").onclick = () => saveLayout(name);
+  enableDrag($("boxCam"), "cam");
+  enableDrag($("boxGame"), "game");
+}
+
+function markCam() {
+  $("camList").querySelectorAll("[data-cam]").forEach((b) => {
+    const c = lyState.det.cams[+b.dataset.cam].rect;
+    b.classList.toggle("on", !!lyState.cam && c.every((v, i) => Math.abs(v - lyState.cam[i]) < 0.002));
+  });
+}
+
+function placeBoxes() {
+  const set = (el, r) => { el.style.left = r[0] * 100 + "%"; el.style.top = r[1] * 100 + "%";
+                           el.style.width = r[2] * 100 + "%"; el.style.height = r[3] * 100 + "%"; };
+  if (!lyState.cam) lyState.cam = [0.7, 0.05, 0.25, 0.3];
+  set($("boxCam"), lyState.cam);
+  set($("boxGame"), lyState.game);
+  $("boxCam").classList.toggle("hidden", lyState.layout !== "split");
+  $("boxGame").classList.toggle("hidden", lyState.layout === "face-follow");
+  drawPreview();
+}
+
+function enableDrag(el, key) {
+  el.onpointerdown = (e) => {
+    e.preventDefault();
+    const stage = $("lyStage").getBoundingClientRect();
+    const resize = e.target.tagName === "I";
+    const start = { x: e.clientX, y: e.clientY, r: lyState[key].slice() };
+    el.setPointerCapture(e.pointerId);
+    el.onpointermove = (m) => {
+      const dx = (m.clientX - start.x) / stage.width, dy = (m.clientY - start.y) / stage.height;
+      let [x, y, w, h] = start.r;
+      if (resize) { w = Math.min(1 - x, Math.max(0.03, w + dx)); h = Math.min(1 - y, Math.max(0.03, h + dy)); }
+      else { x = Math.min(1 - w, Math.max(0, x + dx)); y = Math.min(1 - h, Math.max(0, y + dy)); }
+      lyState[key] = [x, y, w, h];
+      placeBoxes();
+      if (key === "cam") markCam();
+    };
+    el.onpointerup = () => { el.onpointermove = null; el.onpointerup = null; };
+  };
+}
+
+function coverCrop(r, aspect, anchorY) {
+  let [x, y, w, h] = r;
+  let cw, ch;
+  if (w / h > aspect) { ch = h; cw = h * aspect; } else { cw = w; ch = w / aspect; }
+  const cx = x + (w - cw) / 2;
+  let cy = y + anchorY * h - ch / 2;
+  cy = Math.min(Math.max(cy, y), y + h - ch);
+  return [cx, cy, cw, ch];
+}
+
+function drawPreview() {
+  const img = $("lyImg"), cv = $("lyPreview"), g = cv.getContext("2d");
+  if (!img.naturalWidth || !lyState) return;
+  const W = cv.width, H = cv.height, iw = img.naturalWidth, ih = img.naturalHeight;
+  const px = (r) => [r[0] * iw, r[1] * ih, r[2] * iw, r[3] * ih];
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+  if (lyState.layout === "split" && lyState.cam) {
+    const camH = Math.round(H * 0.30), div = 3, gameH = H - camH - div;
+    let [x, y, w, h] = coverCrop(px(lyState.cam), W / camH, 0.42);
+    g.drawImage(img, x, y, w, h, 0, 0, W, camH);
+    [x, y, w, h] = coverCrop(px(lyState.game), W / gameH, 0.5);
+    g.drawImage(img, x, y, w, h, 0, camH + div, W, gameH);
+  } else if (lyState.layout === "face-follow") {
+    const cw = ih * 9 / 16;
+    g.drawImage(img, (iw - cw) / 2, 0, cw, ih, 0, 0, W, H);
+  } else {
+    const [x, y, w, h] = px(lyState.game);
+    g.filter = "blur(8px)";
+    const s = Math.max(W / w, H / h);
+    g.drawImage(img, x, y, w, h, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+    g.filter = "none";
+    const fh = W * h / w;
+    g.drawImage(img, x, y, w, h, 0, (H - fh) / 2, W, fh);
+  }
+}
+
+async function saveLayout(name) {
+  const streamer = $("lyStreamer").value.trim();
+  try {
+    if (streamer) await api(`/api/projects/${encodeURIComponent(name)}/streamer`, { method: "PUT", body: JSON.stringify({ streamer }) });
+    const body = { layout: lyState.layout, facecam: lyState.layout === "split" ? R(lyState.cam) : null,
+                   gameplay: R(lyState.game), credit_handle: $("lyCredit").value.trim() };
+    const r = await api(`/api/projects/${encodeURIComponent(name)}/layout`, { method: "PUT", body: JSON.stringify(body) });
+    $("lyNote").className = "note";
+    $("lyNote").textContent = `✓ Salvo para “${r.streamer}”. Os próximos VODs desse streamer já usam este layout.`;
+    $("lyOrigin").textContent = "· salvo para este streamer";
+  } catch (e) { $("lyNote").className = "note warn"; $("lyNote").textContent = "Não salvou: " + e.message; }
+}
+
 async function startAnalyze(name) {
   try {
     const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
@@ -390,8 +599,14 @@ async function loadMoments(name) {
           <span class="tag ${m.ai ? "ai" : ""}">${m.ai ? "IA" : "sinais"}</span></div>
         <div class="m-reason">${esc(m.reason || "")}</div>
         ${m.hook ? `<div class="m-hook">Gancho: “${esc(m.hook)}”</div>` : ""}
+        <div class="m-actions">
+          <button data-render="${esc(m.id)}">${(d.clips || {})[m.id]?.final ? "Gerar de novo" : "Gerar clipe"}</button>
+          ${(d.clips || {})[m.id]?.final ? `<button data-watch="${esc(m.id)}">Ver clipe</button>` : ""}
+        </div>
       </div>
     </li>`).join("");
+  ul.querySelectorAll("[data-render]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); startRender(name, [b.dataset.render]); });
+  ul.querySelectorAll("[data-watch]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); openClip(name, b.dataset.watch); });
   ul.querySelectorAll("li").forEach((li) => li.onclick = () => {
     ul.querySelectorAll("li").forEach((el) => el.classList.toggle("playing", el === li));
     seek(parseFloat(li.dataset.start));
@@ -562,6 +777,9 @@ function drawUsage(series) {
   loadAccounts().catch(() => {});
   loadUsage();
   setInterval(loadUsage, 15000);
+  $("clipClose").onclick = closeClip;
+  $("clipModal").onclick = (e) => { if (e.target.id === "clipModal") closeClip(); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeClip(); });
   window.addEventListener("resize", () => loadUsage());
   await loadProjects();
   const running = await api("/api/jobs");

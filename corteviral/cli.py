@@ -10,7 +10,8 @@ from pathlib import Path
 from corteviral.config import load_settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.models import Transcript
-from corteviral.pipeline.analyze import analyze
+from corteviral.pipeline.analyze import analyze, load_moments
+from corteviral.pipeline.render import render_all
 from corteviral.pipeline.ingest import IngestError, ingest
 from corteviral.pipeline.transcribe import transcribe
 from corteviral.project import Project
@@ -73,6 +74,37 @@ def _cmd_analyze(args) -> int:
             print(f"       gancho: {m['hook']}")
     print()
     print(f"Salvo em {project.path('moments.json')}")
+    return 0
+
+
+def _cmd_detect(args) -> int:
+    from corteviral.presets import detected_layout, resolve_layout
+    settings = load_settings(Path(args.config) if args.config else None)
+    project = Project.load(Path(args.project))
+    if args.force:
+        project.data.pop("layout_detect", None)
+    det = detected_layout(project, settings)
+    print(f"Câmeras: {len(det['cams'])}")
+    for i, c in enumerate(det["cams"], 1):
+        print(f"  {i}. {c['rect']}  (presente em {c['share']:.0%} dos quadros)")
+    print(f"Gameplay: {det['gameplay']}")
+    print(f"Layout em uso: {resolve_layout(project, settings).layout}")
+    return 0
+
+
+def _cmd_render(args) -> int:
+    settings = load_settings(Path(args.config) if args.config else None)
+    project = Project.load(Path(args.project))
+    saved = load_moments(project)
+    if not saved:
+        print("Erro: rode 'analyze' antes de renderizar.", file=sys.stderr)
+        return 1
+    ids = set(args.ids.split(",")) if args.ids else None
+    chosen = [m for m in saved["moments"] if not ids or m["id"] in ids]
+    outs = render_all(project, settings, chosen, preview=args.preview, on_progress=_progress("render"))
+    print()
+    for o in outs:
+        print(f"  {o}")
     return 0
 
 
@@ -149,6 +181,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--profile", choices=["viral", "monetizacao"])
     p.add_argument("--provider", choices=["none", "gemini", "anthropic"], help="IA usada na nota")
     p.set_defaults(func=_cmd_analyze)
+
+    p = sub.add_parser("detect", help="detecta câmeras e a janela da gameplay")
+    p.add_argument("project", help="pasta do projeto")
+    p.add_argument("--config", help="caminho do config.yaml")
+    p.add_argument("--force", action="store_true", help="refaz a detecção")
+    p.set_defaults(func=_cmd_detect)
+
+    p = sub.add_parser("render", help="gera os clipes verticais 9:16 dos momentos")
+    p.add_argument("project", help="pasta do projeto")
+    p.add_argument("--config", help="caminho do config.yaml")
+    p.add_argument("--ids", help="só estes momentos (ex.: m00012,m01618)")
+    p.add_argument("--preview", action="store_true", help="prévia rápida 540x960")
+    p.set_defaults(func=_cmd_render)
 
     p = sub.add_parser("ui", help="abre a interface gráfica")
     p.add_argument("--config", help="caminho do config.yaml")

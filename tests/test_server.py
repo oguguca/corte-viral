@@ -225,3 +225,65 @@ def test_api_usage_percent(settings_tmp):
     assert u["limits"] == {"requests": 10, "tokens": 1000}
     assert u["percent"] == 15.0  # max(1/10=10%, 150/1000=15%)
     assert len(u["per_minute"]) == 60
+
+
+def _video_project(settings_tmp, sample_video, cams=True):
+    p = Project.create(settings_tmp.paths.projects_dir, str(sample_video), "Video")
+    det = {"cams": [{"rect": [0.7, 0.05, 0.25, 0.3], "face": [0.8, 0.1, 0.05, 0.08], "share": 1.0, "conf": 0.9}] if cams else [],
+           "gameplay": [0.0, 0.0, 1.0, 1.0], "source": [1280, 720]}
+    p.data.update(video_path=str(sample_video), duration=8.0, streamer="Canal Teste", layout_detect=det)
+    p.save()
+    return p
+
+
+def test_api_layout_detect_and_save(settings_tmp, sample_video):
+    settings_tmp.render.presets_dir = settings_tmp.paths.data_dir / "presets"
+    p = _video_project(settings_tmp, sample_video)
+    c = TestClient(create_app(settings_tmp))
+    r = c.get(f"/api/projects/{p.dir.name}/layout").json()
+    assert r["origin"] == "detected" and r["preset"]["layout"] == "split" and r["streamer"] == "Canal Teste"
+    assert len(r["detected"]["cams"]) == 1
+    new = {"layout": "split", "facecam": [0.6, 0.0, 0.3, 0.3], "gameplay": [0.0, 0.2, 0.7, 0.8], "credit_handle": "@canal"}
+    assert c.put(f"/api/projects/{p.dir.name}/layout", json=new).status_code == 200
+    r2 = c.get(f"/api/projects/{p.dir.name}/layout").json()
+    assert r2["origin"] == "preset" and r2["preset"]["facecam"] == [0.6, 0.0, 0.3, 0.3]
+    assert (settings_tmp.render.presets_dir / "canal-teste.json").exists()
+
+
+def test_api_layout_rejects_invalid_region(settings_tmp, sample_video):
+    p = _video_project(settings_tmp, sample_video)
+    c = TestClient(create_app(settings_tmp))
+    r = c.put(f"/api/projects/{p.dir.name}/layout", json={"layout": "split", "facecam": [0.1, 0.1, 0.0, 0.2]})
+    assert r.status_code == 422
+
+
+def test_api_streamer_rename(settings_tmp, sample_video):
+    p = _video_project(settings_tmp, sample_video)
+    c = TestClient(create_app(settings_tmp))
+    assert c.put(f"/api/projects/{p.dir.name}/streamer", json={"streamer": "Flow Games"}).status_code == 200
+    assert Project.load(p.dir).data["streamer"] == "Flow Games"
+
+
+def test_api_frame_jpeg(settings_tmp, sample_video):
+    p = _video_project(settings_tmp, sample_video)
+    r = TestClient(create_app(settings_tmp)).get(f"/api/projects/{p.dir.name}/frame?t=2")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg" and r.content[:2] == b"\xff\xd8"
+
+
+def test_api_render_job_and_clip_endpoint(settings_tmp, sample_video):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    settings_tmp.render.presets_dir = settings_tmp.paths.data_dir / "presets"
+    p = _video_project(settings_tmp, sample_video)
+    write_json_atomic(p.path(MOMENTS), {"profile": "viral", "moments": [
+        {"id": "m1", "start": 1.0, "end": 4.0, "score": 80, "reason": "r", "ai": False},
+        {"id": "m2", "start": 4.0, "end": 7.0, "score": 70, "reason": "r", "ai": False}]})
+    c = TestClient(create_app(settings_tmp))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "render", "project": p.dir.name, "ids": ["m2"],
+                                             "preview": True}).json()["id"], timeout=120)
+    assert job["status"] == "done", job
+    m = c.get(f"/api/projects/{p.dir.name}/moments").json()
+    assert m["clips"]["m2"]["preview"] is True and "m1" not in m["clips"]
+    r = c.get(f"/api/projects/{p.dir.name}/clips/m2?preview=1", headers={"Range": "bytes=0-99"})
+    assert r.status_code == 206
+    assert c.get(f"/api/projects/{p.dir.name}/clips/m1").status_code == 404

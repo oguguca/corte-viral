@@ -35,11 +35,16 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
 
     provider = s.llm.provider
     model = (s.llm.model or DEFAULT_MODELS.get(provider)) if provider != "none" else None
-    params = {"v": 1, "n": n, "profile": s.analysis.profile, "provider": provider, "model": model,
+    params = {"v": 2, "profile": s.analysis.profile, "provider": provider, "model": model,
               "max_candidates": s.analysis.max_candidates, "batch": s.llm.batch_size,
               "signals": signals_params(project, s)}
     saved = load_moments(project)
-    if project.is_stage_done("scoring", params) and saved:
+    if project.is_stage_done("scoring", params) and saved and "all" in saved:
+        # mudar só a quantidade não precisa da IA: refaz a seleção sobre tudo que já foi pontuado
+        if saved.get("n") != n:
+            saved["moments"] = select(saved["all"], n)
+            saved["n"] = n
+            write_json_atomic(project.path(MOMENTS), saved)
         prog(1.0, "momentos já calculados")
         return saved["moments"]
 
@@ -67,7 +72,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
         "created_at": time.time(), "profile": s.analysis.profile, "n": n, "provider": provider,
         "model": model, "has_chat": signals.chat is not None, "candidates": len(candidates),
         "stats": stats, "complete": complete, "ai_missing": provider != "none" and llm is None,
-        "moments": chosen,
+        "moments": chosen, "all": moments,
     })
     if complete:
         project.mark_stage("scoring", params)

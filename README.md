@@ -4,8 +4,8 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** Fases 1 e 2 concluídas (download, transcrição e melhores momentos com nota).
-> Próxima: Fase 3 — corte e formato vertical 9:16.
+> **Status:** Fases 1–3 concluídas (download, transcrição, melhores momentos e clipes verticais 9:16).
+> Próxima: Fase 4 — legendas animadas.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
 Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum.
@@ -79,6 +79,24 @@ mostra nota de 0 a 100, justificativa e uma sugestão de gancho; clicar toca o t
   AI Studio → *Rate limits* e ajuste `llm.daily_request_limit` / `llm.daily_token_limit`
   no `config.yaml`.
 
+### Gerar os clipes verticais (9:16)
+
+Em cada momento, **Gerar clipe** cria o MP4 1080x1920 em `projects/<projeto>/clips/`;
+**Gerar todos os clipes** faz a lista inteira. **Ver clipe** abre o player vertical.
+
+Abra **Layout do vertical** para conferir o recorte:
+
+- O app detecta sozinho as câmeras (rostos que ficam parados no mesmo lugar) e a
+  janela da gameplay (a área que se mexe). Com várias câmeras, escolha qual usar.
+- Arraste os retângulos (o canto branco redimensiona); a prévia 9:16 atualiza na hora.
+- Layouts: **Câmera + gameplay** (câmera em cima, 30 %), **Seguir o rosto** (recorte
+  vertical acompanhando o rosto) e **Vídeo com fundo desfocado** (sem câmera).
+- **Salvar layout deste streamer** grava em `presets/streamers/<streamer>.json`; os
+  próximos VODs do mesmo canal já saem com esse recorte.
+
+Codificação: tenta a GPU (NVENC) e cai para a CPU (libx264) se não der. Placas da linha
+Pascal (GTX 10xx) com driver 58x não rodam o NVENC do FFmpeg 9 (exige driver ≥ 610).
+
 ### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
 
 Clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
@@ -110,6 +128,10 @@ arquivo `cookies.txt` exportado com a extensão "Get cookies.txt LOCALLY".
 
 # Melhores momentos (perfil viral, 10 momentos, IA Gemini)
 .venv\Scripts\python -m corteviral analyze projects\<pasta-do-projeto> --n 10 --profile viral --provider gemini
+
+# Detectar layout e gerar os clipes
+.venv\Scripts\python -m corteviral detect projects\<pasta-do-projeto>
+.venv\Scripts\python -m corteviral render projects\<pasta-do-projeto> [--ids m00012,m01618] [--preview]
 
 # Estado de um projeto
 .venv\Scripts\python -m corteviral info projects\<pasta-do-projeto>

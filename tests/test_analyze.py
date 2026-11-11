@@ -110,3 +110,21 @@ def test_missing_key_result_is_not_cached(settings_tmp, monkeypatch):
     p = make_project(settings_tmp)
     analyze(p, settings_tmp, n=3, client=None)
     assert "scoring" not in p.data["stages"]
+
+
+def test_changing_n_does_not_call_llm(settings_tmp, monkeypatch):
+    monkeypatch.setattr("corteviral.pipeline.signals.fetch_chat", lambda project, settings: None)
+    p = make_project(settings_tmp, seconds=400, loud_at=200)
+    calls = []
+
+    class LLM:
+        def score(self, items, profile, language):
+            calls.append(len(items))
+            return [{"id": it["id"], "score": 70, "reason": "ok", "hook": "h", "standalone": True} for it in items]
+
+    a = analyze(p, settings_tmp, n=5, client=LLM())
+    after_first = len(calls)
+    b = analyze(p, settings_tmp, n=1, client=LLM())
+    assert after_first >= 1 and len(calls) == after_first  # nenhum lote novo para a IA
+    assert len(b) == 1 and b[0]["id"] == a[0]["id"]
+    assert load_moments(p)["n"] == 1
