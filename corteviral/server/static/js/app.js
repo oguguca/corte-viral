@@ -26,7 +26,7 @@ function stepsBar(name, step, project) {
 function homeView() {
   return `<div class="page"><div class="hero">
     <div class="brand-mark" style="width:72px;height:72px;font-size:28px;border-radius:20px">CV</div>
-    <h1 class="t-display">Transforme lives em cortes virais</h1>
+    <h1 class="t-display">Transforme lives e vídeos em cortes virais</h1>
     <p>Cole o link de uma live ou VOD (YouTube, Twitch, Kick) ou escolha um arquivo. O Corte Viral encontra os melhores
       momentos e entrega os clipes verticais prontos para postar.</p>
     <button class="btn primary large" id="homeNew">＋ Novo vídeo</button>
