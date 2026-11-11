@@ -376,11 +376,13 @@ async function openProject(name) {
     ${t ? `<div class="analyze">
       <div class="f"><label for="aProfile">Perfil</label>
         <select id="aProfile"><option value="viral">Viral (15–60 s)</option><option value="monetizacao">Monetização (61–120 s)</option></select></div>
-      <div class="f" style="min-width:80px"><label for="aN">Quantos</label><input id="aN" type="number" min="1" max="30" value="10"></div>
+      <div class="f" style="min-width:80px"><label for="aN">Momentos a encontrar</label><input id="aN" type="number" min="1" max="30" value="10"></div>
       <div class="f"><label for="aProvider">IA</label>
         <select id="aProvider"><option value="gemini">Gemini (grátis)</option><option value="none">Sem IA (só sinais)</option><option value="anthropic">Claude (pago)</option></select></div>
       <button class="primary" id="aStart">Encontrar momentos</button>
-      <button id="rAll" title="Gera o MP4 vertical de todos os momentos da lista">Gerar todos os clipes</button>
+      <div class="f" style="min-width:110px;margin-left:12px"><label for="rN">Clipes a gerar</label>
+        <input id="rN" type="number" min="1" max="30" value="5" title="Gera os N momentos de maior nota"></div>
+      <button id="rAll" title="Gera o MP4 vertical dos momentos de maior nota">Gerar os melhores</button>
     </div>
     <div id="mNote" class="note"></div>
     <ul id="moments"></ul>
@@ -421,7 +423,13 @@ async function openProject(name) {
   $("q").oninput = (e) => search(e.target.value);
   if (t) {
     $("aStart").onclick = () => startAnalyze(name);
-    $("rAll").onclick = () => startRender(name, null);
+    $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
+    $("rAll").onclick = () => {
+      const n = Math.max(1, parseInt($("rN").value, 10) || 1);
+      const ids = [...currentMoments].sort((a, b) => b.score - a.score).slice(0, n).map((m) => m.id);
+      if (!ids.length) { showJobError("Encontre os momentos antes de gerar clipes."); return; }
+      startRender(name, ids);
+    };
     loadMoments(name);
     $("lyBox").addEventListener("toggle", () => { if ($("lyBox").open && !lyState) loadLayout(name); });
   }
@@ -429,6 +437,7 @@ async function openProject(name) {
 
 // ---- momentos ------------------------------------------------------------------
 let lastRenderIds = null;
+let currentMoments = [];
 async function startRender(name, ids) {
   lastRenderIds = ids;
   try {
@@ -578,6 +587,12 @@ async function loadMoments(name) {
   let d = null;
   try { d = await api(`/api/projects/${encodeURIComponent(name)}/moments`); } catch (e) { /* ainda não analisado */ }
   const ul = $("moments"), note = $("mNote");
+  currentMoments = d ? d.moments : [];
+  if ($("rN") && d) {
+    $("rN").max = d.moments.length;
+    if (+$("rN").value > d.moments.length) $("rN").value = d.moments.length;
+    $("rAll").textContent = `Gerar os ${Math.min(+$("rN").value || 1, d.moments.length)} melhores`;
+  }
   if (!ul) return;
   if (!d) { note.className = "note"; note.textContent = "Clique em “Encontrar momentos” para achar os melhores trechos deste vídeo."; ul.innerHTML = ""; return; }
   if ($("aProfile")) $("aProfile").value = d.profile || "viral";
