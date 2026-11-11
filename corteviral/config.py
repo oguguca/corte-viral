@@ -97,6 +97,8 @@ class CaptionStyle(_Strict):
     max_chars: int = Field(default=20, ge=6, le=40)
     position: float = Field(default=0.70, ge=0.0, le=1.0)  # altura do centro da legenda (fração)
     pop: bool = True
+    hook: bool = True      # gancho escrito nos 3 primeiros segundos
+    credit: bool = True    # "@streamer" discreto no canto (quando o preset tem credit_handle)
 
 
 class Settings(_Strict):

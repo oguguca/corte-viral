@@ -86,3 +86,28 @@ def test_moment_toggle_overrides_job_and_style(rs, sample_video, monkeypatch):
     render_clip(p, {**MOMENT, "id": "m3"}, rs)
     render_clip(p, {**MOMENT, "id": "m4"}, rs, captions=True)
     assert seen == [False, True, False, True]
+
+
+def test_render_burns_hook_top_band(rs, sample_video):
+    p = _project(rs, sample_video, words=False)
+    m = {**MOMENT, "meta": {"hook": "ELE NÃO ESPERAVA"}}
+    out = render_clip(p, m, rs, captions=True)
+    p2 = _project(rs, sample_video, words=False)
+    plain = render_clip(p2, {**m, "hook_on": False}, rs, captions=True)
+
+    def band(path, t):
+        return grab(path, [t], width=540)[0][300:420].astype(np.int16)  # y 600–840 em 1920
+    early = (np.abs(band(out, 1.0) - band(plain, 1.0)).sum(axis=2) > 60).mean()
+    late = (np.abs(band(out, 4.0) - band(plain, 4.0)).sum(axis=2) > 60).mean()
+    assert early > 0.03 and late < 0.001  # gancho só nos 3 s iniciais
+
+
+def test_hook_toggle_per_moment(rs, sample_video, monkeypatch):
+    p = _project(rs, sample_video, words=False)
+    seen = []
+    monkeypatch.setattr("corteviral.ffmpeg.run", lambda args: seen.append("ass=" in " ".join(args)))
+    render_clip(p, {**MOMENT, "meta": {"hook": "oi"}, "hook_on": False}, rs, captions=False)
+    render_clip(p, {**MOMENT, "id": "m2", "meta": {"hook": "oi"}}, rs, captions=False)
+    rs.captions.hook = False
+    render_clip(p, {**MOMENT, "id": "m3", "meta": {"hook": "oi"}}, rs, captions=False)
+    assert seen == [False, True, False]

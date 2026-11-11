@@ -97,3 +97,32 @@ def test_clip_words_relative_times():
     out = clip_words(words, 10.0, 20.0)
     assert [w["w"] for w in out] == ["b", "c"]
     assert out[0]["start"] == 0.2 and out[1]["end"] == 5.3
+
+
+def test_hook_event_first_3s_boxed_in_safe_zone():
+    ass = build_ass([], CaptionStyle(), hook="Ele não esperava por isso", duration=20.0, layout="split")
+    ev = [l for l in ass.splitlines() if l.startswith("Dialogue:") and ",Hook," in l]
+    assert len(ev) == 1 and ev[0].split(",")[1] == "0:00:00.00" and ev[0].split(",")[2] == "0:00:03.00"
+    assert "ELE NÃO ESPERAVA POR ISSO" in ev[0] or "Ele não esperava por isso" in ev[0]
+    style_line = next(l for l in ass.splitlines() if l.startswith("Style: Hook,"))
+    assert style_line.split(",")[15] == "3"  # BorderStyle 3 = caixa opaca atrás do texto
+    y = int(re.search(r"\\pos\(\d+,(\d+)\)", ev[0]).group(1))
+    assert 582 <= y <= 800  # topo da área da gameplay (abaixo da câmera) e dentro da zona segura
+
+
+def test_hook_escaped_and_shrunk():
+    ass = build_ass([], CaptionStyle(), hook=r"{\b1}" + "palavra " * 12, duration=10.0)
+    ev = next(l for l in ass.splitlines() if ",Hook," in l)
+    assert r"\{" in ev and r"{\b1}" not in ev  # chave escapada: não vira comando ASS
+    assert re.search(r"\\fscx\d+", ev)  # longo demais para 2 linhas: encolhe
+
+
+def test_credit_event_whole_clip():
+    ass = build_ass([], CaptionStyle(), credit="flowgames", duration=42.5)
+    ev = next(l for l in ass.splitlines() if ",Credit," in l)
+    assert ev.split(",")[1] == "0:00:00.00" and ev.split(",")[2] == "0:00:42.50" and "@flowgames" in ev
+
+
+def test_ass_without_words_but_with_hook_still_has_events():
+    assert "Dialogue:" in build_ass([], CaptionStyle(), hook="oi", duration=5.0)
+    assert "Dialogue:" not in build_ass([], CaptionStyle(), hook=None, credit=None, duration=5.0)

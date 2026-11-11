@@ -91,11 +91,14 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     meta_file = out.with_suffix(".json")
 
     style = load_style(settings)
+    words = _caption_words(project, moment, start, end) if captions_wanted(moment, captions, style) else []
+    hook_on = moment["hook_on"] if moment.get("hook_on") is not None else style.hook
+    hook = ((moment.get("meta") or {}).get("hook") or "") if hook_on else ""
+    credit = preset.credit_handle if (style.credit and preset.credit_handle) else ""
     ass_text = None
-    if captions_wanted(moment, captions, style):
-        words = _caption_words(project, moment, start, end)
-        if words:
-            ass_text = build_ass(words, style)
+    if words or hook or credit:
+        ass_text = build_ass(words, style, hook=hook or None, credit=credit or None,
+                             duration=end - start, layout=preset.layout)
     key = params_hash({"v": 2, "start": start, "end": end, "preset": preset.model_dump(),
                        "render": rs.model_dump(mode="json"), "preview": preview,
                        "captions": params_hash({"ass": ass_text}) if ass_text else None})
