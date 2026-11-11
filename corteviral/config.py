@@ -83,6 +83,22 @@ class RenderSettings(_Strict):
     presets_dir: Path = Path("presets/streamers")
 
 
+class CaptionStyle(_Strict):
+    enabled: bool = True
+    font: str = "Arial Black"          # fontes do Windows: Arial Black, Impact, Segoe UI Black, Verdana...
+    size: int = Field(default=78, ge=30, le=160)     # px num vídeo 1080x1920
+    color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
+    highlight: str = Field(default="#FFE600", pattern=r"^#[0-9A-Fa-f]{6}$")
+    outline_color: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")
+    outline: int = Field(default=6, ge=0, le=20)
+    shadow: int = Field(default=2, ge=0, le=10)
+    uppercase: bool = True
+    max_words: int = Field(default=3, ge=1, le=6)
+    max_chars: int = Field(default=20, ge=6, le=40)
+    position: float = Field(default=0.70, ge=0.0, le=1.0)  # altura do centro da legenda (fração)
+    pop: bool = True
+
+
 class Settings(_Strict):
     paths: PathsSettings = Field(default_factory=PathsSettings)
     download: DownloadSettings = Field(default_factory=DownloadSettings)
@@ -90,6 +106,7 @@ class Settings(_Strict):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     render: RenderSettings = Field(default_factory=RenderSettings)
     deep: DeepSettings = Field(default_factory=DeepSettings)
+    captions: CaptionStyle = Field(default_factory=CaptionStyle)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
