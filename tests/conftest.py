@@ -45,3 +45,56 @@ def probe_audio(path):
     ).stdout
     stream = json.loads(out)["streams"][0]
     return {"sample_rate": int(stream["sample_rate"]), "channels": int(stream["channels"])}
+
+
+# --- Transcrição: modelo falso do faster-whisper ------------------------------
+from types import SimpleNamespace
+
+from corteviral.project import Project
+
+
+def _fake_segments():
+    words = [("Olha", 0.5, 0.8, 0.9), (" isso", 0.8, 1.1, 0.95), (" aqui!", 1.2, 1.9, 0.88)]
+    yield SimpleNamespace(
+        start=0.5, end=1.9, text=" Olha isso aqui!",
+        words=[SimpleNamespace(word=w, start=s, end=e, probability=p) for w, s, e, p in words],
+    )
+
+
+class FakeModel:
+    """Fábricas compatíveis com WhisperModel(model, device=..., compute_type=..., download_root=...)."""
+
+    @staticmethod
+    def ok(model, device="cuda", compute_type="int8", **kw):
+        return SimpleNamespace(
+            transcribe=lambda audio, **opts: (_fake_segments(), SimpleNamespace(language="pt", duration=8.0))
+        )
+
+    @staticmethod
+    def explode(*a, **kw):
+        raise AssertionError("o modelo não deveria ser carregado")
+
+    @staticmethod
+    def cuda_fails_on_first_inference(created: list):
+        def factory(model, device="cuda", compute_type="int8", **kw):
+            created.append((model, device))
+
+            def transcribe(audio, **opts):
+                def gen():
+                    if device == "cuda":
+                        raise RuntimeError("CUDA failed with error out of memory")
+                    yield from _fake_segments()
+                return gen(), SimpleNamespace(language="pt", duration=8.0)
+
+            return SimpleNamespace(transcribe=transcribe)
+
+        return factory
+
+
+@pytest.fixture
+def project_with_audio(settings_tmp):
+    p = Project.create(settings_tmp.paths.projects_dir, "fake.mp4", "fake")
+    p.path("audio.wav").write_bytes(b"RIFF")
+    p.data["duration"] = 8.0
+    p.save()
+    return p
