@@ -81,10 +81,14 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     except FFmpegError as e:
         if used == "libx264":
             raise
-        log.warning("Codificador %s falhou (%s); usando libx264 (CPU).", used, str(e)[-200:])
-        _BROKEN_ENCODERS.add(used)
+        log.warning("Codificador %s falhou (%s); tentando libx264 (CPU).", used, str(e)[-200:])
+        try:
+            ffmpeg.run(base + _encoder_args("libx264", rs.cq, preview) + tail)
+        except FFmpegError:
+            tmp.unlink(missing_ok=True)
+            raise e from None  # o problema não era o codificador
+        _BROKEN_ENCODERS.add(used)  # x264 funcionou: o codificador da GPU é que está indisponível
         used = "libx264"
-        ffmpeg.run(base + _encoder_args("libx264", rs.cq, preview) + tail)
 
     if tmp.exists():
         os.replace(tmp, out)

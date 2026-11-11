@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import urllib.request
 from pathlib import Path
 
@@ -94,10 +95,16 @@ def motion_region(frames: list[np.ndarray], mask_rects: list[list[float]] | None
 def _yunet(models_dir: Path) -> Path | None:
     path = Path(models_dir) / "face" / YUNET_FILE
     if not path.exists():
+        part = path.with_suffix(".part")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            urllib.request.urlretrieve(YUNET_URL, path)
+            with urllib.request.urlopen(YUNET_URL, timeout=30) as r, open(part, "wb") as out:
+                out.write(r.read())
+            if part.stat().st_size < 100_000:
+                raise OSError("download incompleto")
+            os.replace(part, path)
         except OSError as e:
+            part.unlink(missing_ok=True)
             log.warning("Não consegui baixar o detector YuNet (%s); usando o detector básico.", e)
             return None
     return path
@@ -105,13 +112,23 @@ def _yunet(models_dir: Path) -> Path | None:
 
 def _detector(models_dir: Path, size: tuple[int, int]):
     model = _yunet(models_dir)
+    det = None
     if model:
-        det = cv2.FaceDetectorYN.create(str(model), "", size, 0.7)
+        try:
+            det = cv2.FaceDetectorYN.create(str(model), "", size, 0.7)
+        except cv2.error as e:
+            log.warning("Modelo YuNet inválido (%s); apagando para baixar de novo.", str(e)[:120])
+            Path(model).unlink(missing_ok=True)
+    if det is not None:
         return lambda img: [] if (faces := det.detect(img)[1]) is None else [
             (float(f[0]), float(f[1]), float(f[2]), float(f[3]), float(f[-1])) for f in faces]
-    haar = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    return lambda img: [(float(x), float(y), float(w), float(h), 0.6) for x, y, w, h in
-                        haar.detectMultiScale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 1.1, 5, minSize=(20, 20))]
+    if hasattr(cv2, "CascadeClassifier"):  # removido no OpenCV 5
+        haar = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        return lambda img: [(float(x), float(y), float(w), float(h), 0.6) for x, y, w, h in
+                            haar.detectMultiScale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 1.1, 5, minSize=(20, 20))]
+    log.warning("Sem detector de rostos (YuNet indisponível): o layout usa o fundo desfocado. "
+                "Conecte à internet e abra o layout de novo para baixar o detector.")
+    return lambda img: []
 
 
 def analyze_layout(video: Path, duration: float, models_dir: Path) -> dict:

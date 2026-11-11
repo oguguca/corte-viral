@@ -74,3 +74,13 @@ def test_motion_region_is_inset_to_skip_border():
     x, y, w, h = motion_region(frames)
     assert x > 0.10 and y > 0.15  # recuado para dentro da borda
     assert x + w < 0.80 and y + h < 0.95
+
+
+def test_corrupt_yunet_model_falls_back_to_haar(tmp_path):
+    from corteviral.vision.detect import YUNET_FILE, _detector
+    bad = tmp_path / "face" / YUNET_FILE
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"isto nao e um modelo onnx")
+    detect = _detector(tmp_path, (320, 180))
+    assert detect(np.zeros((180, 320, 3), np.uint8)) == []
+    assert not bad.exists()  # arquivo corrompido removido para baixar de novo

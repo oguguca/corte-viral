@@ -46,3 +46,26 @@ def test_project_json_roundtrip(tmp_path):
     p = Project.create(tmp_path, "a.mp4", "a")
     p.mark_stage("ingest", {})
     assert Project.load(p.dir).is_stage_done("ingest", {})
+
+
+def test_stale_save_keeps_keys_changed_by_another_writer(tmp_path):
+    p = Project.create(tmp_path, "a.mp4", "a")
+    job = Project.load(p.dir)          # tarefa longa carregou antes
+    ui = Project.load(p.dir)           # interface salva o streamer no meio
+    ui.data["streamer"] = "Flow Games"
+    ui.data["layout_detect"] = {"cams": []}
+    ui.save()
+    job.mark_stage("scoring", {"x": 1})  # tarefa termina e salva o que tinha
+    final = Project.load(p.dir)
+    assert final.data["streamer"] == "Flow Games" and final.data["layout_detect"] == {"cams": []}
+    assert final.is_stage_done("scoring", {"x": 1})
+
+
+def test_own_changes_still_win(tmp_path):
+    p = Project.create(tmp_path, "a.mp4", "a")
+    a, b = Project.load(p.dir), Project.load(p.dir)
+    a.data["streamer"] = "A"
+    a.save()
+    b.data["streamer"] = "B"
+    b.save()
+    assert Project.load(p.dir).data["streamer"] == "B"

@@ -480,7 +480,9 @@ async function loadLayout(name) {
   });
   const img = $("lyImg");
   img.onload = () => { placeBoxes(); markCam(); };
-  img.src = `/api/projects/${encodeURIComponent(name)}/frame?t=${Math.round(($("video").duration || 600) * 0.4)}`;
+  img.onerror = () => { $("lyOrigin").textContent = "· não consegui carregar um quadro do vídeo"; };
+  const dur = r.duration || $("video").duration || 0;
+  img.src = `/api/projects/${encodeURIComponent(name)}/frame?t=${Math.max(0, Math.min(dur * 0.4, dur - 1)).toFixed(1)}`;
   $("lyLayout").onchange = () => { lyState.layout = $("lyLayout").value; placeBoxes(); };
   $("lySave").onclick = () => saveLayout(name);
   enableDrag($("boxCam"), "cam");

@@ -55,11 +55,21 @@ def follow_expr(track: list[tuple[float, float]], src_w: int, crop_w: int) -> st
             pos += ALPHA * (cx - pos)
         x = min(max(pos * src_w - crop_w / 2, 0.0), float(src_w - crop_w))
         pts.append((float(t), x))
-    expr = f"{pts[-1][1]:.1f}"
-    for (t0, x0), (t1, x1) in reversed(list(zip(pts, pts[1:]))):
+    # trechos: [início, expressão]; o último fica parado na última posição
+    segs = []
+    for (t0, x0), (t1, x1) in zip(pts, pts[1:]):
         span = max(t1 - t0, 1e-3)
-        expr = f"if(lt(t,{t1:.2f}),{x0:.1f}+({x1:.1f}-{x0:.1f})*(t-{t0:.2f})/{span:.2f},{expr})"
-    return expr
+        segs.append((t0, f"{x0:.1f}+({x1:.1f}-{x0:.1f})*(t-{t0:.2f})/{span:.2f}"))
+    segs.append((pts[-1][0], f"{pts[-1][1]:.1f}"))
+
+    # árvore binária de if(): o parser do FFmpeg recusa ~100 níveis de aninhamento
+    def node(lo: int, hi: int) -> str:
+        if hi - lo == 1:
+            return segs[lo][1]
+        mid = (lo + hi) // 2
+        return f"if(lt(t,{segs[mid][0]:.2f}),{node(lo, mid)},{node(mid, hi)})"
+
+    return node(0, len(segs))
 
 
 def build_filter(preset: LayoutPreset, src: tuple[int, int], rs: RenderSettings,

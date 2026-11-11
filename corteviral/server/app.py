@@ -263,7 +263,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         det = detected_layout(project, settings)
         preset = resolve_layout(project, settings)
         origin = "preset" if has_preset else ("detected" if det.get("cams") or det.get("gameplay") else "fallback")
-        return {"preset": preset.model_dump(), "origin": origin, "detected": det, "streamer": streamer}
+        return {"preset": preset.model_dump(), "origin": origin, "detected": det, "streamer": streamer,
+                "duration": project.data.get("duration", 0)}
 
     @app.put("/api/projects/{name}/layout")
     def put_layout(name: str, preset: LayoutPreset):

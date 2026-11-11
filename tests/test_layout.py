@@ -72,3 +72,22 @@ def test_split_anchors_facecam_near_face():
     w, h, x, y = map(int, cam_crop)
     region_top, region_h = int(0.2 * 1080), int(0.2 * 1080)
     assert y < region_top + (region_h - h) // 2  # acima do centro
+
+
+def test_follow_expr_is_shallow_for_long_clips():
+    track = [(float(t), 0.3 + 0.4 * (t % 7) / 7) for t in range(120)]
+    expr = follow_expr(track, src_w=1920, crop_w=608)
+    depth = max_depth = 0
+    for ch in expr:
+        depth += ch == "("
+        depth -= ch == ")"
+        max_depth = max(max_depth, depth)
+    assert max_depth < 40  # o parser do FFmpeg recusa ~100 níveis
+
+
+def test_follow_filter_runs_in_ffmpeg_for_120s_track():
+    from corteviral import ffmpeg
+    track = [(float(t), 0.2 + 0.6 * ((t * 37) % 100) / 100) for t in range(120)]
+    graph = build_filter(LayoutPreset(layout="face-follow"), SRC, RenderSettings(), track=track, preview=True)
+    ffmpeg.run(["-f", "lavfi", "-i", "color=c=gray:size=1920x1080:rate=10:duration=2",
+                "-filter_complex", graph, "-map", "[v]", "-f", "null", "-"])

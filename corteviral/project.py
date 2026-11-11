@@ -1,7 +1,9 @@
 """Projeto em disco: uma pasta por vídeo, com project.json e cache por etapa."""
 from __future__ import annotations
 
+import copy
 import json
+import threading
 from datetime import date
 from pathlib import Path
 
@@ -12,12 +14,21 @@ STAGES = [
     "boundaries", "layout", "captions", "metadata", "export",
 ]
 PROJECT_FILE = "project.json"
+_LOCKS: dict[str, threading.Lock] = {}
+_GUARD = threading.Lock()
+
+
+def _lock(dir: Path) -> threading.Lock:
+    key = str(Path(dir).resolve()).lower()
+    with _GUARD:
+        return _LOCKS.setdefault(key, threading.Lock())
 
 
 class Project:
     def __init__(self, dir: Path, data: dict):
         self.dir = Path(dir)
         self.data = data
+        self._base = copy.deepcopy(data)  # como estava no disco quando carregamos
 
     # --- criação / busca -------------------------------------------------
     @classmethod
@@ -56,7 +67,27 @@ class Project:
         return cls(dir, data)
 
     def save(self) -> None:
-        write_json_atomic(self.dir / PROJECT_FILE, self.data)
+        """Salva sem apagar o que outro escritor (ex.: a interface) salvou enquanto isto estava aberto.
+
+        Merge de 3 vias por chave: se esta instância não mexeu numa chave e o disco mudou, vale o disco.
+        """
+        f = self.dir / PROJECT_FILE
+        with _lock(self.dir):
+            try:
+                disk = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                disk = {}
+            merged = dict(self.data)
+            for key, value in disk.items():
+                mine_changed = key in self.data and self.data[key] != self._base.get(key, object())
+                deleted_by_me = key not in self.data and key in self._base
+                if key not in self.data and not deleted_by_me:
+                    merged[key] = value
+                elif key in self.data and not mine_changed and value != self._base.get(key):
+                    merged[key] = value
+            self.data = merged
+            write_json_atomic(f, self.data)
+            self._base = copy.deepcopy(self.data)
 
     # --- cache por etapa -------------------------------------------------
     def is_stage_done(self, stage: str, params: dict) -> bool:

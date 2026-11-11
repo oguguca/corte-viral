@@ -287,3 +287,9 @@ def test_api_render_job_and_clip_endpoint(settings_tmp, sample_video):
     r = c.get(f"/api/projects/{p.dir.name}/clips/m2?preview=1", headers={"Range": "bytes=0-99"})
     assert r.status_code == 206
     assert c.get(f"/api/projects/{p.dir.name}/clips/m1").status_code == 404
+
+
+def test_api_layout_reports_duration(settings_tmp, sample_video):
+    p = _video_project(settings_tmp, sample_video)
+    r = TestClient(create_app(settings_tmp)).get(f"/api/projects/{p.dir.name}/layout").json()
+    assert r["duration"] == 8.0

@@ -89,3 +89,14 @@ def test_failed_encoder_is_not_retried_for_next_clips(rs_fast, sample_video, mon
     monkeypatch.setattr(mod.ffmpeg, "run", lambda args: used.append(args[args.index("-c:v") + 1]) or real(args))
     render_clip(p, {**MOMENT, "id": "m00004", "start": 2.0}, rs_fast)
     assert used == ["libx264"]
+
+
+def test_unrelated_ffmpeg_error_does_not_blacklist_encoder(rs_fast, sample_video, monkeypatch):
+    import corteviral.pipeline.render as mod
+    from corteviral.ffmpeg import FFmpegError
+    rs_fast.render.encoder = "h264_nvenc_teste"
+    p = _project(rs_fast, sample_video)
+    monkeypatch.setattr(mod, "build_filter", lambda *a, **k: "[0:v]filtro_inexistente[v]")
+    with pytest.raises(FFmpegError):
+        render_clip(p, {**MOMENT, "id": "m00009"}, rs_fast)
+    assert "h264_nvenc_teste" not in mod._BROKEN_ENCODERS
