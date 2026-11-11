@@ -4,7 +4,8 @@ Aplicativo desktop para Windows que transforma lives e VODs longos (YouTube,
 Twitch, Kick ou arquivo local) em clipes verticais 9:16 prontos para TikTok,
 YouTube Shorts, Instagram Reels e Kwai.
 
-> **Status:** em desenvolvimento — design em revisão, Fase 1 a seguir.
+> **Status:** Fase 1 concluída (download + transcrição via linha de comando).
+> Próxima: Fase 2 — detecção e pontuação de momentos.
 
 Saída: MP4 9:16 (1080x1920), um único arquivo compatível com TikTok, YouTube
 Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum.
@@ -17,7 +18,9 @@ Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum
 3. Detecta os melhores momentos combinando picos de áudio, picos de chat e
    análise da transcrição por IA (Claude).
 4. Cada momento recebe nota de 0 a 100 e uma justificativa.
-5. Gera os N melhores clipes (15–60 s), com início e fim em pontos naturais da fala.
+5. Gera os N melhores clipes — perfil `viral` (15–60 s) ou `monetizacao`
+   (61–120 s, atende o mínimo de 1 min do TikTok Creator Rewards) — com início e
+   fim em pontos naturais da fala.
 6. Converte para 9:16 (facecam em cima + gameplay embaixo, ou recorte seguindo o rosto).
 7. Legendas animadas palavra por palavra — **opcionais**.
 8. Gera gancho, título, descrição e hashtags.
@@ -26,18 +29,68 @@ Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum
 ## Requisitos
 
 - Windows 10/11
-- GPU NVIDIA recomendada (testado em GTX 1050 Ti 4 GB)
-- Python 3.11, FFmpeg, Node.js (a partir da Fase 5)
-- Chave da API Anthropic (para a análise por IA)
+- GPU NVIDIA recomendada (testado em GTX 1050 Ti 4 GB; sem GPU funciona na CPU, mais lento)
+- Python 3.11 e FFmpeg
+- Node.js (a partir da Fase 5)
+- Chave da API Anthropic (a partir da Fase 2)
 
 ## Instalação
 
-_Será preenchida ao fim da Fase 1._
+```powershell
+# 1. Ferramentas (uma vez só; reabra o terminal depois)
+winget install -e --id Python.Python.3.11
+winget install -e --id Gyan.FFmpeg
+
+# 2. Ambiente Python do projeto (dentro da pasta do repositório)
+py -3.11 -m venv .venv
+.venv\Scripts\pip install -e ".[dev]"
+
+# 3. Configuração (opcional — sem ela, valem os padrões)
+copy config.example.yaml config.yaml
+copy .env.example .env
+```
+
+As bibliotecas CUDA (cuBLAS/cuDNN) vêm pelo `pip`; **não** é preciso instalar o
+CUDA Toolkit. Basta ter o driver NVIDIA atualizado.
+
+Na primeira transcrição, o modelo Whisper é baixado para `models/`
+(`medium` ≈ 1,5 GB).
 
 ## Uso
 
-_Será preenchido conforme as fases forem concluídas._
+```powershell
+# Baixa/importa e transcreve
+.venv\Scripts\python -m corteviral ingest "https://www.twitch.tv/videos/123456789"
+.venv\Scripts\python -m corteviral ingest "C:\Videos\live.mp4"
+
+# Opções
+#   --model small        modelo mais rápido (menos preciso)
+#   --language pt        força o idioma (padrão: detecção automática)
+#   --force              refaz tudo, ignorando o cache
+
+# Estado de um projeto
+.venv\Scripts\python -m corteviral info projects\<pasta-do-projeto>
+```
+
+Cada vídeo vira uma pasta em `projects/` com `audio.wav`, `transcript.json`
+(palavras com tempo de início/fim) e `project.json`. Rodar o mesmo link ou
+arquivo de novo reaproveita o que já foi feito. Arquivos locais não são copiados
+(hardlink quando estão no mesmo disco).
+
+Lives em andamento são recusadas — aguarde virar VOD.
+
+## Configuração
+
+Todos os parâmetros ficam em `config.yaml` (veja `config.example.yaml`, comentado).
+
+## Testes
+
+```powershell
+.venv\Scripts\pytest            # testes rápidos
+.venv\Scripts\pytest -m slow    # inclui transcrição real com o modelo tiny
+```
 
 ## Documentação
 
 - [Especificação de design](docs/superpowers/specs/2026-11-11-corte-viral-design.md)
+- [Plano da Fase 1](docs/superpowers/plans/2026-11-11-fase-1-download-transcricao.md)
