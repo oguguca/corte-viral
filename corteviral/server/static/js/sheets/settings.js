@@ -1,19 +1,20 @@
 // Painel "Ajustes": contas conectadas, estilo da legenda, uso da IA e sobre.
 import { $, api, esc, nf } from "../api.js";
 import { loadCapStyle, saveCapStyle, state } from "../state.js";
+import { getTheme, setTheme, THEMES } from "../theme.js";
 import { openSheet, toast } from "../ui.js";
 
 const NAMES = { youtube: "YouTube", twitch: "Twitch", kick: "Kick" };
 
 // ---------------- contas conectadas (também usado no "Novo vídeo") ----------------
-export function accountsSection() {
+export function accountsSection(withAlternatives = true) {
   return `<div class="stack" data-accounts>
     <div class="row"><div style="flex:1"><div class="t-head">Contas conectadas</div>
       <div class="t-small" data-acct-status>verificando…</div></div>
       <button class="btn" data-acct-connect>Conectar contas</button></div>
     <div class="t-small">Abre uma janela separada (perfil próprio do app) com YouTube, Twitch e Kick. Entre nas contas e feche a janela —
       funciona com qualquer navegador que você use, mesmo aberto.</div>
-    <details><summary class="t-small" style="cursor:pointer">Outras formas de login</summary>
+    <details ${withAlternatives ? "" : "hidden"}><summary class="t-small" style="cursor:pointer">Outras formas de login (só para este vídeo)</summary>
       <div class="row" style="margin-top:10px">
         <select class="select" data-login style="width:auto"><option value="">Usar contas conectadas</option>
           <option value="firefox">Firefox</option><option value="file">Arquivo cookies.txt…</option></select>
@@ -170,12 +171,17 @@ async function fillUsage(b) {
 }
 
 // ---------------- painel ----------------
-export async function openSettings(from, start = "accounts") {
+export async function openSettings(from, start = "appearance") {
   await loadCapStyle();
   const body = document.createElement("div");
-  const TABS = [["accounts", "Contas"], ["captions", "Legenda"], ["usage", "Uso da IA"], ["about", "Sobre"]];
+  const TABS = [["appearance", "Aparência"], ["accounts", "Contas"], ["captions", "Legenda"], ["usage", "Uso da IA"], ["about", "Sobre"]];
   body.innerHTML = `<div class="tabs" role="tablist">${TABS.map(([k, l]) => `<button class="tab" role="tab" data-t="${k}">${l}</button>`).join("")}</div>
-    <div data-p="accounts">${accountsSection()}</div><div data-p="captions">${captionSection()}</div>
+    <div data-p="appearance" class="stack"><div class="theme-cards">${THEMES.map(([k, l]) => `
+      <button class="theme-card" data-theme-card="${k}" aria-pressed="${getTheme() === k}"><span class="sw sw-${k}"></span>
+        <b>${l}</b><span class="t-small">${{ auto: "Segue o claro/escuro do Windows", light: "Leve, estilo Fotos/Finder",
+          dark: "Combina com vídeo e games", gta: "Pôr do sol neon de Vice" }[k]}</span></button>`).join("")}</div>
+      <div class="t-small">Também dá para trocar pelo atalho no rodapé da barra lateral.</div></div>
+    <div data-p="accounts">${accountsSection(false)}</div><div data-p="captions">${captionSection()}</div>
     <div data-p="usage">${usageSection()}</div>
     <div data-p="about" class="stack"><div class="t-head">Corte Viral</div>
       <div class="muted">Do link da live até a pasta com clipes 9:16 legendados e textos para TikTok, Shorts, Reels e Kwai.</div>
@@ -190,6 +196,9 @@ export async function openSettings(from, start = "accounts") {
     if (k === "captions") drawCaption(body);
   };
   body.querySelectorAll("[data-t]").forEach((b) => b.onclick = () => show(b.dataset.t));
+  const paintCards = () => body.querySelectorAll("[data-theme-card]").forEach((c) => c.setAttribute("aria-pressed", c.dataset.themeCard === getTheme()));
+  body.querySelectorAll("[data-theme-card]").forEach((c) => c.onclick = () => { setTheme(c.dataset.themeCard); paintCards(); });
+  document.addEventListener("themechange", paintCards);
   bindAccounts(body);
   ["cOn", "cFont", "cSize", "cPos", "cWords", "cColor", "cHl", "cUpper", "cPop", "cHook", "cCredit"].forEach((id) => {
     $("#" + id, body).addEventListener("input", () => drawCaption(body));

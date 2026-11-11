@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Corte Viral</title>
+<script>/* aplica o tema antes de desenhar (sem "piscada" do tema errado) */
+try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
@@ -15,6 +17,7 @@
     <div class="side-section t-label">Projetos</div>
     <ul class="side-list" id="projects" aria-label="Projetos"></ul>
     <div class="side-foot">
+      <div id="themeSlot" style="padding:4px 6px 6px"></div>
       <button class="usage-mini" id="usageMini" aria-label="Uso da IA hoje">
         <span class="ring" id="usageRing" aria-hidden="true"></span>
         <span><span class="t-small" style="display:block">Uso da IA hoje</span><b class="num" id="usagePct">—</b></span>

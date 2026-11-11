@@ -6,6 +6,7 @@ import { openNewVideo } from "./sheets/newvideo.js";
 import { openSettings } from "./sheets/settings.js";
 import { renderProjects, renderUsageMini } from "./sidebar.js";
 import { loadCapStyle, state } from "./state.js";
+import { applyTheme, themeSwitcher } from "./theme.js";
 import { renderClips } from "./views/clips.js";
 import { renderExport } from "./views/export.js";
 import { renderMoments } from "./views/moments.js";
@@ -58,6 +59,8 @@ async function render() {
 }
 
 function init() {
+  applyTheme();
+  $("#themeSlot").append(themeSwitcher());
   $("#newVideo").onclick = (e) => openNewVideo(e.currentTarget);
   $("#openSettings").onclick = (e) => openSettings(e.currentTarget);
   $("#usageMini").onclick = (e) => openSettings(e.currentTarget, "usage");
