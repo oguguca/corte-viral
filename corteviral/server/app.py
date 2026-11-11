@@ -24,6 +24,7 @@ from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
 from corteviral.caption_style import load_style, save_style
 from corteviral.config import CaptionStyle
+from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
 from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
@@ -46,7 +47,7 @@ def default_pipeline(source: str, settings: Settings, on_progress: StageProgress
 
 
 class JobRequest(BaseModel):
-    kind: Literal["ingest", "analyze", "render"] = "ingest"
+    kind: Literal["ingest", "analyze", "render", "export"] = "ingest"
     source: str | None = None       # ingest
     project: str | None = None      # analyze
     n: int | None = Field(default=None, ge=1, le=50)
@@ -65,8 +66,8 @@ class JobRequest(BaseModel):
     def _check(self):
         if self.kind == "ingest" and not self.source:
             raise ValueError("source é obrigatório para ingest")
-        if self.kind in ("analyze", "render") and not self.project:
-            raise ValueError("project é obrigatório para analyze/render")
+        if self.kind in ("analyze", "render", "export") and not self.project:
+            raise ValueError("project é obrigatório para analyze/render/export")
         return self
 
 
@@ -173,7 +174,15 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             job.update(stage=stage, progress=round(frac, 4), message=msg)
 
         try:
-            if req.kind == "render":
+            if req.kind == "export":
+                project = Project.load(_project_dir(req.project))
+                job.update(stage="export", project=project.dir.name)
+                res = export_approved(project, s, on_progress=lambda f, m: progress("export", f, m))
+                job["result"] = {"folder": str(res["folder"]), "duplicates": res["duplicates"],
+                                 "unauthorized": res["unauthorized"], "errors": res["errors"],
+                                 "files": [{"id": f["id"], "mp4": str(f["mp4"]), "txt": str(f["txt"])}
+                                           for f in res["files"]]}
+            elif req.kind == "render":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="render", project=project.dir.name)
                 saved = load_moments(project) or {"moments": []}
@@ -283,6 +292,18 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         except ReviewError as e:
             raise HTTPException(422, str(e))
         return {"ok": True, "moment": moment}
+
+    @app.get("/api/projects/{name}/export-check")
+    def get_export_check(name: str):
+        return export_check(Project.load(_project_dir(name)), settings)
+
+    @app.post("/api/projects/{name}/open-exports")
+    def open_exports(name: str):
+        d = Path(settings.paths.exports_dir) / _project_dir(name).name
+        d.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            os.startfile(d)  # noqa: S606 — abre a pasta de exportação no Explorer
+        return {"ok": True, "folder": str(d)}
 
     @app.get("/api/caption-style")
     def get_caption_style():

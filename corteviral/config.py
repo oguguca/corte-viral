@@ -27,6 +27,7 @@ class WhisperSettings(_Strict):
 class PathsSettings(_Strict):
     projects_dir: Path = Path("projects")
     models_dir: Path = Path("models")
+    exports_dir: Path = Path("exports")  # clipes prontos para postar
     data_dir: Path = Path("data")  # sessão do YouTube do app, preferências locais
 
 

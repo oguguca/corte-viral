@@ -109,6 +109,24 @@ def _cmd_render(args) -> int:
     return 0
 
 
+def _cmd_export(args) -> int:
+    from corteviral.export import export_approved
+    settings = load_settings(Path(args.config) if args.config else None)
+    project = Project.load(Path(args.project))
+    res = export_approved(project, settings, on_progress=_progress("export"))
+    print()
+    for f in res["files"]:
+        print(f"  {f['mp4']}")
+    for e in res["errors"]:
+        print(f"  ERRO {e['id']}: {e['error']}", file=sys.stderr)
+    if res["duplicates"]:
+        print(f"Aviso: {len(res['duplicates'])} trecho(s) já tinham sido exportados antes.")
+    if res["unauthorized"]:
+        print("Aviso: streamer não marcado como autorizado no preset.")
+    print(f"Pasta: {res['folder']}")
+    return 0 if not res["errors"] else 1
+
+
 def _cmd_info(args) -> int:
     project = Project.load(Path(args.project))
     print(f"Projeto:  {project.dir}")
@@ -197,6 +215,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--captions", dest="captions", action="store_true", default=None, help="força legendas")
     p.add_argument("--no-captions", dest="captions", action="store_false", help="sem legendas")
     p.set_defaults(func=_cmd_render)
+
+    p = sub.add_parser("export", help="exporta os clipes aprovados com os textos de postagem")
+    p.add_argument("project", help="pasta do projeto")
+    p.add_argument("--config", help="caminho do config.yaml")
+    p.set_defaults(func=_cmd_export)
 
     p = sub.add_parser("ui", help="abre a interface gráfica")
     p.add_argument("--config", help="caminho do config.yaml")
