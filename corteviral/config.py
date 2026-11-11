@@ -29,8 +29,18 @@ class PathsSettings(_Strict):
     models_dir: Path = Path("models")
 
 
+class DownloadSettings(_Strict):
+    # Navegador logado para vídeos com restrição de idade/login: firefox | edge | chrome | brave | opera
+    cookies_from_browser: str | None = None
+    # Alternativa: arquivo cookies.txt (formato Netscape) exportado do navegador
+    cookies_file: Path | None = None
+    max_height: int = 1080
+    concurrent_fragments: int = 4
+
+
 class Settings(_Strict):
     paths: PathsSettings = Field(default_factory=PathsSettings)
+    download: DownloadSettings = Field(default_factory=DownloadSettings)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
 
 
