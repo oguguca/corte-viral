@@ -12,6 +12,7 @@ def settings_tmp(tmp_path):
     s = Settings()
     s.paths.projects_dir = tmp_path / "projects"
     s.paths.models_dir = tmp_path / "models"
+    s.paths.data_dir = tmp_path / "data"
     return s
 
 

@@ -18,9 +18,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
+from corteviral.browser_session import (BrowserSessionError, edge_path, export_cookies,
+                                        open_login_window, profile_in_use)
 from corteviral.config import Settings
 from corteviral.ffmpeg import FFmpegError
-from corteviral.pipeline.ingest import IngestError, ingest
+from corteviral.pipeline.ingest import IngestError, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
 from corteviral.project import PROJECT_FILE, Project
 
@@ -55,6 +57,28 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
     app = FastAPI(title="Corte Viral")
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
+    data_dir = Path(settings.paths.data_dir)
+    yt_profile = data_dir / "session-profile"
+    yt_cookies = data_dir / "session-cookies.txt"
+    yt_status = data_dir / "session-status.json"
+
+    def _yt_sync() -> dict:
+        info = export_cookies(yt_profile, yt_cookies)
+        info["synced_at"] = time.time()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        yt_status.write_text(json.dumps(info), encoding="utf-8")
+        return info
+
+    def _yt_state() -> dict:
+        state = {"connected": False, "platforms": [], "synced_at": None,
+                 "profile": yt_profile.exists(), "edge": edge_path() is not None}
+        if yt_status.exists():
+            try:
+                state.update(json.loads(yt_status.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        state["connected"] = bool(state.get("platforms")) and yt_cookies.exists()
+        return state
 
     # --- helpers ---------------------------------------------------------
     def _project_dir(name: str) -> Path:
@@ -73,6 +97,16 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
             s.whisper.language = req.language
         s.download.cookies_from_browser = req.cookies_from_browser or None
         s.download.cookies_file = Path(req.cookies_file) if req.cookies_file else None
+
+        # Sem escolha manual: usa a sessão de login do app (renovada agora; se falhar, a última salva)
+        if is_url(req.source) and not req.cookies_from_browser and not req.cookies_file and yt_profile.exists():
+            job.update(message="lendo sessão de login")
+            try:
+                _yt_sync()
+            except BrowserSessionError:
+                pass
+            if yt_cookies.exists():
+                s.download.cookies_file = yt_cookies
 
         def progress(stage: str, frac: float, msg: str) -> None:
             job.update(stage=stage, progress=round(frac, 4), message=msg)
@@ -155,6 +189,29 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
         if os.name == "nt":
             os.startfile(d)  # noqa: S606 — só abre a pasta do projeto no Explorer
         return {"ok": True}
+
+    @app.get("/api/session/status")
+    def session_status():
+        return _yt_state()
+
+    @app.post("/api/session/connect")
+    def session_connect():
+        try:
+            open_login_window(yt_profile)
+        except BrowserSessionError as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True}
+
+    @app.post("/api/session/sync")
+    def session_sync():
+        try:
+            return _yt_sync()
+        except BrowserSessionError as e:
+            raise HTTPException(409, str(e))
+
+    @app.get("/api/session/window-open")
+    def session_window_open():
+        return {"open": yt_profile.exists() and profile_in_use(yt_profile)}
 
     @app.post("/api/pick-file")
     def pick_file(kind: Literal["video", "cookies"] = "video"):

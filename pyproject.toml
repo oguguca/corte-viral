@@ -9,12 +9,13 @@ description = "Transforma lives e VODs longos em clipes verticais prontos para T
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "faster-whisper>=1.1",
-    "yt-dlp>=2025.1",
+    "yt-dlp[default,curl-cffi]>=2025.1",
     "pydantic>=2.7",
     "pyyaml>=6",
     "python-dotenv>=1",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "websocket-client>=1.8",
     "nvidia-cublas-cu12",
     "nvidia-cudnn-cu12==9.*",
 ]

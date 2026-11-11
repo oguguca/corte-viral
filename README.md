@@ -64,23 +64,21 @@ Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela
 você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
 sincronizada com o vídeo (clique numa palavra para pular até ela).
 
-### Vídeos com restrição de idade, privados ou de membros
+### Contas conectadas (vídeos com restrição de idade, privados ou de inscritos)
 
-O download precisa da sua sessão logada. Em "Login do navegador":
+Clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
+Twitch e Kick, num perfil separado só do app. Entre nas contas que quiser e
+feche a janela. Pronto: antes de cada download o app renova essa sessão sozinho.
 
-- **Firefox** — funciona com ele aberto.
-- **Chrome, Brave, Edge, Opera** (Chromium) — feche o navegador **totalmente**
-  (inclusive da bandeja do sistema) antes de processar. Versões recentes do
-  Chromium criptografam os cookies de um jeito que às vezes impede a leitura;
-  nesse caso use a opção abaixo.
-- **Arquivo cookies.txt** — funciona sempre, com o navegador aberto:
-  1. Instale a extensão **"Get cookies.txt LOCALLY"** (código aberto, não envia nada
-     para a internet) no seu navegador.
-  2. Abra youtube.com logado, clique na extensão e exporte.
-  3. No app, escolha "Arquivo cookies.txt…" e selecione o arquivo.
+- Funciona com **qualquer navegador** que você usa (Brave, Chrome, Firefox…),
+  mesmo aberto — o app não mexe no seu navegador principal.
+- Por quê assim: Chrome/Brave/Edge recentes criptografam os cookies de um jeito
+  que nenhum programa externo consegue ler. No perfil do app, o próprio Edge
+  entrega a sessão ao Corte Viral.
+- A sessão fica em `data/` (fora do git). Para desconectar, apague essa pasta.
 
-> O cookies.txt dá acesso à sua conta: guarde-o fora da pasta do projeto e não
-> compartilhe. Se ele vazar, saia da conta em todos os dispositivos no YouTube.
+Alternativas em "Outras formas de login": Firefox (lê direto do perfil) ou um
+arquivo `cookies.txt` exportado com a extensão "Get cookies.txt LOCALLY".
 
 ### Linha de comando
 

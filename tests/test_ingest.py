@@ -64,7 +64,7 @@ def test_age_restricted_error_is_friendly():
     from corteviral.pipeline.ingest import _friendly_error
     raw = "ERROR: [youtube] PhUWBpUeCjk: Sign in to confirm your age. This video may be inappropriate"
     msg = _friendly_error(raw)
-    assert "restrição de idade" in msg and "Login do navegador" in msg and "--cookies-from-browser" in msg
+    assert "restrição de idade" in msg and "Conectar contas" in msg and "--cookies-from-browser" in msg
 
 
 def test_private_or_members_error_is_friendly():
@@ -119,7 +119,7 @@ def test_probe_does_not_follow_playlists(monkeypatch, settings_tmp):
 def test_locked_chromium_cookie_db_message_is_browser_agnostic():
     from corteviral.pipeline.ingest import _friendly_error
     msg = _friendly_error("ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271")
-    assert "Brave" in msg and "cookies.txt" in msg
+    assert "Brave" in msg and "Conectar contas" in msg
 
 
 def test_ydl_opts_include_cookie_file(settings_tmp, tmp_path):
@@ -127,3 +127,8 @@ def test_ydl_opts_include_cookie_file(settings_tmp, tmp_path):
     f = tmp_path / "cookies.txt"
     settings_tmp.download.cookies_file = f
     assert _ydl_base_opts(settings_tmp)["cookiefile"] == str(f)
+
+
+def test_ydl_opts_enable_node_js_runtime(settings_tmp):
+    from corteviral.pipeline.ingest import _ydl_base_opts
+    assert "node" in _ydl_base_opts(settings_tmp)["js_runtimes"]

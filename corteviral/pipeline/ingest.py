@@ -17,19 +17,19 @@ _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 # (trecho da mensagem do yt-dlp, explicação em PT-BR)
 _FRIENDLY = [
     (("confirm your age", "age-restricted", "age restricted"),
-     "vídeo com restrição de idade: o YouTube exige login. Entre na sua conta do YouTube num navegador e "
-     "escolha esse navegador em \"Login do navegador\" (linha de comando: --cookies-from-browser firefox)"),
+     "vídeo com restrição de idade: o YouTube exige login. Clique em \"Conectar contas\" e entre na sua "
+     "conta (linha de comando: --cookies-from-browser firefox)"),
     (("only available for subscribers", "members-only", "join this channel", "subscriber-only"),
      "vídeo exclusivo para inscritos/membros: é preciso login com uma conta que tenha acesso "
-     "(escolha o navegador em \"Login do navegador\" / --cookies-from-browser)"),
+     "(clique em \"Conectar contas\" / --cookies-from-browser)"),
     (("private video", "sign in if you've been granted access"),
      "vídeo privado: é preciso login com uma conta que tenha acesso "
-     "(escolha o navegador em \"Login do navegador\" / --cookies-from-browser)"),
+     "(clique em \"Conectar contas\" / --cookies-from-browser)"),
     (("could not copy chrome cookie database", "failed to decrypt with dpapi", "could not find chrome cookies",
       "failed to decrypt", "app-bound encryption"),
      "não foi possível ler os cookies do navegador. Navegadores baseados em Chromium (Chrome, Brave, Edge, "
      "Opera) travam o arquivo enquanto estão abertos: feche-o totalmente (inclusive da bandeja do sistema) "
-     "e tente de novo. Se continuar falhando, use a opção \"Arquivo cookies.txt\" (veja o README)"),
+     "e tente de novo — ou, melhor, use \"Conectar contas\", que funciona com qualquer navegador aberto"),
     (("http error 403",),
      "o site recusou o download (HTTP 403). Atualize o yt-dlp (pip install -U yt-dlp) e tente de novo"),
     (("video unavailable", "this video is not available", "does not exist"),
@@ -62,7 +62,9 @@ def _friendly_error(raw: str) -> str:
 
 
 def _ydl_base_opts(settings: Settings) -> dict:
-    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _QuietLogger()}
+    opts: dict = {"quiet": True, "no_warnings": True, "noplaylist": True, "logger": _QuietLogger(),
+                  # YouTube exige um runtime JS; o Node (já instalado) entra junto com o Deno padrão
+                  "js_runtimes": {"deno": {}, "node": {}}}
     if settings.download.cookies_from_browser:
         opts["cookiesfrombrowser"] = (settings.download.cookies_from_browser,)
     if settings.download.cookies_file:

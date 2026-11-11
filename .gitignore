@@ -76,3 +76,6 @@ config.yaml
 # --- Sessões de navegador (nunca versionar) ---
 cookies.txt
 *cookies*.txt
+
+# --- Sessão do YouTube do app e dados locais ---
+data/

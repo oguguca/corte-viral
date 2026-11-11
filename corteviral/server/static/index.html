@@ -43,6 +43,12 @@
   .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
   .error { background: #2a1416; border: 1px solid #5a2328; color: #ffb3b3; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; white-space: pre-wrap; }
   .done { color: var(--ok); }
+  .acct { display: flex; gap: 8px; align-items: center; }
+  .acct-status { flex: 1; font-size: 13px; color: var(--muted); }
+  .acct-status b { color: var(--ok); font-weight: 600; }
+  button.attention { outline: 2px solid var(--accent); animation: pulse 1s ease-in-out 3; }
+  details.adv { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  details.adv summary { cursor: pointer; margin-bottom: 6px; }
   select.attention { outline: 2px solid var(--accent); outline-offset: -1px; animation: pulse 1s ease-in-out 3; }
   @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(255,230,0,.35); } }
 
@@ -105,21 +111,25 @@
           </select>
         </div>
       </div>
-      <label for="cookies">Login do navegador</label>
-      <select id="cookies">
-        <option value="">Nenhum</option>
-        <option value="firefox">Firefox</option>
-        <option value="edge">Edge</option>
-        <option value="chrome">Chrome (feche-o antes)</option>
-        <option value="brave">Brave (feche-o antes)</option>
-        <option value="opera">Opera (feche-o antes)</option>
-        <option value="file">Arquivo cookies.txt…</option>
-      </select>
-      <div class="row" id="cookieFileRow" style="display:none;margin-top:8px">
-        <input id="cookieFile" placeholder="C:\…\cookies.txt" autocomplete="off">
-        <button id="pickCookies" style="flex:0" title="Escolher cookies.txt">📁</button>
+      <label>Contas conectadas</label>
+      <div class="acct">
+        <div id="acctStatus" class="acct-status">verificando…</div>
+        <button id="acctConnect">Conectar contas</button>
       </div>
-      <div class="hint">Só para vídeos com restrição de idade, privados ou de membros.</div>
+      <div class="hint" id="acctHint">Entre no YouTube, Twitch ou Kick numa janela do app — funciona com qualquer
+        navegador aberto. Só é preciso para vídeos com restrição de idade, privados ou de inscritos.</div>
+      <details class="adv">
+        <summary>Outras formas de login</summary>
+        <select id="cookies">
+          <option value="">Usar contas conectadas</option>
+          <option value="firefox">Firefox</option>
+          <option value="file">Arquivo cookies.txt…</option>
+        </select>
+        <div class="row" id="cookieFileRow" style="display:none;margin-top:8px">
+          <input id="cookieFile" placeholder="C:\…\cookies.txt" autocomplete="off">
+          <button id="pickCookies" style="flex:0" title="Escolher cookies.txt">📁</button>
+        </div>
+      </details>
       <button class="primary" id="start">Processar</button>
     </section>
 
@@ -212,10 +222,9 @@ function renderJob(job) {
   if (job.status === "error") {
     $("stage").innerHTML = '<span style="color:var(--err)">✕ Falhou</span>';
     $("pct").textContent = "";
-    if (/login do navegador|cookies/i.test(job.error || "")) {
-      const sel = $("cookies");
-      sel.classList.add("attention");
-      sel.focus();
+    if (/conectar contas|login|cookies/i.test(job.error || "")) {
+      $("acctConnect").classList.add("attention");
+      $("acctConnect").focus();
     }
   }
 }
@@ -337,8 +346,46 @@ function search(q) {
   if (first) first.scrollIntoView({ block: "center" });
 }
 
+// ---- contas conectadas ------------------------------------------------------
+const NAMES = { youtube: "YouTube", twitch: "Twitch", kick: "Kick" };
+async function loadAccounts() {
+  const s = await api("/api/session/status");
+  if (!s.edge) { $("acctStatus").textContent = "Microsoft Edge não encontrado"; $("acctConnect").disabled = true; return; }
+  $("acctStatus").innerHTML = s.platforms && s.platforms.length
+    ? "<b>✓</b> " + s.platforms.map((p) => NAMES[p] || p).join(", ")
+    : "nenhuma conta conectada";
+  $("acctConnect").textContent = s.platforms && s.platforms.length ? "Gerenciar" : "Conectar contas";
+}
+
+$("acctConnect").onclick = async () => {
+  const btn = $("acctConnect");
+  btn.classList.remove("attention");
+  btn.disabled = true;
+  try {
+    await api("/api/session/connect", { method: "POST" });
+    $("acctStatus").textContent = "Entre nas contas na janela que abriu e feche-a quando terminar…";
+    // espera a janela abrir (lockfile) e depois fechar
+    let seenOpen = false;
+    for (let i = 0; i < 1200; i++) {
+      const { open } = await api("/api/session/window-open");
+      if (open) seenOpen = true;
+      if (seenOpen && !open) break;
+      if (!seenOpen && i > 40) break; // 20s sem detectar a janela: tenta sincronizar mesmo assim
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    $("acctStatus").textContent = "lendo sessão…";
+    await api("/api/session/sync", { method: "POST" });
+  } catch (e) {
+    $("acctStatus").textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    await loadAccounts().catch(() => {});
+  }
+};
+
 // ---- inicialização --------------------------------------------------------
 (async () => {
+  loadAccounts().catch(() => {});
   await loadProjects();
   const running = await api("/api/jobs");
   if (running) watch(running.id);
