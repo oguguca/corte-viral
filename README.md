@@ -64,8 +64,23 @@ Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela
 você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
 sincronizada com o vídeo (clique numa palavra para pular até ela).
 
-Vídeos com restrição de idade, privados ou de membros: escolha seu navegador em
-"Login do navegador" (você precisa estar logado nele).
+### Vídeos com restrição de idade, privados ou de membros
+
+O download precisa da sua sessão logada. Em "Login do navegador":
+
+- **Firefox** — funciona com ele aberto.
+- **Chrome, Brave, Edge, Opera** (Chromium) — feche o navegador **totalmente**
+  (inclusive da bandeja do sistema) antes de processar. Versões recentes do
+  Chromium criptografam os cookies de um jeito que às vezes impede a leitura;
+  nesse caso use a opção abaixo.
+- **Arquivo cookies.txt** — funciona sempre, com o navegador aberto:
+  1. Instale a extensão **"Get cookies.txt LOCALLY"** (código aberto, não envia nada
+     para a internet) no seu navegador.
+  2. Abra youtube.com logado, clique na extensão e exporte.
+  3. No app, escolha "Arquivo cookies.txt…" e selecione o arquivo.
+
+> O cookies.txt dá acesso à sua conta: guarde-o fora da pasta do projeto e não
+> compartilhe. Se ele vazar, saia da conta em todos os dispositivos no YouTube.
 
 ### Linha de comando
 

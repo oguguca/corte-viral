@@ -72,3 +72,7 @@ desktop.ini
 
 # --- Config local (o exemplo é versionado) ---
 config.yaml
+
+# --- Sessões de navegador (nunca versionar) ---
+cookies.txt
+*cookies*.txt

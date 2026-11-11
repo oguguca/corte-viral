@@ -40,6 +40,7 @@ class JobRequest(BaseModel):
     model: str | None = None
     language: Literal["auto", "pt", "en"] | None = None
     cookies_from_browser: str | None = None
+    cookies_file: str | None = None
 
 
 class _Jobs:
@@ -71,6 +72,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
         if req.language:
             s.whisper.language = req.language
         s.download.cookies_from_browser = req.cookies_from_browser or None
+        s.download.cookies_file = Path(req.cookies_file) if req.cookies_file else None
 
         def progress(stage: str, frac: float, msg: str) -> None:
             job.update(stage=stage, progress=round(frac, 4), message=msg)
@@ -155,15 +157,19 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.post("/api/pick-file")
-    def pick_file():
+    def pick_file(kind: Literal["video", "cookies"] = "video"):
         """Abre o seletor de arquivos nativo do Windows (processo separado, não trava o servidor)."""
+        types = ("[('Cookies','*.txt'),('Todos','*.*')]" if kind == "cookies"
+                 else "[('Vídeos','*.mp4 *.mkv *.mov *.webm *.flv *.ts'),('Todos','*.*')]")
+        title = "Escolha o cookies.txt" if kind == "cookies" else "Escolha o vídeo"
         script = (
             "import tkinter as tk; from tkinter import filedialog as fd; r=tk.Tk(); r.withdraw(); "
             "r.attributes('-topmost', True); "
-            "p=fd.askopenfilename(title='Escolha o vídeo', filetypes=[('Vídeos','*.mp4 *.mkv *.mov *.webm *.flv *.ts'),('Todos','*.*')]); "
+            f"p=fd.askopenfilename(title={title!r}, filetypes={types}); "
             "print(p, end='')"
         )
-        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, encoding="utf-8")
+        proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, encoding="utf-8",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         return {"path": proc.stdout.strip() or None}
 
     return app

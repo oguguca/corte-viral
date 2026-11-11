@@ -95,3 +95,15 @@ def test_video_endpoint_supports_range(client, settings_tmp, sample_video):
     p.save()
     r = client.get(f"/api/projects/{p.dir.name}/video", headers={"Range": "bytes=0-99"})
     assert r.status_code == 206 and len(r.content) == 100
+
+
+def test_job_passes_cookie_file_to_settings(settings_tmp):
+    seen = {}
+
+    def capture(source, settings, on_progress):
+        seen["file"] = settings.download.cookies_file
+        seen["browser"] = settings.download.cookies_from_browser
+        raise IngestError("fim")
+    c = TestClient(create_app(settings_tmp, pipeline=capture))
+    _wait(c, c.post("/api/jobs", json={"source": "x", "cookies_file": "C:/c/cookies.txt"}).json()["id"])
+    assert str(seen["file"]).replace("\\", "/") == "C:/c/cookies.txt" and seen["browser"] is None

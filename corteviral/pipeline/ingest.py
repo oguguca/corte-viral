@@ -25,9 +25,11 @@ _FRIENDLY = [
     (("private video", "sign in if you've been granted access"),
      "vídeo privado: é preciso login com uma conta que tenha acesso "
      "(escolha o navegador em \"Login do navegador\" / --cookies-from-browser)"),
-    (("could not copy chrome cookie database", "failed to decrypt with dpapi", "could not find chrome cookies"),
-     "não foi possível ler os cookies do Chrome (ele bloqueia o acesso enquanto está aberto). "
-     "Feche o Chrome e tente de novo, ou use o Firefox"),
+    (("could not copy chrome cookie database", "failed to decrypt with dpapi", "could not find chrome cookies",
+      "failed to decrypt", "app-bound encryption"),
+     "não foi possível ler os cookies do navegador. Navegadores baseados em Chromium (Chrome, Brave, Edge, "
+     "Opera) travam o arquivo enquanto estão abertos: feche-o totalmente (inclusive da bandeja do sistema) "
+     "e tente de novo. Se continuar falhando, use a opção \"Arquivo cookies.txt\" (veja o README)"),
     (("http error 403",),
      "o site recusou o download (HTTP 403). Atualize o yt-dlp (pip install -U yt-dlp) e tente de novo"),
     (("video unavailable", "this video is not available", "does not exist"),

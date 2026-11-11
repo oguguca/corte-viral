@@ -111,9 +111,14 @@
         <option value="firefox">Firefox</option>
         <option value="edge">Edge</option>
         <option value="chrome">Chrome (feche-o antes)</option>
-        <option value="brave">Brave</option>
-        <option value="opera">Opera</option>
+        <option value="brave">Brave (feche-o antes)</option>
+        <option value="opera">Opera (feche-o antes)</option>
+        <option value="file">Arquivo cookies.txt…</option>
       </select>
+      <div class="row" id="cookieFileRow" style="display:none;margin-top:8px">
+        <input id="cookieFile" placeholder="C:\…\cookies.txt" autocomplete="off">
+        <button id="pickCookies" style="flex:0" title="Escolher cookies.txt">📁</button>
+      </div>
       <div class="hint">Só para vídeos com restrição de idade, privados ou de membros.</div>
       <button class="primary" id="start">Processar</button>
     </section>
@@ -164,7 +169,14 @@ $("pick").onclick = async () => {
   finally { $("pick").disabled = false; }
 };
 
-$("cookies").onchange = () => $("cookies").classList.remove("attention");
+$("cookies").onchange = () => {
+  $("cookies").classList.remove("attention");
+  $("cookieFileRow").style.display = $("cookies").value === "file" ? "flex" : "none";
+};
+$("pickCookies").onclick = async () => {
+  const { path } = await api("/api/pick-file?kind=cookies", { method: "POST" });
+  if (path) $("cookieFile").value = path;
+};
 
 $("start").onclick = async () => {
   const source = $("source").value.trim();
@@ -172,7 +184,8 @@ $("start").onclick = async () => {
   try {
     const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
       source, model: $("model").value, language: $("language").value,
-      cookies_from_browser: $("cookies").value || null }) });
+      cookies_from_browser: ($("cookies").value && $("cookies").value !== "file") ? $("cookies").value : null,
+      cookies_file: $("cookies").value === "file" ? ($("cookieFile").value.trim() || null) : null }) });
     watch(job.id);
   } catch (e) { showJobError(e.message); }
 };
@@ -199,7 +212,7 @@ function renderJob(job) {
   if (job.status === "error") {
     $("stage").innerHTML = '<span style="color:var(--err)">✕ Falhou</span>';
     $("pct").textContent = "";
-    if (/login do navegador/i.test(job.error || "")) {
+    if (/login do navegador|cookies/i.test(job.error || "")) {
       const sel = $("cookies");
       sel.classList.add("attention");
       sel.focus();

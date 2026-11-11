@@ -114,3 +114,16 @@ def test_probe_does_not_follow_playlists(monkeypatch, settings_tmp):
     monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
     mod._probe_url("https://www.youtube.com/watch?v=abc&list=PL1", settings_tmp)
     assert seen.get("noplaylist") is True
+
+
+def test_locked_chromium_cookie_db_message_is_browser_agnostic():
+    from corteviral.pipeline.ingest import _friendly_error
+    msg = _friendly_error("ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271")
+    assert "Brave" in msg and "cookies.txt" in msg
+
+
+def test_ydl_opts_include_cookie_file(settings_tmp, tmp_path):
+    from corteviral.pipeline.ingest import _ydl_base_opts
+    f = tmp_path / "cookies.txt"
+    settings_tmp.download.cookies_file = f
+    assert _ydl_base_opts(settings_tmp)["cookiefile"] == str(f)
