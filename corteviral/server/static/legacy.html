@@ -1,0 +1,1224 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corte Viral</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-2: #1e222b; --line: #2a2f3a;
+    --text: #e8eaf0; --muted: #8b93a7; --accent: #ffe600; --accent-ink: #111;
+    --ok: #3ddc84; --err: #ff5d5d; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 16px 24px;
+           border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  header small { color: var(--muted); }
+  main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  input, select { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 9px 10px; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+  button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+           padding: 9px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 600; width: 100%; margin-top: 14px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
+
+  #job { display: none; }
+  .stage { display: flex; justify-content: space-between; font-weight: 600; }
+  .bar { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+  .error { background: #2a1416; border: 1px solid #5a2328; color: #ffb3b3; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; white-space: pre-wrap; }
+  .done { color: var(--ok); }
+  /* momentos */
+  .analyze { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin: 16px 0 10px; }
+  .analyze label { margin: 0 0 4px; }
+  .analyze .f { display: flex; flex-direction: column; min-width: 120px; }
+  .analyze button.primary { width: auto; margin: 0; padding: 9px 18px; }
+  .note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .note.warn { color: #fab219; }
+  #moments { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  #moments li { display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 10px 12px; background: var(--panel-2);
+                border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
+  #moments li:hover { border-color: var(--line); }
+  #moments li.playing { border-color: var(--accent); }
+  .score { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; line-height: 1.1; }
+  .score small { display: block; font-size: 10px; font-weight: 400; color: var(--muted); }
+  .m-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .m-top .time { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tag { border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; font-size: 11px; }
+  .tag.ai { border-color: #c98500; color: var(--text); }
+  .m-reason { margin-top: 3px; }
+  .m-hook { margin-top: 3px; font-size: 12px; color: var(--muted); }
+  /* layout do vertical */
+  details.ly { margin-top: 16px; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+  details.ly > summary { cursor: pointer; font-weight: 600; }
+  details.ly > summary small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .ly-body { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; margin-top: 10px; }
+  @media (max-width: 1100px) { .ly-body { grid-template-columns: 1fr; } }
+  .ly-stage { position: relative; user-select: none; touch-action: none; line-height: 0; }
+  .ly-stage img { width: 100%; border-radius: 6px; display: block; }
+  .box { position: absolute; border: 2px solid; border-radius: 3px; cursor: move; box-sizing: border-box; }
+  .box.cam { border-color: #c98500; background: rgba(201,133,0,.12); }
+  .box.game { border-color: #3987e5; background: rgba(57,135,229,.10); }
+  .box b { position: absolute; left: 0; top: -20px; font: 600 11px/18px "Segoe UI", sans-serif; padding: 0 6px;
+           border-radius: 4px; color: #0b0b0b; white-space: nowrap; }
+  .box.cam b { background: #c98500; }
+  .box.game b { background: #3987e5; color: #fff; }
+  .box i { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 3px;
+           background: #fff; border: 2px solid #0b0b0b; cursor: nwse-resize; }
+  .box.hidden { display: none; }
+  .ly-side canvas { width: 180px; height: 320px; border-radius: 8px; background: #000; display: block; }
+  .ly-side .hint { margin-top: 6px; }
+  .ly-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 10px; line-height: 1.45; }
+  .ly-controls .f { display: flex; flex-direction: column; min-width: 140px; }
+  .ly-controls label { margin: 0 0 4px; }
+  .camlist { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; line-height: 1.45; }
+  .camlist button.on { border-color: #c98500; }
+  .m-actions { display: flex; gap: 6px; margin-top: 6px; }
+  .m-actions button { padding: 4px 10px; font-size: 12px; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .modal.open { display: flex; }
+  .modal-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
+  .modal video { height: min(80vh, 760px); aspect-ratio: 9 / 16; background: #000; border-radius: 8px; }
+  .modal .row { justify-content: space-between; align-items: center; }
+  /* avaliação por critério */
+  .tag.video { border-color: #3987e5; color: var(--text); }
+  .m-desc { margin-top: 3px; color: var(--text); }
+  .m-risk { margin-top: 3px; font-size: 12px; color: #fab219; }
+  .crit { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 8px; max-width: 520px; }
+  .crit div { font-size: 11px; color: var(--muted); }
+  .crit .bar { height: 6px; background: var(--panel); border-radius: 99px; margin-top: 3px; overflow: hidden; }
+  .crit .bar > i { display: block; height: 100%; background: #c98500; border-radius: 99px; }
+  .crit b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .m-actions button.fb { min-width: 38px; }
+  .m-actions button.fb.on { border-color: var(--accent); background: #2a2610; }
+  .m-actions .sp { flex: 1; }
+  /* legendas */
+  .cap-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-content: start; line-height: 1.45; }
+  .cap-form label { margin: 0 0 4px; }
+  .cap-form .f { display: flex; flex-direction: column; }
+  .cap-form input[type=color] { height: 36px; padding: 2px; }
+  .cap-form .chk { display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; color: var(--text); font-size: 13px; }
+  .cap-form .chk input { width: auto; }
+  .m-cap { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .m-cap input { width: auto; }
+  .cap-edit { margin-top: 8px; display: grid; gap: 6px; }
+  .cap-edit textarea { width: 100%; min-height: 64px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+                       border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+  .cap-edit .row { justify-content: flex-start; }
+  .cap-edit .row > * { flex: 0 0 auto; }
+  /* revisão e exportação */
+  .rv-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; }
+  .rv-bar select { width: auto; }
+  .rv-bar .grow { flex: 1; }
+  #moments li.approved { box-shadow: inset 3px 0 0 #0ca30c; }
+  #moments li.discarded { opacity: .55; }
+  .st { font-size: 11px; border-radius: 99px; padding: 0 8px; border: 1px solid var(--line); }
+  .st.approved { border-color: #0ca30c; color: var(--text); }
+  .st.discarded { border-color: #d03b3b; color: var(--text); }
+  details.rv { margin-top: 8px; }
+  details.rv > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .rv-grid { display: grid; gap: 10px; margin-top: 8px; }
+  .rv-cut { display: flex; gap: 6px; flex-wrap: wrap; align-items: end; }
+  .rv-cut .f { display: flex; flex-direction: column; width: 110px; }
+  .rv-cut label, .rv-text label { margin: 0 0 4px; }
+  .rv-cut button { padding: 6px 8px; font-size: 12px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tabs button { padding: 4px 10px; font-size: 12px; }
+  .tabs button.on { border-color: var(--accent); }
+  .rv-text { display: grid; gap: 6px; }
+  .rv-text textarea { width: 100%; min-height: 70px; background: var(--panel); color: var(--text);
+                      border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+  .export-res { margin-top: 8px; font-size: 13px; }
+  /* barra rápida: duração e legenda */
+  .quick { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 2px 0 10px; font-size: 13px; }
+  .quick .grp { display: flex; gap: 6px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 6px 10px; font-size: 12px; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .switch input { width: auto; }
+  #aCustom { display: none; gap: 6px; align-items: end; }
+  #aCustom input { width: 74px; }
+  /* uso da IA */
+  .usage-hero { display: flex; align-items: baseline; gap: 8px; }
+  .usage-hero b { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .meter { height: 8px; background: var(--panel-2); border-radius: 99px; overflow: hidden; margin: 8px 0 6px; }
+  .meter > div { height: 100%; width: 0; border-radius: 99px; transition: width .4s; }
+  .usage-status { font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .usage-nums { font-size: 12px; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .chart-title { font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  #usageChart { width: 100%; height: 90px; display: block; }
+  #usageChart .bar { fill: #c98500; }
+  #usageChart .grid { stroke: var(--line); stroke-width: 1; }
+  #usageChart text { fill: var(--muted); font-size: 10px; }
+  .tip { position: fixed; pointer-events: none; background: #0b0d11; border: 1px solid var(--line); border-radius: 6px;
+         padding: 4px 8px; font-size: 12px; display: none; z-index: 10; font-variant-numeric: tabular-nums; }
+  .acct { display: flex; gap: 8px; align-items: center; }
+  .acct-status { flex: 1; font-size: 13px; color: var(--muted); }
+  .acct-status b { color: var(--ok); font-weight: 600; }
+  button.attention { outline: 2px solid var(--accent); animation: pulse 1s ease-in-out 3; }
+  details.adv { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  details.adv summary { cursor: pointer; margin-bottom: 6px; }
+  select.attention { outline: 2px solid var(--accent); outline-offset: -1px; animation: pulse 1s ease-in-out 3; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(255,230,0,.35); } }
+
+  #projects { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
+  #projects li { padding: 9px 10px; border-radius: 8px; background: var(--panel-2); cursor: pointer; border: 1px solid transparent; }
+  #projects li:hover { border-color: var(--line); }
+  #projects li.active { border-color: var(--accent); }
+  #projects .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #projects .s { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); font-size: 13px; }
+
+  #viewer .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  #viewer .head h3 { margin: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { background: var(--panel-2); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+  .player { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 1200px) { .player { grid-template-columns: 1fr; } }
+  video { width: 100%; border-radius: 8px; background: #000; max-height: 60vh; }
+  #words { background: var(--panel-2); border-radius: 8px; padding: 12px; height: 60vh; overflow: auto; line-height: 1.9; }
+  #words .seg { margin-bottom: 8px; }
+  #words .ts { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 6px; cursor: pointer; }
+  #words .w { cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+  #words .w:hover { background: var(--line); }
+  #words .w.low { text-decoration: underline dotted var(--muted); }
+  #words .w.now { background: var(--accent); color: var(--accent-ink); }
+  #words mark { background: #4b3f00; color: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Corte <span>Viral</span></h1>
+  <small>Fase 1 · download + transcrição</small>
+</header>
+
+<main>
+  <div class="stack">
+    <section class="card">
+      <h2>Nova tarefa</h2>
+      <label for="source">Link (YouTube, Twitch, Kick) ou arquivo do PC</label>
+      <div class="row">
+        <input id="source" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
+        <button id="pick" style="flex:0" title="Escolher arquivo">📁</button>
+      </div>
+      <div class="row">
+        <div>
+          <label for="model">Modelo</label>
+          <select id="model">
+            <option value="medium">medium (padrão)</option>
+            <option value="small">small (2× mais rápido)</option>
+            <option value="base">base (teste rápido)</option>
+            <option value="tiny">tiny (só p/ testar)</option>
+          </select>
+        </div>
+        <div>
+          <label for="language">Idioma</label>
+          <select id="language">
+            <option value="pt">Português</option>
+            <option value="auto">Detectar</option>
+            <option value="en">Inglês</option>
+          </select>
+        </div>
+      </div>
+      <label>Contas conectadas</label>
+      <div class="acct">
+        <div id="acctStatus" class="acct-status">verificando…</div>
+        <button id="acctConnect">Conectar contas</button>
+      </div>
+      <div class="hint" id="acctHint">Entre no YouTube, Twitch ou Kick numa janela do app — funciona com qualquer
+        navegador aberto. Só é preciso para vídeos com restrição de idade, privados ou de inscritos.</div>
+      <details class="adv">
+        <summary>Outras formas de login</summary>
+        <select id="cookies">
+          <option value="">Usar contas conectadas</option>
+          <option value="firefox">Firefox</option>
+          <option value="file">Arquivo cookies.txt…</option>
+        </select>
+        <div class="row" id="cookieFileRow" style="display:none;margin-top:8px">
+          <input id="cookieFile" placeholder="C:\…\cookies.txt" autocomplete="off">
+          <button id="pickCookies" style="flex:0" title="Escolher cookies.txt">📁</button>
+        </div>
+      </details>
+      <button class="primary" id="start">Processar</button>
+    </section>
+
+    <section class="card" id="job">
+      <div class="stage"><span id="stage">—</span><span id="pct">0%</span></div>
+      <div class="bar"><div id="fill"></div></div>
+      <div class="meta"><span id="msg"></span><span id="eta"></span></div>
+      <div class="error" id="err"></div>
+    </section>
+
+    <section class="card" id="usageCard">
+      <h2>Uso da IA hoje</h2>
+      <div class="usage-hero"><b id="uPct">0%</b><span class="hint" style="margin:0">do limite diário</span></div>
+      <div class="meter" role="meter" aria-label="Uso do limite diário" aria-valuemin="0" aria-valuemax="100" id="uMeterWrap"><div id="uMeter"></div></div>
+      <div class="usage-status" id="uStatus"></div>
+      <div class="usage-nums" id="uNums"></div>
+      <div class="chart-title">Tokens por minuto — última hora</div>
+      <svg id="usageChart" role="img" aria-label="Tokens por minuto na última hora"></svg>
+      <details class="adv"><summary>Ver em tabela</summary><div id="uTable" class="usage-nums"></div></details>
+    </section>
+
+    <section class="card">
+      <h2>Projetos</h2>
+      <ul id="projects"></ul>
+    </section>
+  </div>
+
+  <section class="card" id="viewer">
+    <div class="empty">Escolha um projeto à esquerda para ver o vídeo e a transcrição.</div>
+  </section>
+</main>
+<div class="tip" id="tip"></div>
+<div class="modal" id="clipModal" role="dialog" aria-modal="true" aria-label="Clipe vertical">
+  <div class="modal-card">
+    <div class="row"><b id="clipTitle"></b><span class="row" style="flex:0;gap:6px">
+      <button id="clipFolder">Abrir pasta</button><button id="clipClose">Fechar</button></span></div>
+    <video id="clipVideo" controls playsinline></video>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let playUntil = null;
+const STAGES = { ingest: "Baixando / extraindo áudio", transcribe: "Transcrevendo", analyze: "Encontrando momentos", render: "Gerando clipes", posts: "Escrevendo textos", export: "Exportando" };
+let current = null;      // projeto aberto
+let words = [];          // palavras do projeto aberto
+let wordEls = [];
+
+const fmt = (s) => {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(sec).padStart(2, "0");
+};
+const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const body = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(body?.detail || r.statusText);
+  return body;
+}
+
+// ---- nova tarefa ---------------------------------------------------------
+$("pick").onclick = async () => {
+  $("pick").disabled = true;
+  try { const { path } = await api("/api/pick-file", { method: "POST" }); if (path) $("source").value = path; }
+  finally { $("pick").disabled = false; }
+};
+
+$("cookies").onchange = () => {
+  $("cookies").classList.remove("attention");
+  $("cookieFileRow").style.display = $("cookies").value === "file" ? "flex" : "none";
+};
+$("pickCookies").onclick = async () => {
+  const { path } = await api("/api/pick-file?kind=cookies", { method: "POST" });
+  if (path) $("cookieFile").value = path;
+};
+
+$("start").onclick = async () => {
+  const source = $("source").value.trim();
+  if (!source) { $("source").focus(); return; }
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
+      source, model: $("model").value, language: $("language").value,
+      cookies_from_browser: ($("cookies").value && $("cookies").value !== "file") ? $("cookies").value : null,
+      cookies_file: $("cookies").value === "file" ? ($("cookieFile").value.trim() || null) : null }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+};
+
+function showJobError(text) {
+  $("job").style.display = "block";
+  $("err").style.display = "block";
+  $("err").textContent = text;
+}
+
+function renderJob(job) {
+  $("job").style.display = "block";
+  $("stage").textContent = STAGES[job.stage] || job.stage;
+  const pct = Math.round(job.progress * 100);
+  $("pct").textContent = pct + "%";
+  $("fill").style.width = pct + "%";
+  $("msg").textContent = job.message || "";
+  const elapsed = (Date.now() / 1000) - job.started_at;
+  $("eta").textContent = "decorrido " + fmt(elapsed);
+  $("err").style.display = job.status === "error" ? "block" : "none";
+  $("err").textContent = job.error || "";
+  $("start").disabled = job.status === "running";
+  if (job.status === "done") { $("stage").innerHTML = '<span class="done">✓ Concluído</span>'; }
+  if (job.status === "error") {
+    $("stage").innerHTML = '<span style="color:var(--err)">✕ Falhou</span>';
+    $("pct").textContent = "";
+    if (/conectar contas|login|cookies/i.test(job.error || "")) {
+      $("acctConnect").classList.add("attention");
+      $("acctConnect").focus();
+    }
+  }
+}
+
+async function watch(id) {
+  $("start").disabled = true;
+  for (;;) {
+    const job = await api("/api/jobs/" + id);
+    renderJob(job);
+    if (job.status !== "running") {
+      $("start").disabled = false;
+      await loadProjects();
+      if (job.stage === "export" && job.status === "done") showExportResult(job);
+      if (job.project && ["analyze", "render", "posts", "export"].includes(job.stage) && current === job.project) {
+        await loadMoments(job.project);
+        if (job.stage === "render" && job.status === "done" && lastRenderIds && lastRenderIds.length === 1) openClip(job.project, lastRenderIds[0]);
+      }
+      else if (job.project) openProject(job.project);
+      return;
+    }
+    if (job.stage === "analyze") loadUsage();
+    await new Promise((r) => setTimeout(r, 700));
+  }
+}
+
+// ---- projetos -----------------------------------------------------------
+async function loadProjects() {
+  const list = await api("/api/projects");
+  const ul = $("projects");
+  if (!list.length) { ul.innerHTML = '<li class="empty" style="cursor:default">Nenhum projeto ainda.</li>'; return; }
+  ul.innerHTML = list.map((p) => `
+    <li data-name="${esc(p.name)}" class="${p.name === current ? "active" : ""}">
+      <div class="t">${esc(p.title || p.name)}</div>
+      <div class="s">${fmt(p.duration)} · ${p.has_transcript ? "transcrito" : "sem transcrição"}</div>
+    </li>`).join("");
+  ul.querySelectorAll("li[data-name]").forEach((li) => li.onclick = () => openProject(li.dataset.name));
+}
+
+async function openProject(name) {
+  current = name;
+  playUntil = null;
+  lyState = null;
+  document.querySelectorAll("#projects li").forEach((li) => li.classList.toggle("active", li.dataset.name === name));
+  const v = $("viewer");
+  let t = null;
+  try { t = await api(`/api/projects/${encodeURIComponent(name)}/transcript`); } catch (e) { /* sem transcrição */ }
+  v.innerHTML = `
+    <div class="head">
+      <h3>${esc(name)}</h3>
+      <div class="row" style="flex:0">
+        <input id="q" placeholder="Buscar na transcrição…" style="width:220px">
+        <button id="folder">Abrir pasta</button>
+      </div>
+    </div>
+    ${t ? `<div class="chips">
+      <span class="chip">idioma: ${esc(t.language)}</span>
+      <span class="chip">${t.words.length} palavras</span>
+      <span class="chip">modelo: ${esc(t.model || "?")} · ${esc(t.device || "?")}</span>
+      <span class="chip">duração: ${fmt(t.duration)}</span></div>` : ""}
+    <div class="player">
+      <video id="video" controls preload="metadata" src="/api/projects/${encodeURIComponent(name)}/video"></video>
+      <div id="words">${t ? "" : '<span class="empty">Este projeto ainda não tem transcrição.</span>'}</div>
+    </div>
+    ${t ? `<div class="analyze">
+      <div class="f"><label for="aDur">Duração do clipe</label>
+        <select id="aDur">
+          <option value="15-30">15–30 s (curto)</option>
+          <option value="15-60" selected>15–60 s (viral)</option>
+          <option value="30-60">30–60 s</option>
+          <option value="61-90">61–90 s (monetização)</option>
+          <option value="61-120">61–120 s (monetização)</option>
+          <option value="custom">Personalizado…</option>
+        </select></div>
+      <div id="aCustom"><div class="f" style="min-width:0"><label for="aMin">Mín. (s)</label><input id="aMin" type="number" min="5" max="175" value="20"></div>
+        <div class="f" style="min-width:0"><label for="aMax">Máx. (s)</label><input id="aMax" type="number" min="10" max="180" value="45"></div></div>
+      <div class="f" style="min-width:80px"><label for="aN">Momentos a encontrar</label><input id="aN" type="number" min="1" max="30" value="10"></div>
+      <div class="f"><label for="aProvider">IA</label>
+        <select id="aProvider"><option value="gemini">Gemini (grátis)</option><option value="none">Sem IA (só sinais)</option><option value="anthropic">Claude (pago)</option></select></div>
+      <button class="primary" id="aStart">Encontrar momentos</button>
+      <button id="aForce" title="Ignora o resultado salvo e avalia tudo de novo (gasta cota da IA)">Reavaliar do zero</button>
+      <div class="f" style="min-width:110px;margin-left:12px"><label for="rN">Clipes a gerar</label>
+        <input id="rN" type="number" min="1" max="30" value="5" title="Gera os N momentos de maior nota"></div>
+      <button id="rAll" title="Gera o MP4 vertical dos momentos de maior nota">Gerar os melhores</button>
+    </div>
+    <div class="quick">
+      <div class="grp"><span>Legenda</span>
+        <label class="switch" title="Liga/desliga a legenda nos próximos clipes gerados"><input type="checkbox" id="qCapOn"> <span id="qCapOnTxt">ligada</span></label></div>
+      <div class="grp"><span>Posição</span>
+        <div class="seg" role="group" aria-label="Posição da legenda">
+          <button data-qpos="0.47">Em cima</button><button data-qpos="0.58">Meio</button><button data-qpos="0.70">Embaixo</button></div></div>
+      <span class="hint" id="qCapNote" style="margin:0">Vale para os próximos clipes gerados (“Gerar de novo” nos que já existem).</span>
+    </div>
+    <div class="rv-bar">
+      <label for="rvFilter" style="margin:0">Mostrar</label>
+      <select id="rvFilter"><option value="all">Todos</option><option value="pending">A revisar</option>
+        <option value="approved">Aprovados</option><option value="discarded">Descartados</option></select>
+      <span class="grow"></span>
+      <button id="rvPosts" title="A IA escreve gancho, título, descrição e hashtags para cada rede">Gerar textos com IA</button>
+      <button class="primary" id="rvExport" style="width:auto;margin:0">Exportar aprovados</button>
+    </div>
+    <div id="rvNote" class="note"></div>
+    <div id="mNote" class="note"></div>
+    <ul id="moments"></ul>
+    <details class="ly" id="lyBox">
+      <summary>Layout do vertical <small id="lyOrigin">carregando…</small></summary>
+      <div class="ly-body">
+        <div>
+          <div class="ly-stage" id="lyStage">
+            <img id="lyImg" alt="Quadro do vídeo para ajustar o recorte">
+            <div class="box game" id="boxGame"><b>Gameplay</b><i></i></div>
+            <div class="box cam" id="boxCam"><b>Câmera</b><i></i></div>
+          </div>
+          <div class="camlist" id="camList"></div>
+        </div>
+        <div class="ly-side">
+          <canvas id="lyPreview" width="360" height="640" aria-label="Prévia do vertical 9:16"></canvas>
+          <div class="hint">Prévia do recorte. Arraste os retângulos; o canto branco redimensiona.</div>
+        </div>
+      </div>
+      <div class="ly-controls">
+        <div class="f"><label for="lyStreamer">Streamer</label><input id="lyStreamer" placeholder="nome do canal"></div>
+        <div class="f"><label for="lyLayout">Layout</label>
+          <select id="lyLayout"><option value="split">Câmera + gameplay</option>
+            <option value="face-follow">Seguir o rosto</option><option value="fallback">Vídeo com fundo desfocado</option></select></div>
+        <div class="f"><label for="lyCredit">Crédito (opcional)</label><input id="lyCredit" placeholder="@canal"></div>
+        <label class="m-cap" style="font-size:13px;color:var(--text)"><input type="checkbox" id="lyAuth"> Tenho autorização deste streamer para postar cortes</label>
+        <button class="primary" id="lySave" style="width:auto;margin:0">Salvar layout deste streamer</button>
+      </div>
+      <div class="note" id="lyNote" style="margin-top:6px"></div>
+    </details>
+    <details class="ly" id="capBox">
+      <summary>Legendas <small id="capInfo"></small></summary>
+      <div class="ly-body">
+        <div class="cap-form">
+          <label class="chk"><input type="checkbox" id="capOn"> Legendas ligadas nos clipes (padrão)</label>
+          <div class="f"><label for="capFont">Fonte</label><select id="capFont"></select></div>
+          <div class="f"><label for="capSize">Tamanho <b id="capSizeV"></b></label><input type="range" id="capSize" min="50" max="140" step="2"></div>
+          <div class="f"><label for="capPos">Altura na tela <b id="capPosV"></b></label><input type="range" id="capPos" min="0.11" max="0.75" step="0.01"></div>
+          <div class="f"><label for="capWords">Palavras por vez</label><select id="capWords"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
+          <div class="f"><label for="capColor">Cor do texto</label><input type="color" id="capColor"></div>
+          <div class="f"><label for="capHl">Cor da palavra falada</label><input type="color" id="capHl"></div>
+          <label class="chk"><input type="checkbox" id="capUpper"> Tudo em MAIÚSCULAS</label>
+          <label class="chk"><input type="checkbox" id="capPop"> Efeito "pop" na palavra falada</label>
+        </div>
+        <div class="ly-side">
+          <canvas id="capPreview" width="360" height="640" aria-label="Prévia do estilo da legenda"></canvas>
+          <div class="hint">Prévia do estilo. A legenda fica sempre dentro da área segura do TikTok, Shorts e Reels.</div>
+        </div>
+      </div>
+      <div class="ly-controls"><button class="primary" id="capSave" style="width:auto;margin:0">Salvar estilo da legenda</button></div>
+      <div class="note" id="capNote" style="margin-top:6px"></div>
+    </details>` : ""}`;
+  $("folder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
+  words = t ? t.words : [];
+  if (t) renderWords(t);
+  const video = $("video");
+  video.ontimeupdate = () => {
+    highlight(video.currentTime);
+    if (playUntil !== null && video.currentTime >= playUntil) { video.pause(); playUntil = null; }
+  };
+  $("q").oninput = (e) => search(e.target.value);
+  if (t) {
+    $("aStart").onclick = () => startAnalyze(name);
+    $("aDur").onchange = () => { $("aCustom").style.display = $("aDur").value === "custom" ? "flex" : "none"; };
+    syncQuickCaptions();
+    $("qCapOn").onchange = () => saveQuickCaption({ enabled: $("qCapOn").checked });
+    document.querySelectorAll("[data-qpos]").forEach((b) => b.onclick = () => saveQuickCaption({ position: +b.dataset.qpos }));
+    $("aForce").onclick = () => {
+      if (confirm("Reavaliar do zero refaz toda a análise, incluindo a IA assistindo os vídeos. " +
+                  "Leva alguns minutos e gasta cerca de 120 mil tokens da cota grátis. Continuar?")) startAnalyze(name, true);
+    };
+    $("rvFilter").onchange = () => loadMoments(name);
+    $("rvPosts").onclick = () => {
+      const ap = currentMoments.filter((m) => m.status === "approved").map((m) => m.id);
+      const ids = ap.length ? ap : currentMoments.map((m) => m.id);
+      const withTexts = currentMoments.filter((m) => ids.includes(m.id) && m.meta).length;
+      if (withTexts && !confirm(`${withTexts} clipe(s) já têm textos (talvez editados por você). A IA vai substituir. Continuar?`)) return;
+      startPosts(name, ids);
+    };
+    $("rvExport").onclick = () => startExport(name);
+    $("rN").oninput = () => { $("rAll").textContent = `Gerar os ${Math.max(1, +$("rN").value || 1)} melhores`; };
+    $("rAll").onclick = () => {
+      const n = Math.max(1, parseInt($("rN").value, 10) || 1);
+      const ids = [...currentMoments].sort((a, b) => b.score - a.score).slice(0, n).map((m) => m.id);
+      if (!ids.length) { showJobError("Encontre os momentos antes de gerar clipes."); return; }
+      startRender(name, ids);
+    };
+    loadMoments(name);
+    $("lyBox").addEventListener("toggle", () => { if ($("lyBox").open && !lyState) loadLayout(name); });
+    $("capBox").addEventListener("toggle", () => { if ($("capBox").open) fillCapForm(); });
+  }
+}
+
+// ---- momentos ------------------------------------------------------------------
+let lastRenderIds = null;
+
+function durationRange() {
+  let lo, hi;
+  if ($("aDur").value === "custom") { lo = +$("aMin").value; hi = +$("aMax").value; }
+  else [lo, hi] = $("aDur").value.split("-").map(Number);
+  return { min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" };
+}
+
+function setDuration(lo, hi) {
+  const key = `${lo}-${hi}`;
+  const opt = [...$("aDur").options].find((o) => o.value === key);
+  $("aDur").value = opt ? key : "custom";
+  if (!opt) { $("aMin").value = lo; $("aMax").value = hi; }
+  $("aCustom").style.display = $("aDur").value === "custom" ? "flex" : "none";
+}
+
+function syncQuickCaptions() {
+  if (!$("qCapOn")) return;
+  $("qCapOn").checked = capStyle.enabled !== false;
+  $("qCapOnTxt").textContent = $("qCapOn").checked ? "ligada" : "desligada";
+  const pos = capStyle.position ?? 0.70;
+  document.querySelectorAll("[data-qpos]").forEach((b) => b.classList.toggle("on", Math.abs(+b.dataset.qpos - pos) < 0.04));
+}
+
+async function saveQuickCaption(change) {
+  try {
+    const r = await api("/api/caption-style", { method: "PUT", body: JSON.stringify({ ...capStyle, ...change }) });
+    capStyle = r.style;
+    syncQuickCaptions();
+    if ($("capBox") && $("capBox").open) fillCapForm();
+    if (current) loadMoments(current);
+  } catch (e) { $("qCapNote").textContent = "Não salvou: " + e.message; }
+}
+const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], ["kwai", "Kwai"]];
+const matchesFilter = (m) => { const f = ($("rvFilter") || {}).value || "all"; return f === "all" || (m.status || "pending") === f; };
+
+async function startPosts(name, ids) {
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "posts", project: name, ids }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+
+async function startExport(name) {
+  let chk;
+  try { chk = await api(`/api/projects/${encodeURIComponent(name)}/export-check`); } catch (e) { showJobError(e.message); return; }
+  if (!chk.approved) { $("rvNote").className = "note warn"; $("rvNote").textContent = "Aprove pelo menos um momento antes de exportar."; return; }
+  if (chk.unauthorized && !confirm("Este streamer não está marcado como autorizado (Layout do vertical → “Tenho autorização”). " +
+      "Postar cortes sem autorização pode gerar derrubada do vídeo ou desmonetização. Exportar mesmo assim?")) return;
+  if (chk.duplicates.length && !confirm(`${chk.duplicates.length} trecho(s) já foram exportados antes. Exportar de novo?`)) return;
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "export", project: name }) });
+    lastExportJob = job.id;
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+let lastExportJob = null;
+
+function showExportResult(job) {
+  const r = job.result || {};
+  const n = (r.files || []).length;
+  $("rvNote").className = "note" + ((r.errors || []).length ? " warn" : "");
+  $("rvNote").innerHTML = `✓ ${n} clipe(s) exportado(s) com os textos de cada rede. ` +
+    ((r.errors || []).length ? `⚠ ${r.errors.length} falharam. ` : "") +
+    `<button id="rvOpen" style="padding:2px 8px">Abrir pasta</button>`;
+  $("rvOpen").onclick = () => api(`/api/projects/${encodeURIComponent(job.project)}/open-exports`, { method: "POST" });
+}
+let capStyle = { enabled: true };
+let capFonts = [];
+
+async function loadCapStyle() {
+  try { const r = await api("/api/caption-style"); capStyle = r.style; capFonts = r.fonts; syncQuickCaptions(); } catch (e) { /* mantém padrão */ }
+}
+
+function fillCapForm() {
+  const s = capStyle;
+  $("capFont").innerHTML = capFonts.map((f) => `<option ${f === s.font ? "selected" : ""}>${esc(f)}</option>`).join("");
+  $("capOn").checked = s.enabled; $("capSize").value = s.size; $("capPos").value = s.position;
+  $("capWords").value = String(s.max_words); $("capColor").value = s.color; $("capHl").value = s.highlight;
+  $("capUpper").checked = s.uppercase; $("capPop").checked = s.pop;
+  ["capOn", "capFont", "capSize", "capPos", "capWords", "capColor", "capHl", "capUpper", "capPop"].forEach((id) => {
+    $(id).oninput = drawCap; $(id).onchange = drawCap;
+  });
+  $("capSave").onclick = saveCapStyle;
+  $("capInfo").textContent = s.enabled ? "· ligadas por padrão" : "· desligadas por padrão";
+  drawCap();
+}
+
+function capFromForm() {
+  return { ...capStyle, enabled: $("capOn").checked, font: $("capFont").value, size: +$("capSize").value,
+           position: +$("capPos").value, max_words: +$("capWords").value, color: $("capColor").value.toUpperCase(),
+           highlight: $("capHl").value.toUpperCase(), uppercase: $("capUpper").checked, pop: $("capPop").checked };
+}
+
+function drawCap() {
+  const s = capFromForm(), cv = $("capPreview"), g = cv.getContext("2d");
+  const W = cv.width, H = cv.height, k = H / 1920;
+  $("capSizeV").textContent = s.size + " px";
+  $("capPosV").textContent = Math.round(s.position * 100) + "%";
+  const bg = $("lyPreview");
+  if (bg && lyState) g.drawImage(bg, 0, 0, W, H);
+  else { const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, "#2b3240"); gr.addColorStop(1, "#11141a");
+         g.fillStyle = gr; g.fillRect(0, 0, W, H); }
+  let words = ["olha", "essa", "explosão", "mano"].slice(0, s.max_words);
+  if (s.uppercase) words = words.map((w) => w.toUpperCase());
+  const active = Math.min(1, words.length - 1);
+  // o libass mede o tamanho pela altura da linha (~1,41× o tamanho de fonte do navegador)
+  let px = s.size * k / 1.41;
+  g.font = `900 ${px}px "${s.font}", sans-serif`;
+  g.textBaseline = "bottom";
+  g.lineJoin = "round";
+  let space = g.measureText(" ").width, widths = words.map((w) => g.measureText(w).width);
+  let total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  const safeW = (1080 - 60 - 140) * k;
+  if (total > safeW) {  // mesmo comportamento do clipe: encolhe para caber na largura segura
+    px *= safeW / total;
+    g.font = `900 ${px}px "${s.font}", sans-serif`;
+    space = g.measureText(" ").width; widths = words.map((w) => g.measureText(w).width);
+    total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  }
+  const cx = ((60 + (1080 - 140)) / 2) * k;
+  const y = Math.min(Math.max(s.position * 1920 + s.size / 2, 210 + s.size), 1440) * k;  // base da linha
+  let xx = cx - total / 2;
+  words.forEach((w, i) => {
+    g.lineWidth = Math.max(2, 6 * 2 * k * 1.5);
+    g.strokeStyle = "#000";
+    g.strokeText(w, xx, y);
+    g.fillStyle = i === active ? s.highlight : s.color;
+    g.fillText(w, xx, y);
+    xx += widths[i] + space;
+  });
+  g.strokeStyle = "rgba(255,255,255,.25)";
+  g.setLineDash([4, 4]);
+  g.lineWidth = 1;
+  g.strokeRect(60 * k, 210 * k, (1080 - 200) * k, (1440 - 210) * k);
+  g.setLineDash([]);
+}
+
+async function saveCapStyle() {
+  try {
+    const r = await api("/api/caption-style", { method: "PUT", body: JSON.stringify(capFromForm()) });
+    capStyle = r.style;
+    syncQuickCaptions();
+    $("capNote").className = "note";
+    $("capNote").textContent = "✓ Estilo salvo. Vale para os próximos clipes gerados (use “Gerar de novo” nos que já existem).";
+    $("capInfo").textContent = capStyle.enabled ? "· ligadas por padrão" : "· desligadas por padrão";
+    if (current) loadMoments(current);
+  } catch (e) { $("capNote").className = "note warn"; $("capNote").textContent = "Não salvou: " + e.message; }
+}
+const CRIT = [["gancho", "Gancho"], ["emocao", "Emoção"], ["visual", "Visual"], ["final", "Final"], ["contexto", "Contexto"]];
+const fbOf = (d, id) => (d.feedback || {})[id] || null;
+let currentMoments = [];
+async function startRender(name, ids) {
+  lastRenderIds = ids;
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({ kind: "render", project: name, ids }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+
+function openClip(name, id) {
+  const v = $("clipVideo");
+  v.src = `/api/projects/${encodeURIComponent(name)}/clips/${encodeURIComponent(id)}?t=${Date.now()}`;
+  $("clipTitle").textContent = id;
+  $("clipFolder").onclick = () => api(`/api/projects/${encodeURIComponent(name)}/open-folder`, { method: "POST" });
+  $("clipModal").classList.add("open");
+  v.play().catch(() => {});
+}
+function closeClip() { const v = $("clipVideo"); v.pause(); v.removeAttribute("src"); v.load(); $("clipModal").classList.remove("open"); }
+
+// ---- layout do vertical ------------------------------------------------------------
+let lyState = null;   // {cam:[x,y,w,h]|null, game:[x,y,w,h]|null, layout, det}
+const R = (a) => a ? a.map((v) => Math.round(v * 10000) / 10000) : null;
+
+async function loadLayout(name) {
+  $("lyOrigin").textContent = "detectando câmeras e gameplay…";
+  let r;
+  try { r = await api(`/api/projects/${encodeURIComponent(name)}/layout`); }
+  catch (e) { $("lyOrigin").textContent = "erro: " + e.message; return; }
+  lyState = { cam: r.preset.facecam || (r.detected.cams[0] && r.detected.cams[0].rect) || null,
+              game: r.preset.gameplay || r.detected.gameplay || [0, 0, 1, 1], layout: r.preset.layout, det: r.detected };
+  $("lyOrigin").textContent = { preset: "· salvo para este streamer", detected: "· detectado automaticamente",
+                                fallback: "· nenhuma câmera encontrada" }[r.origin] || "";
+  $("lyStreamer").value = r.streamer || "";
+  $("lyLayout").value = r.preset.layout;
+  $("lyCredit").value = r.preset.credit_handle || "";
+  $("lyAuth").checked = !!r.preset.authorized;
+  $("camList").innerHTML = r.detected.cams.map((c, i) =>
+    `<button data-cam="${i}">Câmera ${i + 1}</button>`).join("") +
+    (r.detected.cams.length ? "" : '<span class="hint" style="margin:0">Nenhuma câmera detectada — desenhe a área ou use outro layout.</span>');
+  $("camList").querySelectorAll("[data-cam]").forEach((b) => b.onclick = () => {
+    lyState.cam = r.detected.cams[+b.dataset.cam].rect.slice(); placeBoxes(); markCam();
+  });
+  const img = $("lyImg");
+  img.onload = () => { placeBoxes(); markCam(); };
+  img.onerror = () => { $("lyOrigin").textContent = "· não consegui carregar um quadro do vídeo"; };
+  const dur = r.duration || $("video").duration || 0;
+  img.src = `/api/projects/${encodeURIComponent(name)}/frame?t=${Math.max(0, Math.min(dur * 0.4, dur - 1)).toFixed(1)}`;
+  $("lyLayout").onchange = () => { lyState.layout = $("lyLayout").value; placeBoxes(); };
+  $("lySave").onclick = () => saveLayout(name);
+  enableDrag($("boxCam"), "cam");
+  enableDrag($("boxGame"), "game");
+}
+
+function markCam() {
+  $("camList").querySelectorAll("[data-cam]").forEach((b) => {
+    const c = lyState.det.cams[+b.dataset.cam].rect;
+    b.classList.toggle("on", !!lyState.cam && c.every((v, i) => Math.abs(v - lyState.cam[i]) < 0.002));
+  });
+}
+
+function placeBoxes() {
+  const set = (el, r) => { el.style.left = r[0] * 100 + "%"; el.style.top = r[1] * 100 + "%";
+                           el.style.width = r[2] * 100 + "%"; el.style.height = r[3] * 100 + "%"; };
+  if (!lyState.cam) lyState.cam = [0.7, 0.05, 0.25, 0.3];
+  set($("boxCam"), lyState.cam);
+  set($("boxGame"), lyState.game);
+  $("boxCam").classList.toggle("hidden", lyState.layout !== "split");
+  $("boxGame").classList.toggle("hidden", lyState.layout === "face-follow");
+  drawPreview();
+}
+
+function enableDrag(el, key) {
+  el.onpointerdown = (e) => {
+    e.preventDefault();
+    const stage = $("lyStage").getBoundingClientRect();
+    const resize = e.target.tagName === "I";
+    const start = { x: e.clientX, y: e.clientY, r: lyState[key].slice() };
+    el.setPointerCapture(e.pointerId);
+    el.onpointermove = (m) => {
+      const dx = (m.clientX - start.x) / stage.width, dy = (m.clientY - start.y) / stage.height;
+      let [x, y, w, h] = start.r;
+      if (resize) { w = Math.min(1 - x, Math.max(0.03, w + dx)); h = Math.min(1 - y, Math.max(0.03, h + dy)); }
+      else { x = Math.min(1 - w, Math.max(0, x + dx)); y = Math.min(1 - h, Math.max(0, y + dy)); }
+      lyState[key] = [x, y, w, h];
+      placeBoxes();
+      if (key === "cam") markCam();
+    };
+    el.onpointerup = () => { el.onpointermove = null; el.onpointerup = null; };
+  };
+}
+
+function coverCrop(r, aspect, anchorY) {
+  let [x, y, w, h] = r;
+  let cw, ch;
+  if (w / h > aspect) { ch = h; cw = h * aspect; } else { cw = w; ch = w / aspect; }
+  const cx = x + (w - cw) / 2;
+  let cy = y + anchorY * h - ch / 2;
+  cy = Math.min(Math.max(cy, y), y + h - ch);
+  return [cx, cy, cw, ch];
+}
+
+function drawPreview() {
+  const img = $("lyImg"), cv = $("lyPreview"), g = cv.getContext("2d");
+  if (!img.naturalWidth || !lyState) return;
+  const W = cv.width, H = cv.height, iw = img.naturalWidth, ih = img.naturalHeight;
+  const px = (r) => [r[0] * iw, r[1] * ih, r[2] * iw, r[3] * ih];
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+  if (lyState.layout === "split" && lyState.cam) {
+    const camH = Math.round(H * 0.30), div = 3, gameH = H - camH - div;
+    let [x, y, w, h] = coverCrop(px(lyState.cam), W / camH, 0.42);
+    g.drawImage(img, x, y, w, h, 0, 0, W, camH);
+    [x, y, w, h] = coverCrop(px(lyState.game), W / gameH, 0.5);
+    g.drawImage(img, x, y, w, h, 0, camH + div, W, gameH);
+  } else if (lyState.layout === "face-follow") {
+    const cw = ih * 9 / 16;
+    g.drawImage(img, (iw - cw) / 2, 0, cw, ih, 0, 0, W, H);
+  } else {
+    const [x, y, w, h] = px(lyState.game);
+    g.filter = "blur(8px)";
+    const s = Math.max(W / w, H / h);
+    g.drawImage(img, x, y, w, h, (W - w * s) / 2, (H - h * s) / 2, w * s, h * s);
+    g.filter = "none";
+    const fh = W * h / w;
+    g.drawImage(img, x, y, w, h, 0, (H - fh) / 2, W, fh);
+  }
+}
+
+async function saveLayout(name) {
+  const streamer = $("lyStreamer").value.trim();
+  try {
+    if (streamer) await api(`/api/projects/${encodeURIComponent(name)}/streamer`, { method: "PUT", body: JSON.stringify({ streamer }) });
+    const body = { layout: lyState.layout, facecam: lyState.layout === "split" ? R(lyState.cam) : null,
+                   gameplay: R(lyState.game), credit_handle: $("lyCredit").value.trim(), authorized: $("lyAuth").checked };
+    const r = await api(`/api/projects/${encodeURIComponent(name)}/layout`, { method: "PUT", body: JSON.stringify(body) });
+    $("lyNote").className = "note";
+    $("lyNote").textContent = `✓ Salvo para “${r.streamer}”. Os próximos VODs desse streamer já usam este layout.`;
+    $("lyOrigin").textContent = "· salvo para este streamer";
+  } catch (e) { $("lyNote").className = "note warn"; $("lyNote").textContent = "Não salvou: " + e.message; }
+}
+
+async function startAnalyze(name, force = false) {
+  try {
+    const job = await api("/api/jobs", { method: "POST", body: JSON.stringify({
+      kind: "analyze", project: name, ...durationRange(), force,
+      n: parseInt($("aN").value, 10) || 10, provider: $("aProvider").value }) });
+    watch(job.id);
+  } catch (e) { showJobError(e.message); }
+}
+
+async function loadMoments(name) {
+  let d = null;
+  try { d = await api(`/api/projects/${encodeURIComponent(name)}/moments`); } catch (e) { /* ainda não analisado */ }
+  const ul = $("moments"), note = $("mNote");
+  currentMoments = d ? d.moments : [];
+  if ($("rvExport") && d) $("rvExport").textContent = `Exportar aprovados (${d.moments.filter((m) => m.status === "approved").length})`;
+  if ($("rN") && d) {
+    $("rN").max = d.moments.length;
+    if (+$("rN").value > d.moments.length) $("rN").value = d.moments.length;
+    $("rAll").textContent = `Gerar os ${Math.min(+$("rN").value || 1, d.moments.length)} melhores`;
+  }
+  if (!ul) return;
+  if (!d) { note.className = "note"; note.textContent = "Clique em “Encontrar momentos” para achar os melhores trechos deste vídeo."; ul.innerHTML = ""; return; }
+  if ($("aDur") && d.range) setDuration(d.range[0], d.range[1]);
+  const s = d.stats || {};
+  const dv = (s.deep || {});
+  const parts = [`${d.moments.length} momentos de ${d.candidates ?? "?"} candidatos`,
+                 dv.video ? `IA assistiu ${dv.video}` : null,
+                 d.provider === "none" ? "sem IA" : `IA avaliou ${s.ai ?? 0}`,
+                 d.has_chat ? "com chat" : "sem chat"];
+  note.className = "note" + (s.rate_limited || s.errors || dv.rate_limited || dv.errors ? " warn" : "");
+  note.textContent = parts.filter(Boolean).join(" · ")
+                     + (dv.rate_limited ? " · ⚠ cota acabou durante a revisão em vídeo" : "")
+                     + (dv.errors ? ` · ⚠ IA não conseguiu assistir ${dv.errors} trecho(s)` : "")
+                     + (dv.skipped && dv.reason && d.provider === "gemini" ? ` · vídeo não assistido: ${dv.reason}` : "") + (s.rate_limited ? " · ⚠ limite da IA atingido: parte ficou só com sinais"
+                     : s.errors ? ` · ⚠ IA falhou em ${s.errors} lote(s): parte ficou só com sinais`
+                     : d.ai_missing ? " · ⚠ sem chave da IA no .env: só sinais" : "")
+                     + (d.complete === false ? " · clique de novo para tentar completar com a IA" : "");
+  const openRv = new Set([...ul.querySelectorAll("details.rv[open]")].map((el) => el.dataset.rv));
+  ul.innerHTML = d.moments.map((m) => `
+    <li data-start="${m.start}" data-end="${m.end}" data-id="${esc(m.id)}" class="${esc(m.status || "pending")}">
+      <div class="score">${m.score}<small>nota</small></div>
+      <div>
+        <div class="m-top"><span class="time">${fmt(m.start)} – ${fmt(m.end)}</span>
+          <span>${Math.round(m.end - m.start)} s</span>
+          ${m.status === "approved" ? '<span class="st approved">✓ aprovado</span>' : m.status === "discarded" ? '<span class="st discarded">descartado</span>' : ""}
+          <span class="tag ${m.ai === "video" ? "video" : m.ai ? "ai" : ""}">${m.ai === "video" ? "IA assistiu" : m.ai ? "IA (texto)" : "sinais"}</span>
+          ${m.ai === "video" && m.triage_score != null ? `<span title="nota da triagem só pelo texto">triagem ${m.triage_score}</span>` : ""}</div>
+        ${m.description ? `<div class="m-desc">${esc(m.description)}</div>` : ""}
+        <div class="m-reason">${esc(m.reason || "")}</div>
+        ${m.risk && !/^nenhum/i.test(m.risk) ? `<div class="m-risk">⚠ ${esc(m.risk)}</div>` : ""}
+        ${m.hook ? `<div class="m-hook">Gancho: “${esc(m.hook)}”</div>` : ""}
+        ${m.criteria ? `<div class="crit">${CRIT.map(([k, label]) => `<div>${label} <b>${m.criteria[k] ?? "–"}</b>
+            <div class="bar"><i style="width:${Math.max(0, Math.min(100, m.criteria[k] || 0))}%"></i></div></div>`).join("")}</div>` : ""}
+        <div class="m-actions">
+          <button data-render="${esc(m.id)}">${(d.clips || {})[m.id]?.final ? "Gerar de novo" : "Gerar clipe"}</button>
+          ${(d.clips || {})[m.id]?.final ? `<button data-watch="${esc(m.id)}">Ver clipe</button>` : ""}
+          <label class="m-cap" title="Liga/desliga a legenda só neste clipe"><input type="checkbox" data-capon="${esc(m.id)}" ${(m.captions ?? capStyle.enabled) ? "checked" : ""}> Legenda</label>
+          <button data-capedit="${esc(m.id)}">Editar legenda</button>
+          <span class="sp"></span>
+          <button class="fb ${fbOf(d, m.id) === "good" ? "on" : ""}" data-fb="good" data-id="${esc(m.id)}" title="Bom momento — a IA aprende com isso" aria-label="Bom momento" aria-pressed="${fbOf(d, m.id) === "good"}">👍</button>
+          <button class="fb ${fbOf(d, m.id) === "bad" ? "on" : ""}" data-fb="bad" data-id="${esc(m.id)}" title="Momento ruim — a IA aprende com isso" aria-label="Momento ruim" aria-pressed="${fbOf(d, m.id) === "bad"}">👎</button>
+        </div>
+        <div class="m-actions">
+          <button data-status="approved" data-id="${esc(m.id)}">${m.status === "approved" ? "✓ Aprovado" : "Aprovar"}</button>
+          <button data-status="discarded" data-id="${esc(m.id)}">${m.status === "discarded" ? "Descartado" : "Descartar"}</button>
+        </div>
+        <details class="rv" data-rv="${esc(m.id)}">
+          <summary>Revisar corte e textos de postagem ${m.meta ? (m.meta.ai ? "· textos da IA" : "· textos simples") : "· sem textos ainda"}</summary>
+          <div class="rv-grid">
+            <div class="rv-cut">
+              <div class="f"><label>Início (s)</label><input type="number" step="0.1" data-cut="start" value="${m.start}"></div>
+              <button data-nudge="start:-1">−1 s</button><button data-nudge="start:1">+1 s</button>
+              <button data-here="start" title="Usa o ponto atual do player">Início = player</button>
+              <div class="f"><label>Fim (s)</label><input type="number" step="0.1" data-cut="end" value="${m.end}"></div>
+              <button data-nudge="end:-1">−1 s</button><button data-nudge="end:1">+1 s</button>
+              <button data-here="end" title="Usa o ponto atual do player">Fim = player</button>
+              <button data-cutsave>Salvar corte</button>
+            </div>
+            <div class="rv-text">
+              <label>Gancho (texto nos 3 primeiros segundos do vídeo)</label>
+              <div class="row"><input data-hook value="${esc((m.meta && m.meta.hook) || m.hook || "")}">
+                <label class="m-cap" style="flex:0 0 auto"><input type="checkbox" data-hookon ${(m.hook_on ?? capStyle.hook ?? true) ? "checked" : ""}> no vídeo</label></div>
+              <div class="tabs">${PLATS.map(([k, label], i) => `<button data-tab="${k}" class="${i === 0 ? "on" : ""}">${label}</button>`).join("")}</div>
+              ${PLATS.map(([k], i) => { const p = (m.meta && m.meta.posts && m.meta.posts[k]) || {}; return `
+              <div data-pane="${k}" ${i === 0 ? "" : "hidden"} class="rv-text">
+                <label>Título</label><input data-f="title" value="${esc(p.title || "")}">
+                <label>Descrição</label><textarea data-f="description">${esc(p.description || "")}</textarea>
+                <label>Hashtags</label><input data-f="hashtags" value="${esc((p.hashtags || []).join(" "))}">
+                <div class="row" style="justify-content:flex-start"><button data-copy="${k}" style="flex:0 0 auto">Copiar tudo</button></div>
+              </div>`; }).join("")}
+              <div class="row" style="justify-content:flex-start"><button data-textsave style="flex:0 0 auto">Salvar textos</button>
+                <button data-posts="${esc(m.id)}" style="flex:0 0 auto">Gerar com IA só este</button></div>
+            </div>
+          </div>
+        </details>
+        <div class="cap-edit" data-capbox="${esc(m.id)}" hidden>
+          <textarea aria-label="Texto da legenda deste clipe">${esc(m.caption_text || "")}</textarea>
+          <div class="row"><button data-capsave="${esc(m.id)}">Salvar legenda</button>
+            <button data-capreset="${esc(m.id)}">Voltar ao texto original</button>
+            <span class="hint" style="margin:0">Corrija palavras; os tempos são reaproveitados. Depois clique em “Gerar de novo”.</span></div>
+        </div>
+      </div>
+    </li>`).join("");
+  ul.querySelectorAll("[data-render]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); startRender(name, [b.dataset.render]); });
+  ul.querySelectorAll("[data-watch]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); openClip(name, b.dataset.watch); });
+  ul.querySelectorAll("details.rv").forEach((el) => { if (openRv.has(el.dataset.rv)) el.open = true; });  // mantém abertos
+  const patch = (id, body) => api(`/api/projects/${encodeURIComponent(name)}/moments/${encodeURIComponent(id)}`,
+                                   { method: "PUT", body: JSON.stringify(body) });
+  ul.querySelectorAll("[data-capon]").forEach((c) => {
+    c.onclick = (e) => e.stopPropagation();
+    c.onchange = () => patch(c.dataset.capon, { captions: c.checked }).catch((err) => showJobError(err.message));
+  });
+  ul.querySelectorAll("[data-capedit]").forEach((b) => b.onclick = (e) => {
+    e.stopPropagation();
+    const box = ul.querySelector(`[data-capbox="${CSS.escape(b.dataset.capedit)}"]`);
+    box.hidden = !box.hidden;
+    if (!box.hidden) box.querySelector("textarea").focus();
+  });
+  ul.querySelectorAll(".cap-edit").forEach((box) => box.onclick = (e) => e.stopPropagation());
+  ul.querySelectorAll("[data-capsave]").forEach((b) => b.onclick = async () => {
+    const box = ul.querySelector(`[data-capbox="${CSS.escape(b.dataset.capsave)}"]`);
+    try { await patch(b.dataset.capsave, { caption_text: box.querySelector("textarea").value }); b.textContent = "Salvo ✓"; }
+    catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("[data-capreset]").forEach((b) => b.onclick = async () => {
+    try { await patch(b.dataset.capreset, { reset_caption: true }); await loadMoments(name); }
+    catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("details.rv, [data-status]").forEach((el) => el.addEventListener("click", (e) => e.stopPropagation()));
+  ul.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
+    const m = d.moments.find((x) => x.id === b.dataset.id);
+    const status = m.status === b.dataset.status ? "pending" : b.dataset.status;  // clicar de novo desfaz
+    try { await patch(m.id, { status }); m.status = status; await loadMoments(name); }
+    catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("details.rv").forEach((box) => {
+    const id = box.dataset.rv, li = box.closest("li");
+    const cut = (k) => box.querySelector(`[data-cut="${k}"]`);
+    box.querySelectorAll("[data-nudge]").forEach((b) => b.onclick = () => {
+      const [k, dlt] = b.dataset.nudge.split(":");
+      cut(k).value = Math.max(0, (+cut(k).value + +dlt)).toFixed(1);
+    });
+    box.querySelectorAll("[data-here]").forEach((b) => b.onclick = () => { cut(b.dataset.here).value = $("video").currentTime.toFixed(1); });
+    box.querySelector("[data-cutsave]").onclick = async () => {
+      try { await patch(id, { start: +cut("start").value, end: +cut("end").value }); await loadMoments(name); }
+      catch (err) { showJobError(err.message); }
+    };
+    box.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => {
+      box.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+      box.querySelectorAll("[data-pane]").forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.tab; });
+    });
+    box.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
+      const pane = box.querySelector(`[data-pane="${b.dataset.copy}"]`);
+      const v = (f) => pane.querySelector(`[data-f="${f}"]`).value;
+      const text = [v("title"), "", v("description"), "", v("hashtags")].join(String.fromCharCode(10));
+      try { await navigator.clipboard.writeText(text); b.textContent = "Copiado ✓"; } catch (err) { b.textContent = "Não copiou"; }
+    });
+    box.querySelector("[data-hookon]").onchange = (e) => patch(id, { hook_on: e.target.checked }).catch((err) => showJobError(err.message));
+    box.querySelector("[data-textsave]").onclick = async (e) => {
+      const posts = {};
+      box.querySelectorAll("[data-pane]").forEach((p) => {
+        const v = (f) => p.querySelector(`[data-f="${f}"]`).value;
+        posts[p.dataset.pane] = { title: v("title"), description: v("description"), hashtags: v("hashtags").split(/[ ,]+/).filter(Boolean) };
+      });
+      try { await patch(id, { meta: { hook: box.querySelector("[data-hook]").value, posts } }); e.target.textContent = "Salvo ✓"; }
+      catch (err) { showJobError(err.message); }
+    };
+    box.querySelector("[data-posts]").onclick = () => startPosts(name, [id]);
+    li.hidden = !matchesFilter(d.moments.find((x) => x.id === id));
+  });
+  ul.querySelectorAll("[data-fb]").forEach((b) => b.onclick = async (e) => {
+    e.stopPropagation();
+    const id = b.dataset.id, label = fbOf(d, id) === b.dataset.fb ? null : b.dataset.fb;  // clicar de novo desmarca
+    try {
+      await api(`/api/projects/${encodeURIComponent(name)}/moments/${encodeURIComponent(id)}/feedback`,
+                { method: "POST", body: JSON.stringify({ label }) });
+      d.feedback = { ...(d.feedback || {}) };
+      if (label) d.feedback[id] = label; else delete d.feedback[id];
+      ul.querySelectorAll(`[data-id="${CSS.escape(id)}"]`).forEach((x) => {
+        const on = x.dataset.fb === label;
+        x.classList.toggle("on", on); x.setAttribute("aria-pressed", on);
+      });
+    } catch (err) { showJobError(err.message); }
+  });
+  ul.querySelectorAll("li").forEach((li) => li.onclick = () => {
+    ul.querySelectorAll("li").forEach((el) => el.classList.toggle("playing", el === li));
+    seek(parseFloat(li.dataset.start));
+    playUntil = parseFloat(li.dataset.end);
+  });
+}
+
+function renderWords(t) {
+  // agrupa palavras por segmento para ficar legível
+  const box = $("words");
+  const frag = document.createDocumentFragment();
+  wordEls = [];
+  let wi = 0;
+  for (const seg of t.segments) {
+    const div = document.createElement("div");
+    div.className = "seg";
+    const ts = document.createElement("span");
+    ts.className = "ts"; ts.textContent = fmt(seg.start);
+    ts.onclick = () => seek(seg.start);
+    div.appendChild(ts);
+    while (wi < words.length && words[wi].start < seg.end + 0.01) {
+      const w = words[wi];
+      const span = document.createElement("span");
+      span.className = "w" + (w.p < 0.5 ? " low" : "");
+      span.textContent = w.w;
+      span.title = `${w.start.toFixed(2)}s → ${w.end.toFixed(2)}s · confiança ${Math.round(w.p * 100)}%`;
+      span.onclick = () => seek(w.start);
+      div.appendChild(span);
+      div.appendChild(document.createTextNode(" "));
+      wordEls.push(span);
+      wi++;
+    }
+    frag.appendChild(div);
+  }
+  box.innerHTML = "";
+  box.appendChild(frag);
+}
+
+function seek(t) { playUntil = null; const v = $("video"); v.currentTime = t; v.play(); }
+
+let lastNow = -1;
+function highlight(time) {
+  // busca binária da palavra atual
+  let lo = 0, hi = words.length - 1, idx = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (words[mid].start <= time) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+  if (idx === lastNow) return;
+  if (lastNow >= 0 && wordEls[lastNow]) wordEls[lastNow].classList.remove("now");
+  if (idx >= 0 && wordEls[idx] && time <= words[idx].end + 0.3) {
+    wordEls[idx].classList.add("now");
+    wordEls[idx].scrollIntoView({ block: "nearest" });
+  }
+  lastNow = idx;
+}
+
+function search(q) {
+  q = q.trim().toLowerCase();
+  let first = null;
+  wordEls.forEach((el, i) => {
+    const hit = q && words[i].w.toLowerCase().includes(q);
+    el.innerHTML = hit ? `<mark>${esc(words[i].w)}</mark>` : esc(words[i].w);
+    if (hit && !first) first = el;
+  });
+  if (first) first.scrollIntoView({ block: "center" });
+}
+
+// ---- contas conectadas ------------------------------------------------------
+const NAMES = { youtube: "YouTube", twitch: "Twitch", kick: "Kick" };
+async function loadAccounts() {
+  const s = await api("/api/session/status");
+  if (!s.edge) { $("acctStatus").textContent = "Microsoft Edge não encontrado"; $("acctConnect").disabled = true; return; }
+  $("acctStatus").innerHTML = s.platforms && s.platforms.length
+    ? "<b>✓</b> " + s.platforms.map((p) => NAMES[p] || p).join(", ")
+    : "nenhuma conta conectada";
+  $("acctConnect").textContent = s.platforms && s.platforms.length ? "Gerenciar" : "Conectar contas";
+}
+
+$("acctConnect").onclick = async () => {
+  const btn = $("acctConnect");
+  btn.classList.remove("attention");
+  btn.disabled = true;
+  try {
+    await api("/api/session/connect", { method: "POST" });
+    $("acctStatus").textContent = "Entre nas contas na janela que abriu e feche-a quando terminar…";
+    // espera a janela abrir (lockfile) e depois fechar
+    let seenOpen = false;
+    for (let i = 0; i < 1200; i++) {
+      const { open } = await api("/api/session/window-open");
+      if (open) seenOpen = true;
+      if (seenOpen && !open) break;
+      if (!seenOpen && i > 40) break; // 20s sem detectar a janela: tenta sincronizar mesmo assim
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    $("acctStatus").textContent = "lendo sessão…";
+    await api("/api/session/sync", { method: "POST" });
+  } catch (e) {
+    $("acctStatus").textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    await loadAccounts().catch(() => {});
+  }
+};
+
+// ---- uso da IA -----------------------------------------------------------------
+const nf = new Intl.NumberFormat("pt-BR");
+function statusFor(pct, limited) {
+  if (limited) return { color: "#d03b3b", icon: "⛔", text: "limite do Gemini atingido — tente mais tarde" };
+  if (pct >= 90) return { color: "#d03b3b", icon: "⚠", text: "quase no limite" };
+  if (pct >= 70) return { color: "#fab219", icon: "⚠", text: "atenção: uso alto" };
+  return { color: "#0ca30c", icon: "✓", text: "dentro do limite" };
+}
+
+async function loadUsage() {
+  let u;
+  try { u = await api("/api/usage"); } catch (e) { return; }
+  const st = statusFor(u.percent, u.rate_limited);
+  $("uPct").textContent = (u.percent < 10 ? u.percent.toFixed(1) : Math.round(u.percent)) + "%";
+  $("uMeter").style.width = Math.min(100, u.percent) + "%";
+  $("uMeter").style.background = st.color;
+  $("uMeterWrap").setAttribute("aria-valuenow", u.percent);
+  $("uStatus").innerHTML = `<span style="color:${st.color}">${st.icon}</span><span>${st.text}</span>`;
+  $("uNums").textContent = `${nf.format(u.total_tokens)} de ${nf.format(u.limits.tokens)} tokens · ` +
+    `${nf.format(u.requests)} de ${nf.format(u.limits.requests)} requisições` +
+    (u.provider === "none" ? " · IA desligada" : ` · ${u.provider}`);
+  drawUsage(u.per_minute);
+  $("uTable").innerHTML = u.per_minute.filter((b) => b.tokens).map((b) => `${b.t} — ${nf.format(b.tokens)} tokens`).join("<br>")
+    || "Nenhum uso na última hora.";
+}
+
+function drawUsage(series) {
+  const svg = $("usageChart");
+  const W = svg.clientWidth || 300, H = 90, padL = 34, padB = 14, padT = 6;
+  const max = Math.max(1, ...series.map((b) => b.tokens));
+  const step = Math.pow(10, Math.floor(Math.log10(max)));
+  const top = Math.ceil(max / step) * step;
+  const bw = (W - padL) / series.length;
+  const y = (v) => padT + (H - padB - padT) * (1 - v / top);
+  let out = `<line class="grid" x1="${padL}" x2="${W}" y1="${y(top)}" y2="${y(top)}" stroke-dasharray="2 3"/>` +
+            `<text x="${padL - 4}" y="${y(top) + 3}" text-anchor="end">${nf.format(top)}</text>` +
+            `<text x="${padL - 4}" y="${y(0) + 3}" text-anchor="end">0</text>` +
+            `<text x="${padL}" y="${H - 2}">−60 min</text><text x="${W}" y="${H - 2}" text-anchor="end">agora</text>`;
+  series.forEach((b, i) => {
+    const x = padL + i * bw;
+    const h = y(0) - y(b.tokens);
+    if (b.tokens > 0) {
+      const w = Math.max(1, bw - 2), r = Math.min(2, w / 2, h);
+      out += `<path class="bar" d="M${x + 1},${y(0)} v${-(h - r)} q0,${-r} ${r},${-r} h${w - 2 * r} q${r},0 ${r},${r} v${h - r} z"/>`;
+    }
+    out += `<rect data-i="${i}" x="${x}" y="${padT}" width="${bw}" height="${H - padB - padT}" fill="transparent"/>`;
+  });
+  out += `<line class="grid" x1="${padL}" x2="${W}" y1="${y(0)}" y2="${y(0)}"/>`;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+  const tip = $("tip");
+  svg.querySelectorAll("rect[data-i]").forEach((r) => {
+    r.onmousemove = (e) => {
+      const b = series[+r.dataset.i];
+      tip.style.display = "block";
+      tip.style.left = e.clientX + 12 + "px";
+      tip.style.top = e.clientY - 28 + "px";
+      tip.textContent = `${b.t} — ${nf.format(b.tokens)} tokens`;
+    };
+    r.onmouseleave = () => { tip.style.display = "none"; };
+  });
+}
+
+// ---- inicialização --------------------------------------------------------
+(async () => {
+  loadAccounts().catch(() => {});
+  loadCapStyle();
+  loadUsage();
+  setInterval(loadUsage, 15000);
+  $("clipClose").onclick = closeClip;
+  $("clipModal").onclick = (e) => { if (e.target.id === "clipModal") closeClip(); };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeClip(); });
+  window.addEventListener("resize", () => loadUsage());
+  await loadProjects();
+  const running = await api("/api/jobs");
+  if (running) watch(running.id);
+})();
+</script>
+</body>
+</html>

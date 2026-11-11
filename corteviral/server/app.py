@@ -16,6 +16,7 @@ from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from corteviral.browser_session import (BrowserSessionError, edge_path, export_cookies,
@@ -120,6 +121,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
     feedback = FeedbackStore(Path(settings.paths.data_dir) / "feedback.json")
     app = FastAPI(title="Corte Viral")
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
     data_dir = Path(settings.paths.data_dir)
@@ -229,6 +231,11 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     @app.get("/", response_class=HTMLResponse)
     def index():
         return (STATIC / "index.html").read_text(encoding="utf-8")
+
+    @app.get("/classico", response_class=HTMLResponse)
+    def legacy():
+        """Interface anterior (rede de segurança enquanto a nova amadurece)."""
+        return (STATIC / "legacy.html").read_text(encoding="utf-8")
 
     @app.post("/api/jobs")
     def create_job(req: JobRequest):
