@@ -179,8 +179,7 @@ export async function openSettings(from, start = "accounts") {
     <div data-p="usage">${usageSection()}</div>
     <div data-p="about" class="stack"><div class="t-head">Corte Viral</div>
       <div class="muted">Do link da live até a pasta com clipes 9:16 legendados e textos para TikTok, Shorts, Reels e Kwai.</div>
-      <div class="t-small">Seus projetos, clipes e ajustes ficam nesta pasta do computador; nada é apagado pela interface.</div>
-      <a href="/classico">Abrir a interface clássica</a></div>`;
+      <div class="t-small">Seus projetos, clipes e ajustes ficam nesta pasta do computador; nada é apagado pela interface.</div></div>`;
   const s = openSheet({ title: "Ajustes", body, width: 860, from });
   let usageTimer = null;
   const show = (k) => {

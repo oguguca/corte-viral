@@ -232,11 +232,6 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     def index():
         return (STATIC / "index.html").read_text(encoding="utf-8")
 
-    @app.get("/classico", response_class=HTMLResponse)
-    def legacy():
-        """Interface anterior (rede de segurança enquanto a nova amadurece)."""
-        return (STATIC / "legacy.html").read_text(encoding="utf-8")
-
     @app.post("/api/jobs")
     def create_job(req: JobRequest):
         with jobs.lock:

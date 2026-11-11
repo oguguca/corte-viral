@@ -31,3 +31,9 @@ def test_js_modules_parse():
         r = subprocess.run(["node", "--check", "--input-type=module"], input=f.read_text(encoding="utf-8"),
                            capture_output=True, text=True, encoding="utf-8")
         assert r.returncode == 0, f"{f.name}: {r.stderr[:400]}"
+
+
+def test_classic_interface_removed(settings_tmp):
+    c = TestClient(create_app(settings_tmp))
+    assert c.get("/classico").status_code == 404
+    assert "classico" not in (Path(STATIC) / "js" / "sheets" / "settings.js").read_text(encoding="utf-8")
