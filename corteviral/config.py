@@ -86,7 +86,7 @@ class RenderSettings(_Strict):
 class CaptionStyle(_Strict):
     enabled: bool = True
     font: str = "Arial Black"          # fontes do Windows: Arial Black, Impact, Segoe UI Black, Verdana...
-    size: int = Field(default=78, ge=30, le=160)     # px num vídeo 1080x1920
+    size: int = Field(default=90, ge=30, le=160)     # px num vídeo 1080x1920
     color: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
     highlight: str = Field(default="#FFE600", pattern=r"^#[0-9A-Fa-f]{6}$")
     outline_color: str = Field(default="#000000", pattern=r"^#[0-9A-Fa-f]{6}$")

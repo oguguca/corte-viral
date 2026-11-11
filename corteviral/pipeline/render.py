@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Callable
 
 from corteviral import ffmpeg
+from corteviral.caption_style import load_style
 from corteviral.config import Settings
+from corteviral.models import Transcript
+from corteviral.pipeline.captions import build_ass, clip_words
 from corteviral.ffmpeg import FFmpegError
 from corteviral.pipeline.layout import build_filter
 from corteviral.presets import LayoutPreset, resolve_layout
@@ -47,8 +50,34 @@ def _face_track(video: Path, start: float, end: float, models_dir: Path) -> list
     return track
 
 
+def ass_filter_path(path: Path) -> str:
+    """Caminho do .ass para o filtro do FFmpeg no Windows: barras '/', ':' escapado, entre aspas."""
+    p = str(Path(path).resolve()).replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+    return f"'{p}'"
+
+
+def _caption_words(project: Project, moment: dict, start: float, end: float) -> list[dict]:
+    edited = moment.get("caption_words")
+    if edited is not None:
+        return clip_words(edited, start, end)
+    tpath = project.path("transcript.json")
+    if not tpath.exists():
+        return []
+    return clip_words(Transcript.load(tpath).words, start, end)
+
+
+def captions_wanted(moment: dict, captions: bool | None, style) -> bool:
+    """Por clipe > pedido de geração > estilo (config/interface)."""
+    if moment.get("captions") is not None:
+        return bool(moment["captions"])
+    if captions is not None:
+        return bool(captions)
+    return bool(style.enabled)
+
+
 def render_clip(project: Project, moment: dict, settings: Settings, preview: bool = False,
-                preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None) -> Path:
+                preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None,
+                captions: bool | None = None) -> Path:
     rs = settings.render
     video = Path(project.data["video_path"])
     preset = preset or resolve_layout(project, settings)
@@ -60,14 +89,29 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     out_dir.mkdir(exist_ok=True)
     out = out_dir / f"{moment['id']}{'.preview' if preview else ''}.mp4"
     meta_file = out.with_suffix(".json")
-    key = params_hash({"v": 1, "start": start, "end": end, "preset": preset.model_dump(),
-                       "render": rs.model_dump(mode="json"), "preview": preview})
+
+    style = load_style(settings)
+    ass_text = None
+    if captions_wanted(moment, captions, style):
+        words = _caption_words(project, moment, start, end)
+        if words:
+            ass_text = build_ass(words, style)
+    key = params_hash({"v": 2, "start": start, "end": end, "preset": preset.model_dump(),
+                       "render": rs.model_dump(mode="json"), "preview": preview,
+                       "captions": params_hash({"ass": ass_text}) if ass_text else None})
     if out.exists() and meta_file.exists():
         if json.loads(meta_file.read_text(encoding="utf-8")).get("hash") == key:
             return out
 
     track = _face_track(video, start, end, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
     graph = build_filter(preset, src, rs, track=track, preview=preview)
+    ass_file = out.with_suffix(".ass")
+    if ass_text:
+        ass_file.write_text(ass_text, encoding="utf-8")
+        head, _, _ = graph.rpartition("[v]")
+        graph = f"{head},ass=filename={ass_filter_path(ass_file)}[v]"
+    else:
+        ass_file.unlink(missing_ok=True)
     tmp = out.with_name(out.stem + ".tmp.mp4")
     base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video),
             "-filter_complex", graph, "-map", "[v]", "-map", "0:a?"]
@@ -93,20 +137,21 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     if tmp.exists():
         os.replace(tmp, out)
     write_json_atomic(meta_file, {"hash": key, "layout": preset.layout, "encoder": used, "start": start,
-                                  "end": end, "preview": preview, "preset": preset.model_dump()})
+                                  "end": end, "preview": preview, "preset": preset.model_dump(),
+                                  "captions": bool(ass_text)})
     if on_progress:
         on_progress(1.0, f"{moment['id']} pronto")
     return out
 
 
 def render_all(project: Project, settings: Settings, moments: list[dict], preview: bool = False,
-               on_progress: ProgressFn | None = None) -> list[Path]:
+               on_progress: ProgressFn | None = None, captions: bool | None = None) -> list[Path]:
     preset = resolve_layout(project, settings)
     outs = []
     for i, m in enumerate(moments):
         if on_progress:
             on_progress(i / max(1, len(moments)), f"renderizando clipe {i + 1} de {len(moments)}")
-        outs.append(render_clip(project, m, settings, preview=preview, preset=preset))
+        outs.append(render_clip(project, m, settings, preview=preview, preset=preset, captions=captions))
     if on_progress:
         on_progress(1.0, f"{len(outs)} clipes prontos")
     return outs
