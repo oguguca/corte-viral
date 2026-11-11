@@ -134,6 +134,33 @@ def _valid_review(d) -> bool:
     return all(isinstance(d.get(k), str) for k in ("descricao", "motivo", "risco"))
 
 
+_POST_ITEM = {"type": "object", "properties": {
+    "title": {"type": "string"}, "description": {"type": "string"},
+    "hashtags": {"type": "array", "items": {"type": "string"}}},
+    "required": ["title", "description", "hashtags"]}
+POSTS_SCHEMA = {"type": "array", "items": {"type": "object", "properties": {
+    "id": {"type": "string"}, "hook": {"type": "string"},
+    **{p: _POST_ITEM for p in ("tiktok", "shorts", "reels", "kwai")}},
+    "required": ["id", "hook", "tiktok", "shorts", "reels", "kwai"]}}
+POSTS_INSTRUCTIONS = """Você é social media de cortes de lives de games (GTA) no Brasil.
+Para cada clipe, escreva os textos de postagem em {lang}:
+- hook: frase de gancho que aparece escrita no vídeo nos 3 primeiros segundos (até 8 palavras, sem hashtag,
+  provoca curiosidade, sem entregar o final; ex.: "Ele não esperava por isso").
+- Para cada rede (tiktok, shorts, reels, kwai): title (até 70 caracteres, chamativo, sem clickbait mentiroso),
+  description (1–2 frases + uma pergunta para gerar comentários) e hashtags (6–8: amplas como #gta6 #gaming,
+  de nicho do momento, e o nome do streamer sem espaços).
+- Adapte o tom: tiktok/kwai mais informal e com gírias; shorts direto e com palavra-chave no início do título
+  (bom para busca); reels mais visual e com emoji.
+- Não invente fatos que não estão na descrição/transcrição. Não use o nome de pessoas reais além do streamer.
+Clipes:
+"""
+
+
+def _posts_prompt(items: list[dict], language: str) -> str:
+    lang = "português do Brasil" if (language or "pt").startswith("pt") else f"no idioma '{language}'"
+    return POSTS_INSTRUCTIONS.format(lang=lang) + json.dumps(items, ensure_ascii=False)
+
+
 class LLMError(Exception):
     pass
 
@@ -192,6 +219,16 @@ class GeminiClient:
         if not _valid_review(data):
             raise LLMError("revisão em vídeo veio incompleta")
         return data
+
+    def write_posts(self, items: list[dict], language: str) -> list[dict]:
+        """Gancho + título/descrição/hashtags para TikTok, Shorts, Reels e Kwai (um item por clipe)."""
+        body = {
+            "contents": [{"parts": [{"text": _posts_prompt(items, language)}]}],
+            "generationConfig": {"responseMimeType": "application/json", "responseSchema": POSTS_SCHEMA,
+                                 "temperature": 0.7},
+        }
+        data = self._post(body)
+        return data if isinstance(data, list) else []
 
     def _post(self, body: dict):
         req = urllib.request.Request(
