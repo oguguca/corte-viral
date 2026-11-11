@@ -64,7 +64,7 @@ def test_age_restricted_error_is_friendly():
     from corteviral.pipeline.ingest import _friendly_error
     raw = "ERROR: [youtube] PhUWBpUeCjk: Sign in to confirm your age. This video may be inappropriate"
     msg = _friendly_error(raw)
-    assert "restrição de idade" in msg and "--cookies-from-browser" in msg
+    assert "restrição de idade" in msg and "Login do navegador" in msg and "--cookies-from-browser" in msg
 
 
 def test_private_or_members_error_is_friendly():

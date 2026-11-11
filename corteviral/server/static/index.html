@@ -43,6 +43,8 @@
   .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
   .error { background: #2a1416; border: 1px solid #5a2328; color: #ffb3b3; padding: 10px; border-radius: 8px; margin-top: 10px; display: none; white-space: pre-wrap; }
   .done { color: var(--ok); }
+  select.attention { outline: 2px solid var(--accent); outline-offset: -1px; animation: pulse 1s ease-in-out 3; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(255,230,0,.35); } }
 
   #projects { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 40vh; overflow: auto; }
   #projects li { padding: 9px 10px; border-radius: 8px; background: var(--panel-2); cursor: pointer; border: 1px solid transparent; }
@@ -162,6 +164,8 @@ $("pick").onclick = async () => {
   finally { $("pick").disabled = false; }
 };
 
+$("cookies").onchange = () => $("cookies").classList.remove("attention");
+
 $("start").onclick = async () => {
   const source = $("source").value.trim();
   if (!source) { $("source").focus(); return; }
@@ -192,6 +196,15 @@ function renderJob(job) {
   $("err").textContent = job.error || "";
   $("start").disabled = job.status === "running";
   if (job.status === "done") { $("stage").innerHTML = '<span class="done">✓ Concluído</span>'; }
+  if (job.status === "error") {
+    $("stage").innerHTML = '<span style="color:var(--err)">✕ Falhou</span>';
+    $("pct").textContent = "";
+    if (/login do navegador/i.test(job.error || "")) {
+      const sel = $("cookies");
+      sel.classList.add("attention");
+      sel.focus();
+    }
+  }
 }
 
 async function watch(id) {

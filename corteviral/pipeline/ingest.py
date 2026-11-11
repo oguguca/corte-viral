@@ -17,16 +17,17 @@ _URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 # (trecho da mensagem do yt-dlp, explicação em PT-BR)
 _FRIENDLY = [
     (("confirm your age", "age-restricted", "age restricted"),
-     "vídeo com restrição de idade: o YouTube exige login. Faça login no navegador e rode de novo com "
-     "--cookies-from-browser firefox (ou edge/chrome), ou defina download.cookies_from_browser no config.yaml"),
+     "vídeo com restrição de idade: o YouTube exige login. Entre na sua conta do YouTube num navegador e "
+     "escolha esse navegador em \"Login do navegador\" (linha de comando: --cookies-from-browser firefox)"),
     (("only available for subscribers", "members-only", "join this channel", "subscriber-only"),
      "vídeo exclusivo para inscritos/membros: é preciso login com uma conta que tenha acesso "
-     "(use --cookies-from-browser <navegador>)"),
+     "(escolha o navegador em \"Login do navegador\" / --cookies-from-browser)"),
     (("private video", "sign in if you've been granted access"),
-     "vídeo privado: é preciso login com uma conta que tenha acesso (use --cookies-from-browser <navegador>)"),
+     "vídeo privado: é preciso login com uma conta que tenha acesso "
+     "(escolha o navegador em \"Login do navegador\" / --cookies-from-browser)"),
     (("could not copy chrome cookie database", "failed to decrypt with dpapi", "could not find chrome cookies"),
      "não foi possível ler os cookies do Chrome (ele bloqueia o acesso enquanto está aberto). "
-     "Feche o Chrome e tente de novo, ou use --cookies-from-browser firefox"),
+     "Feche o Chrome e tente de novo, ou use o Firefox"),
     (("http error 403",),
      "o site recusou o download (HTTP 403). Atualize o yt-dlp (pip install -U yt-dlp) e tente de novo"),
     (("video unavailable", "this video is not available", "does not exist"),
