@@ -423,3 +423,8 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
   :root { --line: rgba(127, 127, 127, 0.6); --line-strong: rgba(127, 127, 127, 0.9); }
   .sidebar, .steps, .pill { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+/* prévia da legenda arrastável */
+.cap-drag { cursor: grab; touch-action: none; transition: box-shadow var(--dur) var(--ease); }
+.cap-drag:hover { box-shadow: 0 0 0 2px var(--info); }
+.cap-drag.dragging { cursor: grabbing; box-shadow: 0 0 0 2px var(--info), var(--shadow-2); }

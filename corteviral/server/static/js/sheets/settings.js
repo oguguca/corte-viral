@@ -83,8 +83,9 @@ function captionSection() {
       <label class="switch"><input type="checkbox" id="cCredit" ${s.credit ? "checked" : ""}><span class="track"></span><span>Crédito “@streamer” no canto</span></label>
       <div class="row"><button class="btn primary" id="cSave">Salvar estilo</button></div>
     </div>
-    <div class="stack" style="align-items:center"><canvas class="preview-9x16" id="cPv" width="360" height="640" aria-label="Prévia da legenda"></canvas>
-      <span class="t-small">Prévia · área segura tracejada</span></div></div>`;
+    <div class="stack" style="align-items:center"><canvas class="preview-9x16 cap-drag" id="cPv" width="360" height="640"
+        aria-label="Prévia da legenda — arraste para cima ou para baixo para mudar a posição"></canvas>
+      <span class="t-small">↕ Arraste a legenda para posicioná-la · área segura tracejada</span></div></div>`;
 }
 
 function readCaption(b) {
@@ -92,6 +93,27 @@ function readCaption(b) {
            position: +$("#cPos", b).value, max_words: +$("#cWords", b).value, color: $("#cColor", b).value.toUpperCase(),
            highlight: $("#cHl", b).value.toUpperCase(), uppercase: $("#cUpper", b).checked, pop: $("#cPop", b).checked,
            hook: $("#cHook", b).checked, credit: $("#cCredit", b).checked };
+}
+
+// arrastar a legenda na prévia: segue o ponteiro 1:1 a partir de onde foi pega e move o controle "Altura na tela"
+function bindCaptionDrag(b) {
+  const cv = $("#cPv", b), pos = $("#cPos", b);
+  const lo = +pos.min, hi = +pos.max;
+  cv.onpointerdown = (e) => {
+    e.preventDefault();
+    cv.setPointerCapture(e.pointerId);
+    cv.classList.add("dragging");
+    const rect = cv.getBoundingClientRect(), y0 = e.clientY, p0 = +pos.value;
+    cv.onpointermove = (ev) => {
+      const p = Math.min(hi, Math.max(lo, p0 + (ev.clientY - y0) / rect.height));
+      pos.value = p.toFixed(2);
+      drawCaption(b);
+    };
+    cv.onpointerup = cv.onpointercancel = () => {
+      cv.onpointermove = cv.onpointerup = cv.onpointercancel = null;
+      cv.classList.remove("dragging");
+    };
+  };
 }
 
 function drawCaption(b) {
@@ -212,6 +234,7 @@ export async function openSettings(from, start = "appearance") {
     $("#" + id, body).addEventListener("input", () => drawCaption(body));
     $("#" + id, body).addEventListener("change", () => drawCaption(body));
   });
+  bindCaptionDrag(body);
   $("#cSave", body).onclick = async () => {
     try {
       await saveCapStyle(readCaption(body));
