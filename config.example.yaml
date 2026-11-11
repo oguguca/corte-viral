@@ -1,0 +1,15 @@
+# Copie este arquivo para config.yaml e ajuste o que quiser.
+# Chaves omitidas usam o valor padrão mostrado aqui.
+
+paths:
+  projects_dir: projects   # onde ficam os projetos (vídeo, áudio, transcrição, clipes)
+  models_dir: models       # cache dos modelos de IA
+
+whisper:
+  model: medium            # tiny | base | small | medium | large-v3 (medium cabe em 4 GB com int8)
+  device: cuda             # cuda | cpu | auto
+  compute_type: int8       # int8 economiza VRAM; float16 é mais rápido em GPUs maiores
+  language: auto           # auto | pt | en
+  beam_size: 5
+  vad_filter: true         # pula silêncio (acelera bastante em lives)
+  cpu_fallback_model: small  # usado se a GPU falhar (CUDA/VRAM)

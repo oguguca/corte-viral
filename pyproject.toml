@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corteviral"
+version = "0.1.0"
+description = "Transforma lives e VODs longos em clipes verticais prontos para TikTok, Shorts, Reels e Kwai."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "faster-whisper>=1.1",
+    "yt-dlp>=2025.1",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "python-dotenv>=1",
+    "nvidia-cublas-cu12",
+    "nvidia-cudnn-cu12==9.*",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["corteviral*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: testes que usam modelo real / rede"]
+addopts = "-m 'not slow'"
