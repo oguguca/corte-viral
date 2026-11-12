@@ -423,7 +423,41 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\n\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
+        "method": "PUT",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "status"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $('YouTube: enviar').first().json.id, status: { privacyStatus: ($('YouTube: enviar').first().json.status && $('YouTube: enviar').first().json.status.privacyStatus) || $('Preparar').all().find(i => i.json.network === 'youtube').json.post.privacy || 'private', embeddable: true, license: 'youtube', publicStatsViewable: true, selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "9e7b56d4-0f5b-5cba-9515-3c52c6c03358",
+      "name": "YouTube: declarar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        700
+      ],
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\nconst r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.id });\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
       },
       "id": "de8cc87f-da90-511a-9816-8702a6707cab",
       "name": "YouTube: resultado",
@@ -967,7 +1001,7 @@
       "main": [
         [
           {
-            "node": "YouTube: resultado",
+            "node": "YouTube: declarar",
             "type": "main",
             "index": 0
           }
@@ -975,6 +1009,17 @@
         [
           {
             "node": "YouTube: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: declarar": {
+      "main": [
+        [
+          {
+            "node": "YouTube: resultado",
             "type": "main",
             "index": 0
           }

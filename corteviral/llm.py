@@ -168,6 +168,11 @@ Para cada clipe, escreva os textos de postagem em {lang}:
   específico (ex.: "gta 6", "gta vi", "trailer gta 6", nome do streamer, assunto do momento).
 - Adapte o tom: tiktok/kwai mais informal e com gírias; shorts direto e com palavra-chave no início do título
   (bom para busca); reels mais visual e com emoji.
+- Em shorts, pense em busca + retenção do YouTube:
+  - title: palavra-chave mais buscada nas primeiras palavras ("GTA 6: …"), curiosidade no final, até 70 caracteres.
+  - description: 2–3 frases naturais que repetem as palavras-chave do título (GTA 6, trailer, nome do
+    streamer, assunto do momento), depois uma pergunta para comentar e um convite curto para se inscrever.
+  - hashtags: as 3 primeiras são as mais fortes (o YouTube mostra essas acima do título), ex.: #gta6 #gta #shorts.
 - Hashtags do jogo devem ser do jogo certo: se for GTA 6 (trailer, gameplay ou react de GTA VI), use #gta6
   e nunca #gtav; se não der para saber a versão, use só #gta.
 - Não invente fatos que não estão na descrição/transcrição. Não use o nome de pessoas reais além do streamer.

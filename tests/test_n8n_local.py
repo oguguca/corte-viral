@@ -90,3 +90,25 @@ def test_ensure_workflow_injects_token_keeps_accounts_and_runs_once(tmp_path, mo
     assert n8n_local.ensure_workflow(tmp_path, tmp_path, TOK, wf) is True
     assert calls == ["export:workflow", "import:workflow", "publish:workflow"]
     assert imported["staticData"]["global"]["tiktok"]["refresh_token"] == "r"  # contas conectadas mantidas
+
+
+def test_update_keeps_chosen_credentials_and_shares_them_with_new_nodes():
+    cred = {"youTubeOAuth2Api": {"id": "C1", "name": "YouTube account"}}
+    old = {"nodes": [{"name": "YouTube: enviar", "credentials": cred}]}
+    wf = {"nodes": [{"name": "YouTube: enviar", "disabled": True, "parameters": {}},
+                    {"name": "YouTube: declarar", "disabled": True,
+                     "parameters": {"nodeCredentialType": "youTubeOAuth2Api"}},
+                    {"name": "Outro", "parameters": {}}]}
+    n8n_local.keep_credentials(wf, old)
+    up, decl, other = wf["nodes"]
+    assert up["credentials"] == cred and "disabled" not in up
+    assert decl["credentials"] == cred and "disabled" not in decl
+    assert "credentials" not in other
+
+
+def test_shipped_workflow_declares_no_synthetic_media():
+    wf = json.loads(n8n_local.WORKFLOW_FILE.read_text(encoding="utf-8"))
+    decl = next(n for n in wf["nodes"] if n["name"] == "YouTube: declarar")
+    assert "containsSyntheticMedia: false" in decl["parameters"]["jsonBody"]
+    assert "selfDeclaredMadeForKids: false" in decl["parameters"]["jsonBody"]
+    assert wf["connections"]["YouTube: enviar"]["main"][0][0]["node"] == "YouTube: declarar"

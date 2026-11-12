@@ -87,6 +87,11 @@ function init() {
       toast(`${r.sent} clipe(s) entregues ao n8n${r.skipped?.length ? ` · ${r.skipped.length} já publicados` : ""}${
         errs.length ? ` · ${errs.length} falharam: ${errs[0].error}` : ""}`, errs.length ? "bad" : "good");
     }
+    if (job.stage === "schedule" && job.result) {
+      const r = job.result, hhmm = (t) => new Date(t * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      toast(r.queued ? `${r.queued} clipe(s) na fila: o primeiro sai às ${hhmm(r.first_at)} e o último às ${hhmm(r.last_at)}.`
+        : "Esses clipes já estavam na fila.", "good");
+    }
     if (job.stage === "transcribe" || job.stage === "ingest") {
       await renderProjects();
       const r = parse();

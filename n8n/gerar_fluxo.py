@@ -221,14 +221,33 @@ node("YouTube: enviar", "n8n-nodes-base.youTube", 1,
                   "privacyStatus": f"={{{{ {Y}.post.privacy || 'private' }}}}", "selfDeclaredMadeForKids": False,
                   "defaultLanguage": "pt"}},
      [1340, 800], onError="continueErrorOutput", disabled=True)  # religar depois de escolher a credencial
+# Depois do envio: declara o que a tela do YouTube Studio pergunta (o nó do YouTube não tem esses campos).
+# containsSyntheticMedia=false → "conteúdo alterado ou sintético: Não" (cortes de live reais);
+# promoção paga não pode ser marcada pela API e já fica "Não" por padrão.
+# Ao atualizar "status", o YouTube apaga o que não vier no pedido: por isso vão todos os campos.
+YUP = "$('YouTube: enviar').first().json"
+node("YouTube: declarar", "n8n-nodes-base.httpRequest", 4.2,
+     {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos",
+      "authentication": "predefinedCredentialType", "nodeCredentialType": "youTubeOAuth2Api",
+      "sendQuery": True, "queryParameters": {"parameters": [{"name": "part", "value": "status"}]},
+      "sendBody": True, "contentType": "json", "specifyBody": "json",
+      "jsonBody": f"={{{{ JSON.stringify({{ id: {YUP}.id, status: {{ "
+                  f"privacyStatus: ({YUP}.status && {YUP}.status.privacyStatus) || {Y}.post.privacy || 'private', "
+                  "embeddable: true, license: 'youtube', publicStatsViewable: true, "
+                  "selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
+      "options": {"timeout": 60000}},
+     [1450, 700], onError="continueRegularOutput", disabled=True)  # usa a mesma credencial do nó YouTube: enviar
 code("YouTube: resultado", cb_js("youtube", "r.id ? 'published' : 'error'",
                                  "r.id ? 'https://youtube.com/shorts/' + r.id : ''",
-                                 "r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o'"), [1560, 800])
+                                 "r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o'",
+                                 pre="const r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.id });"),
+     [1560, 800])
 code("YouTube: falhou", FAIL_JS("youtube", "YouTube"), [1560, 940])
 link("Qual rede?", "YouTube: ler vídeo", 1)
-for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "YouTube: resultado")):
+for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "YouTube: declarar")):
     link(a, b, 0)
     link(a, "YouTube: falhou", 1)
+link("YouTube: declarar", "YouTube: resultado")  # falhar ao declarar não desfaz o vídeo publicado
 link("YouTube: resultado", AV)
 link("YouTube: falhou", AV)
 

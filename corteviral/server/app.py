@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable, Literal
 
@@ -37,7 +38,8 @@ from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.pipeline.ingest import IngestError, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
-from corteviral.pipeline.render import render_all
+from corteviral.pipeline.render import render_all, render_clip
+from corteviral.schedule import MAX_INTERVAL, MIN_INTERVAL, Scheduler, ScheduleStore
 from corteviral.presets import LayoutPreset, detected_layout, load_preset, resolve_layout, save_preset
 from corteviral.project import PROJECT_FILE, Project
 from corteviral.usage import UsageTracker
@@ -54,7 +56,8 @@ def default_pipeline(source: str, settings: Settings, on_progress: StageProgress
 
 
 class JobRequest(BaseModel):
-    kind: Literal["ingest", "analyze", "render", "export", "posts", "publish"] = "ingest"
+    kind: Literal["ingest", "analyze", "render", "export", "posts", "publish", "schedule"] = "ingest"
+    interval_min: int | None = Field(default=None, ge=MIN_INTERVAL, le=MAX_INTERVAL)  # schedule: 1 clipe a cada N min
     source: str | None = None       # ingest
     project: str | None = None      # analyze
     n: int | None = Field(default=None, ge=1, le=50)
@@ -84,7 +87,7 @@ class JobRequest(BaseModel):
         if (self.min_seconds is None) != (self.max_seconds is None) or (
                 self.min_seconds is not None and self.max_seconds - self.min_seconds < 5):
             raise ValueError("duração inválida: informe mínimo e máximo, com o máximo ao menos 5 s maior")
-        if self.kind in ("analyze", "render", "export", "posts", "publish") and not self.project:
+        if self.kind in ("analyze", "render", "export", "posts", "publish", "schedule") and not self.project:
             raise ValueError("project é obrigatório para analyze/render/export")
         return self
 
@@ -162,8 +165,22 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     analyzer = analyzer or analyze
     usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
     feedback = FeedbackStore(Path(settings.paths.data_dir) / "feedback.json")
-    app = FastAPI(title="Corte Viral")
+    @asynccontextmanager
+    async def lifespan(_app):
+        sched = Scheduler(schedule_store, _send_scheduled)  # fila de postagem programada
+        sched.start()
+        yield
+        sched.stop.set()
+
+    app = FastAPI(title="Corte Viral", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    base: dict = {"url": None}  # endereço deste servidor (porta muda a cada abertura): o n8n avisa de volta aqui
+
+    @app.middleware("http")
+    async def _remember_base(request: Request, call_next):
+        if request.url.path.startswith("/api/"):
+            base["url"] = str(request.base_url)
+        return await call_next(request)
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
     data_dir = Path(settings.paths.data_dir)
@@ -171,8 +188,10 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     yt_cookies = data_dir / "session-cookies.txt"
     yt_status = data_dir / "session-status.json"
     publish_store = PublishStore(data_dir)
+    schedule_store = ScheduleStore(data_dir)
     goals_store = GoalsStore(data_dir)
     n8n_proc: dict = {"p": None}
+    n8n_lock = threading.Lock()
 
     def _yt_sync() -> dict:
         info = export_cookies(yt_profile, yt_cookies)
@@ -264,6 +283,29 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 job.update(stage="publish", project=project.dir.name)
                 job["result"] = publish_clips(project, s, publish_store, req.ids, req.callback_url or "",
                                               force=req.force, on_progress=lambda f, m: progress("publish", f, m))
+            elif req.kind == "schedule":
+                project = Project.load(_project_dir(req.project))
+                job.update(stage="schedule", project=project.dir.name, message="preparando a fila")
+                if not publish_store.load().enabled():
+                    raise PublishError("Ative pelo menos uma rede em Contas conectadas.")
+
+                def approved_now() -> list[dict]:
+                    return [m for m in chosen_moments(project, req.ids) if m.get("status") == "approved"]
+                missing = [m["id"] for m in approved_now() if not m.get("meta")]
+                if missing:  # cada post sai com título, descrição, hashtags e tags escritos pela IA
+                    job.update(stage="posts", message=f"IA escrevendo os textos de {len(missing)} clipe(s)")
+                    generate_posts(project, missing, s)
+                chosen = approved_now()
+                if not chosen:
+                    raise PublishError("Nenhum clipe aprovado para programar.")
+                for i, m in enumerate(chosen):  # deixa os vídeos prontos: na hora marcada é só enviar
+                    progress("render", i / len(chosen), f"preparando clipe {i + 1} de {len(chosen)}")
+                    render_clip(project, m, settings)
+                new = schedule_store.plan(project.dir.name, [m["id"] for m in chosen], req.interval_min or 15)
+                job["result"] = {"queued": len(new), "first_at": new[0]["at"] if new else None,
+                                 "last_at": new[-1]["at"] if new else None,
+                                 "already": len(chosen) - len(new)}
+                job["stage"] = "schedule"
             elif req.kind == "render":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="render", project=project.dir.name)
@@ -471,22 +513,61 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     def get_project_publish(name: str):
         return publish_store.status(_project_dir(name).name)
 
-    @app.post("/api/n8n/start")
-    def post_n8n_start():
+    def _start_n8n() -> dict:
         state = _n8n_state()
         if state["online"]:
             return {"ok": True, "already": True}
         if not state["installed"]:
-            raise HTTPException(409, "o n8n ainda não foi instalado neste PC (veja o README)")
-        p = n8n_proc["p"]
-        if p is None or p.poll() is not None:
-            try:  # primeira vez (ou fluxo atualizado): importa e publica antes de ligar
-                n8n_local.ensure_workflow(settings.paths.n8n_dir, data_dir, publish_store.load().token)
-            except (RuntimeError, OSError, ValueError) as e:
-                raise HTTPException(500, f"não consegui preparar o fluxo no n8n: {e}")
-            n8n_proc["p"] = n8n_local.start(settings.paths.n8n_dir, data_dir,
-                                            (projects_dir, Path(settings.paths.exports_dir)))
+            raise PublishError("o n8n ainda não foi instalado neste PC (veja o README)")
+        with n8n_lock:
+            p = n8n_proc["p"]
+            if p is None or p.poll() is not None:
+                try:  # primeira vez (ou fluxo atualizado): importa e publica antes de ligar
+                    n8n_local.ensure_workflow(settings.paths.n8n_dir, data_dir, publish_store.load().token)
+                except (RuntimeError, OSError, ValueError) as e:
+                    raise PublishError(f"não consegui preparar o fluxo no n8n: {e}")
+                n8n_proc["p"] = n8n_local.start(settings.paths.n8n_dir, data_dir,
+                                                (projects_dir, Path(settings.paths.exports_dir)))
         return {"ok": True, "starting": True}
+
+    @app.post("/api/n8n/start")
+    def post_n8n_start():
+        try:
+            return _start_n8n()
+        except PublishError as e:
+            raise HTTPException(409 if "instalado" in str(e) else 500, str(e))
+
+    def _send_scheduled(item: dict) -> str | None:
+        """Hora marcada: entrega o clipe ao n8n (liga o n8n sozinho se estiver desligado)."""
+        if not base["url"]:
+            return "o Corte Viral ainda não sabe o próprio endereço: abra a janela do app"
+        state = _n8n_state()
+        if not state["online"]:
+            if not state["local"]:
+                return "o n8n não respondeu"
+            _start_n8n()
+            for _ in range(60):  # até ~2 min para o n8n ficar pronto
+                time.sleep(2)
+                if n8n_local.online(state["editor_url"]):
+                    break
+            else:
+                return "o n8n não ligou a tempo"
+        project = Project.load(_project_dir(item["project"]))
+        res = publish_clips(project, settings, publish_store, [item["clip_id"]],
+                            base["url"] + "api/publish/callback")
+        return res["errors"][0]["error"] if res["errors"] else None
+
+    @app.get("/api/schedule")
+    def get_schedule(project: str | None = None):
+        return {"items": schedule_store.items(project), "summary": schedule_store.summary(), "now": time.time()}
+
+    @app.delete("/api/schedule/{item_id}")
+    def delete_schedule_item(item_id: str):
+        return {"removed": schedule_store.cancel(item_id=item_id)}
+
+    @app.delete("/api/schedule")
+    def delete_schedule(project: str):
+        return {"removed": schedule_store.cancel(project=project)}
 
     @app.post("/api/n8n/open")
     def post_n8n_open():

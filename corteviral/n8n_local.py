@@ -80,12 +80,35 @@ def _cli(tools_dir: Path, data_dir: Path, *args: str) -> str:
     return (r.stdout or "").strip()[-300:]
 
 
+def keep_credentials(wf: dict, old: dict) -> None:
+    """Leva para a versão nova as credenciais escolhidas à mão (ex.: YouTube) e religa esses nós.
+
+    Nó novo que usa um tipo de credencial já escolhido em outro nó (ex.: "YouTube: declarar") recebe a mesma.
+    """
+    by_name = {n.get("name"): n for n in old.get("nodes", [])}
+    by_type: dict[str, dict] = {}
+    for n in old.get("nodes", []):
+        for ctype, cred in (n.get("credentials") or {}).items():
+            by_type.setdefault(ctype, cred)
+    for n in wf.get("nodes", []):
+        prev = by_name.get(n.get("name"))
+        if prev and prev.get("credentials"):
+            n["credentials"] = prev["credentials"]
+            if not prev.get("disabled"):
+                n.pop("disabled", None)
+            continue
+        ctype = n.get("parameters", {}).get("nodeCredentialType")
+        if ctype in by_type and not n.get("credentials"):
+            n["credentials"] = {ctype: by_type[ctype]}
+            n.pop("disabled", None)
+
+
 def ensure_workflow(tools_dir: Path, data_dir: Path, token: str, file: Path = WORKFLOW_FILE) -> bool:
     """Importa e publica o fluxo pronto quando ele é novo ou mudou (rodar com o n8n desligado).
 
     - grava no fluxo o token do Corte Viral (sem ele o webhook recusa tudo);
     - mantém as contas já conectadas (TikTok/Instagram ficam nos dados estáticos do fluxo).
-    Credenciais escolhidas à mão nos nós (YouTube) precisam ser reescolhidas depois de uma atualização.
+    - mantém as credenciais escolhidas à mão nos nós (YouTube), sem precisar escolher de novo.
     """
     if not re.fullmatch(r"[0-9a-f]{32,128}", token or ""):
         raise ValueError("token do Corte Viral inválido")
@@ -105,6 +128,7 @@ def ensure_workflow(tools_dir: Path, data_dir: Path, token: str, file: Path = WO
             old = old[0] if isinstance(old, list) else old
             if old.get("staticData"):
                 wf["staticData"] = old["staticData"]
+            keep_credentials(wf, old)
         finally:
             current.unlink(missing_ok=True)
     prepared = folder / "workflow-importar.json"  # tem o token: fica em data/ (fora do git)

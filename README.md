@@ -203,7 +203,10 @@ O programa (`tools/`) e os dados do n8n (`data/n8n`: login, contas, chaves) nunc
    quando o fluxo mudar). O nó **YouTube: enviar** vem desligado até você escolher a credencial do YouTube nele.
 3. Em cada rede, siga o passo a passo da própria tela (botão "Como conectar…"):
    - **YouTube:** credencial **YouTube OAuth2 API** dentro do n8n (projeto no Google Cloud com a YouTube Data API v3).
-     Sem a verificação do Google, os vídeos sobem **privados**; a cota grátis aguenta ~6 envios por dia.
+     Sem a verificação do Google, os vídeos sobem **privados**; a cota grátis aceita até 100 envios por dia.
+     Depois de cada envio, o nó **YouTube: declarar** marca *conteúdo alterado ou sintético: Não* e *conteúdo
+     para crianças: Não* (usa a mesma credencial; promoção paga já fica *Não* por padrão). Ao atualizar o fluxo,
+     a credencial escolhida é mantida.
    - **Instagram:** conta **Profissional** ligada a uma Página do Facebook + app da Meta. Cole o ID da conta e o
      token de um *Usuário do sistema* na tela e clique em **Conectar no n8n**.
    - **TikTok:** app em developers.tiktok.com com *Login Kit* e *Content Posting API*. Preencha client key,
@@ -211,7 +214,14 @@ O programa (`tools/`) e os dados do n8n (`data/n8n`: login, contas, chaves) nunc
      saem **só para você**; clipes acima de 64 MB não são aceitos.
 4. Ligue as redes desejadas e clique em **Testar ligação**.
 
-**Postar:** na etapa **Exportar**, **Enviar N clipe(s) para postar** — ou ligue **"Enviar para postar ao exportar"**.
+**Programar postagem (fila):** na etapa **Exportar**, card **⏱ Programar postagem** — escolha o intervalo
+(ex.: 1 clipe a cada 15 min) e clique em **Programar N clipe(s)**. Antes, a IA escreve título, descrição, hashtags
+e tags de quem ainda não tem, e os vídeos já ficam prontos. Uma leva nova começa sozinha depois da última que
+está na fila. Cada clipe na fila mostra a hora (⏱) e pode ser tirado com ✕. O Corte Viral precisa ficar aberto:
+na hora marcada ele liga o n8n se estiver desligado. Com o app fechado, os atrasados saem um por vez ao abrir.
+A fila fica em `data/publish_queue.json`.
+
+**Postar agora:** na etapa **Exportar**, **Enviar N clipe(s) agora** — ou ligue **"Enviar para postar ao exportar"**.
 Cada clipe mostra o status por rede (→ enviado, ✓ publicado com link, ⚠ falhou); clipes já publicados numa rede
 não são reenviados sem confirmação. O histórico fica em `data/publish_log.json`.
 
