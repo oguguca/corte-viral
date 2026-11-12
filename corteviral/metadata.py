@@ -69,6 +69,27 @@ def normalize_keywords(tags) -> list[str]:
     return out
 
 
+YT_TITLE_CHARS = 100
+
+
+def youtube_title(title: str, hashtags: list[str], limit: int = YT_TITLE_CHARS) -> str:
+    """Título do Shorts com o máximo de hashtags que couber em `limit` caracteres (#shorts primeiro).
+
+    Não repete hashtag que já está no título e nunca corta o título original.
+    """
+    title = " ".join(str(title or "").split())
+    have = {w.lower() for w in title.split() if w.startswith("#")}
+    tags = ["#shorts"] + [h for h in hashtags or [] if h.startswith("#") and len(h) > 1]
+    out = title[:limit]
+    for h in tags:
+        if h.lower() in have:
+            continue
+        if len(out) + 1 + len(h) <= limit:
+            out = f"{out} {h}"
+            have.add(h.lower())
+    return out
+
+
 def _credit_line(credit: str | None) -> str:
     if not credit:
         return ""

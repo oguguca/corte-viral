@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from corteviral.config import Settings
 from corteviral.export import _approved, _meta
+from corteviral.metadata import youtube_title
 from corteviral.pipeline.render import render_clip
 from corteviral.presets import load_preset
 from corteviral.project import Project
@@ -144,7 +145,8 @@ def build_payload(project: str, moment: dict, meta: dict, networks: list[str], c
             desc = (post.get("description", "") + "\n\n" + " ".join(post.get("hashtags", []))).strip()
             if "#shorts" not in desc.lower():
                 desc += " #Shorts"
-            out[net] = {"title": (post.get("title") or meta.get("hook") or "Corte")[:100], "description": desc[:4900],
+            title = youtube_title(post.get("title") or meta.get("hook") or "Corte", post.get("hashtags", []))
+            out[net] = {"title": title, "description": desc[:4900],
                         "tags": (post.get("tags") or _tags(post.get("hashtags", [])))[:15],
                         "privacy": cfg.youtube_privacy}
         else:

@@ -207,6 +207,7 @@ O programa (`tools/`) e os dados do n8n (`data/n8n`: login, contas, chaves) nunc
      Depois de cada envio, o nó **YouTube: declarar** marca *conteúdo alterado ou sintético: Não* e *conteúdo
      para crianças: Não* (usa a mesma credencial; promoção paga já fica *Não* por padrão). Ao atualizar o fluxo,
      a credencial escolhida é mantida.
+     O título do Shorts leva o máximo de hashtags que cabe em 100 caracteres (`#shorts` primeiro).
    - **Instagram:** conta **Profissional** ligada a uma Página do Facebook + app da Meta. Cole o ID da conta e o
      token de um *Usuário do sistema* na tela e clique em **Conectar no n8n**.
    - **TikTok:** app em developers.tiktok.com com *Login Kit* e *Content Posting API*. Preencha client key,

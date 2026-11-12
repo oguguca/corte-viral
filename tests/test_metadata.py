@@ -125,3 +125,15 @@ def test_shorts_has_youtube_tags():
     derived = normalize_post({"title": "t", "description": "x", "hashtags": ["#gta6", "#cortes"]}, "shorts", None)
     assert derived["tags"] == ["gta6", "cortes"]        # sem tags da IA: vêm das hashtags
     assert "tags" not in normalize_post({"title": "t", "description": "x", "hashtags": []}, "tiktok", None)
+
+
+def test_youtube_title_fills_hashtags_up_to_100_chars():
+    from corteviral.metadata import youtube_title
+    t = youtube_title("GTA 6: A cena da Lucy #shorts", ["#gta6", "#gta", "#shorts", "#gtavi", "#coringa",
+                                                    "#coringareage", "#lucygta6", "#trailergta6", "#gaming"])
+    assert len(t) <= 100 and t.startswith("GTA 6: A cena da Lucy #shorts #gta6 #gta #gtavi")
+    assert t.lower().count("#shorts") == 1  # não repete
+    assert len(t) > 100 - len(" #gaming") or "#gaming" in t  # enche até onde cabe
+    long = "x" * 98
+    assert youtube_title(long, ["#gta6"]) == long  # não corta o título para caber hashtag
+    assert youtube_title("Corte", []) == "Corte #shorts"

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from corteviral.config import Settings
-from corteviral.metadata import fallback_posts
+from corteviral.metadata import fallback_posts, youtube_title
 from corteviral.pipeline.render import render_clip
 from corteviral.presets import load_preset
 from corteviral.project import Project
@@ -81,6 +81,7 @@ def platform_texts(moment: dict, streamer: str | None = None, credit: str | None
         title, desc = post.get("title", ""), post.get("description", "")
         tags = " ".join(post.get("hashtags", []))
         if plat == "shorts":  # YouTube: título, descrição e tags são campos separados
+            title = youtube_title(title, post.get("hashtags", []))  # o máximo de # que cabe em 100 caracteres
             body = (f"{label}\n\n"
                     f"TÍTULO (campo \"Título\", até 100 caracteres):\n{title}\n\n"
                     f"DESCRIÇÃO (campo \"Descrição\"; as 3 primeiras hashtags aparecem em cima do título):\n"
