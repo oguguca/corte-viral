@@ -60,6 +60,8 @@ function row(it, now, next) {
         <a href="#/p/${encodeURIComponent(it.project)}/export" title="Abrir o vídeo no Corte Viral">${esc(it.project_title)}</a>
         ${it.duration ? ` · ${it.duration} s` : ""}</div>
       ${err && cls === "bad" ? `<div class="qp-err">${esc(err)}</div>` : ""}
+      ${Object.values(it.publish || {}).filter((e) => e.note).map((e) =>
+        `<div class="qp-note ${/⚠/.test(e.note) ? "warn" : ""}">${esc(e.note)}</div>`).join("")}
     </div>
     <div class="qp-status">
       <span class="badge ${cls}">${esc(label)}</span>${netBadges(it)}

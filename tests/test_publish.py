@@ -278,3 +278,17 @@ def test_test_and_setup_send_the_app_token(n8n):
     test_connection(n8n, "segredo")
     setup_account(n8n, "instagram", {"ig_user_id": "1", "access_token": "x"}, "segredo")
     assert [r["json"]["token"] for r in _Fake.received] == ["segredo", "segredo"]
+
+
+def test_callback_keeps_youtube_check_note(tmp_path):
+    from corteviral.publish import PublishStore, apply_callback
+    store = PublishStore(tmp_path)
+    tok = store.load().token
+    store.record("p", "m1", "youtube", status="sent", send_id="s1")
+    apply_callback(store, {"token": tok, "network": "youtube", "project": "p", "clip_id": "m1", "send_id": "s1",
+                           "status": "published", "url": "https://youtube.com/shorts/x",
+                           "note": "Uso de IA: Não ✓ · Promoção paga: Não ✓"})
+    e = store.status("p")["m1"]["youtube"]
+    assert e["note"].startswith("Uso de IA: Não")
+    store.record("p", "m1", "youtube", status="sent", send_id="s2")  # novo envio limpa o aviso antigo
+    assert "note" not in store.status("p")["m1"]["youtube"]

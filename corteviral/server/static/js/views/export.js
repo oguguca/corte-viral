@@ -14,7 +14,7 @@ function pubBadges(entries) {  // status por rede: publicado / enviado / falhou
   return Object.entries(entries || {}).map(([net, e]) => {
     const cls = e.status === "published" ? "good" : e.status === "error" ? "bad" : "info";
     const sym = e.status === "published" ? "✓" : e.status === "error" ? "⚠" : "→";
-    const tip = e.status === "error" ? e.error : e.status === "published" ? "publicado" : "enviado ao n8n";
+    const tip = e.status === "error" ? e.error : e.status === "published" ? `publicado${e.note ? " · " + e.note : ""}` : "enviado ao n8n";
     const badge = `<span class="badge ${cls}" title="${esc(tip || "")}">${sym} ${NET_SHORT[net] || esc(net)}</span>`;
     return e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${badge}</a>` : badge;
   }).join("");

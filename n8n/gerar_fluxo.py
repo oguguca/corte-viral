@@ -247,18 +247,49 @@ node("YouTube: declarar", "n8n-nodes-base.httpRequest", 4.2,
                   "selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
       "options": {"timeout": 60000}},
      [1450, 760], onError="continueRegularOutput", disabled=True)
-code("YouTube: resultado", cb_js("youtube", "r.id ? 'published' : 'error'",
-                                 "r.id ? 'https://youtube.com/shorts/' + r.id : ''",
-                                 "r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o'",
-                                 pre="const r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.uploadId || r2.id });"),
-     [1560, 800])
+# Promoção paga: a API não documenta esse campo como gravável; tenta e ignora a recusa (o padrão já é "Não").
+node("YouTube: promoção paga", "n8n-nodes-base.httpRequest", 4.2,
+     {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
+      "sendQuery": True, "queryParameters": {"parameters": [{"name": "part", "value": "paidProductPlacementDetails"}]},
+      "sendBody": True, "contentType": "json", "specifyBody": "json",
+      "jsonBody": f"={{{{ JSON.stringify({{ id: {VID}, paidProductPlacementDetails: {{ hasPaidProductPlacement: false }} }}) }}}}",
+      "options": {"timeout": 60000}},
+     [1450, 880], onError="continueRegularOutput", disabled=True)
+# Confere como o vídeo ficou e conta ao Corte Viral (aparece no selo do clipe e na Fila de postagem).
+node("YouTube: conferir", "n8n-nodes-base.httpRequest", 4.2,
+     {"method": "GET", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
+      "sendQuery": True, "queryParameters": {"parameters": [
+          {"name": "part", "value": "status,paidProductPlacementDetails"},
+          {"name": "id", "value": f"={{{{ {VID} }}}}"}]},
+      "options": {"timeout": 60000}},
+     [1450, 1000], onError="continueRegularOutput", disabled=True)
+code("YouTube: resultado", r"""const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;
+const up = $('YouTube: enviar').first().json;
+const id = up.uploadId || up.id;
+const it = (($input.first().json.items || [])[0]) || {};
+const st = it.status || {}, pp = it.paidProductPlacementDetails || {};
+const errOf = (n) => { try { const j = $(n).first().json; return j && j.error ? String(j.error.message || j.error.description || j.error).slice(0, 160) : ''; } catch (e) { return ''; } };
+const notes = [];
+if (it.status) {
+  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === false ? 'Não ✓' : st.containsSyntheticMedia === true ? 'Sim ⚠' : 'sem resposta ⚠'));
+  notes.push('Promoção paga: ' + (pp.hasPaidProductPlacement === true ? 'Sim ⚠' : 'Não ✓'));
+  notes.push('Visibilidade: ' + (st.privacyStatus || '?'));
+} else notes.push('não consegui conferir o vídeo' + (errOf('YouTube: conferir') ? ' (' + errOf('YouTube: conferir') + ')' : ''));
+if (errOf('YouTube: declarar')) notes.push('declarar falhou: ' + errOf('YouTube: declarar'));
+return [{ json: { callback_url: p.callback_url, body: {
+  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',
+  status: id ? 'published' : 'error', url: id ? 'https://youtube.com/shorts/' + id : '',
+  error: id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o',
+  note: notes.join(' · ') } } }];""", [1560, 800])
 code("YouTube: falhou", FAIL_JS("youtube", "YouTube"), [1560, 940])
 link("Qual rede?", "YouTube: ler vídeo", 1)
 for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "YouTube: ver status")):
     link(a, b, 0)
     link(a, "YouTube: falhou", 1)
 link("YouTube: ver status", "YouTube: declarar")
-link("YouTube: declarar", "YouTube: resultado")  # falhar ao declarar não desfaz o vídeo publicado
+link("YouTube: declarar", "YouTube: promoção paga")  # falhar aqui não desfaz o vídeo publicado
+link("YouTube: promoção paga", "YouTube: conferir")
+link("YouTube: conferir", "YouTube: resultado")
 link("YouTube: resultado", AV)
 link("YouTube: falhou", AV)
 

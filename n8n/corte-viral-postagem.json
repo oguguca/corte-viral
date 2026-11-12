@@ -491,7 +491,75 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\nconst r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.uploadId || r2.id });\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
+        "method": "PUT",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "paidProductPlacementDetails"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: ($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id), paidProductPlacementDetails: { hasPaidProductPlacement: false } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "25c3463a-6f7b-5ba2-8c4f-99929524469c",
+      "name": "YouTube: promoção paga",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        880
+      ],
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "status,paidProductPlacementDetails"
+            },
+            {
+              "name": "id",
+              "value": "={{ ($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "b85e1029-9dfd-54ea-9f28-fc3888fb5147",
+      "name": "YouTube: conferir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        1000
+      ],
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst up = $('YouTube: enviar').first().json;\nconst id = up.uploadId || up.id;\nconst it = (($input.first().json.items || [])[0]) || {};\nconst st = it.status || {}, pp = it.paidProductPlacementDetails || {};\nconst errOf = (n) => { try { const j = $(n).first().json; return j && j.error ? String(j.error.message || j.error.description || j.error).slice(0, 160) : ''; } catch (e) { return ''; } };\nconst notes = [];\nif (it.status) {\n  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === false ? 'Não ✓' : st.containsSyntheticMedia === true ? 'Sim ⚠' : 'sem resposta ⚠'));\n  notes.push('Promoção paga: ' + (pp.hasPaidProductPlacement === true ? 'Sim ⚠' : 'Não ✓'));\n  notes.push('Visibilidade: ' + (st.privacyStatus || '?'));\n} else notes.push('não consegui conferir o vídeo' + (errOf('YouTube: conferir') ? ' (' + errOf('YouTube: conferir') + ')' : ''));\nif (errOf('YouTube: declarar')) notes.push('declarar falhou: ' + errOf('YouTube: declarar'));\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: id ? 'published' : 'error', url: id ? 'https://youtube.com/shorts/' + id : '',\n  error: id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o',\n  note: notes.join(' · ') } } }];"
       },
       "id": "de8cc87f-da90-511a-9816-8702a6707cab",
       "name": "YouTube: resultado",
@@ -1061,6 +1129,28 @@
       ]
     },
     "YouTube: declarar": {
+      "main": [
+        [
+          {
+            "node": "YouTube: promoção paga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: promoção paga": {
+      "main": [
+        [
+          {
+            "node": "YouTube: conferir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: conferir": {
       "main": [
         [
           {

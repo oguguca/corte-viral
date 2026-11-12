@@ -108,6 +108,7 @@ class PublishStore:
                 entry.pop("error", None)
             if fields.get("status") == "sent":
                 entry.pop("url", None)  # novo envio: o link antigo não vale mais
+                entry.pop("note", None)
             items[key] = entry
             self.dir.mkdir(parents=True, exist_ok=True)
             write_json_atomic(self.log_path, items)
@@ -272,6 +273,9 @@ def apply_callback(store: PublishStore, body: dict) -> dict:
     url = str(body.get("url") or "")[:500]
     if url.startswith("https://"):  # só links https (nada de javascript: no href da tela)
         fields["url"] = url
+    note = str(body.get("note") or "")[:300]
+    if note:  # ex.: "Uso de IA: Não ✓ · Promoção paga: Não ✓"
+        fields["note"] = note
     if status == "error":
         fields["error"] = str(body.get("error") or "falha sem detalhe")[:500]
     store.record(project, clip, net, **fields)
