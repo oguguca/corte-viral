@@ -58,6 +58,11 @@ export async function renderExport(root, name, project, ctx = {}) {
   const waitingBy = Object.fromEntries(items.filter((i) => i.status === "waiting").map((i) => [i.clip_id, i]));
   const wentOut = (m) => Object.values(pub[m.id] || {}).some((e) => e.status === "published" || e.status === "sent");
   const toQueue = approved.filter((m) => !waitingBy[m.id] && !wentOut(m));
+  // ordem da lista: os que estão na fila, do que sai primeiro ao último; depois os demais (melhor nota antes)
+  approved.sort((a, b) => {
+    const ta = waitingBy[a.id] ? waitingBy[a.id].at : Infinity, tb = waitingBy[b.id] ? waitingBy[b.id].at : Infinity;
+    return ta !== tb ? ta - tb : b.score - a.score;
+  });
   const sum = queue ? queue.summary : null;
 
   root.innerHTML = `

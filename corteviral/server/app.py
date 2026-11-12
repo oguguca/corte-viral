@@ -180,7 +180,10 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     async def _remember_base(request: Request, call_next):
         if request.url.path.startswith("/api/"):
             base["url"] = str(request.base_url)
-        return await call_next(request)
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"  # sempre confere a versão nova da tela depois de atualizar
+        return response
     jobs = _Jobs()
     projects_dir = Path(settings.paths.projects_dir)
     data_dir = Path(settings.paths.data_dir)
@@ -570,6 +573,56 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     @app.get("/api/schedule")
     def get_schedule(project: str | None = None):
         return {"items": schedule_store.items(project), "summary": schedule_store.summary(), "now": time.time()}
+
+    @app.get("/api/queue")
+    def get_queue():
+        """Aba Fila de postagem: todos os clipes programados, de todos os vídeos, com o status de cada rede."""
+        projects: dict[str, tuple[str, dict]] = {}
+
+        def info(name: str) -> tuple[str, dict]:
+            if name not in projects:
+                try:
+                    pr = Project.load(_project_dir(name))
+                    data = load_moments(pr) or {}
+                    ms = {m["id"]: m for m in data.get("all", []) + data.get("moments", [])}
+                    projects[name] = (pr.data.get("title") or name, ms)
+                except (HTTPException, OSError, ValueError):
+                    projects[name] = (name, {})
+            return projects[name]
+
+        def title(m: dict) -> str:
+            posts = (m.get("meta") or {}).get("posts") or {}
+            return ((posts.get("shorts") or {}).get("title") or (posts.get("tiktok") or {}).get("title")
+                    or (m.get("meta") or {}).get("hook") or m.get("description") or m.get("reason") or m.get("id", ""))
+
+        status_by_project: dict[str, dict] = {}
+        out = []
+        for it in schedule_store.items():
+            ptitle, ms = info(it["project"])
+            if it["project"] not in status_by_project:
+                status_by_project[it["project"]] = publish_store.status(it["project"])
+            pub = status_by_project[it["project"]].get(it["clip_id"], {})
+            if it["status"] == "waiting":  # resultado antigo (de antes de entrar na fila) não vale
+                pub = {}
+            elif it.get("sent_at"):
+                pub = {k: v for k, v in pub.items() if v.get("ts", 0) >= it["sent_at"] - 5}
+            m = ms.get(it["clip_id"], {"id": it["clip_id"]})
+            out.append({**it, "project_title": ptitle, "title": title(m),
+                        "duration": round(m["end"] - m["start"]) if "end" in m else None, "publish": pub})
+        state = _n8n_state()
+        return {"items": out, "summary": schedule_store.summary(), "now": time.time(),
+                "networks": [NETWORKS[k][0] for k in publish_store.load().enabled()],
+                "n8n": {"online": state["online"], "installed": state["installed"]}}
+
+    @app.post("/api/schedule/{item_id}/retry")
+    def retry_schedule_item(item_id: str):
+        it = next((i for i in schedule_store.items() if i["id"] == item_id), None)
+        if it is None:
+            raise HTTPException(404, "item da fila não encontrado")
+        if it["status"] == "waiting":
+            raise HTTPException(409, "esse clipe ainda está na fila")
+        new = schedule_store.plan(it["project"], [it["clip_id"]], it.get("interval") or 15)
+        return {"item": new[0] if new else None}
 
     @app.delete("/api/schedule/{item_id}")
     def delete_schedule_item(item_id: str):

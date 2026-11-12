@@ -12,6 +12,7 @@ import { renderAccounts } from "./views/accounts.js";
 import { renderClips } from "./views/clips.js";
 import { renderExport } from "./views/export.js";
 import { renderHome } from "./views/home.js";
+import { renderQueue } from "./views/queue.js";
 import { renderMoments } from "./views/moments.js";
 import { renderVideo } from "./views/video.js";
 
@@ -42,6 +43,15 @@ async function render({ keepFocus = false } = {}) {
     if (!keepFocus) { const h1 = $("#page h1"); h1?.setAttribute("tabindex", "-1"); h1?.focus({ preventScroll: true }); }
     return;
   }
+  if (route.view === "queue") $("#openQueue").setAttribute("aria-current", "page");
+  else $("#openQueue").removeAttribute("aria-current");
+  if (route.view === "queue") {
+    main.innerHTML = '<div class="page" id="page"></div>';
+    if (!keepFocus) main.scrollTop = 0;
+    await renderQueue($("#page"));
+    if (!keepFocus) { const h1 = $("#page h1"); h1?.setAttribute("tabindex", "-1"); h1?.focus({ preventScroll: true }); }
+    return;
+  }
   if (route.view === "home") $("#brandHome").setAttribute("aria-current", "page");
   else $("#brandHome").removeAttribute("aria-current");
   if (route.view === "home") {
@@ -68,6 +78,15 @@ async function render({ keepFocus = false } = {}) {
     h1?.setAttribute("tabindex", "-1");
     h1?.focus({ preventScroll: true });
   }
+}
+
+async function queueBadge() {  // "Fila de postagem · 14 na fila · próximo 19:28" na barra lateral
+  try {
+    const q = await api("/api/schedule");
+    const s = q.summary, el = $("#queueSub");
+    el.textContent = s.waiting ? `${s.waiting} na fila · próximo ${new Date(s.next_at * 1000)
+      .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "nada programado";
+  } catch (e) { /* app reiniciando */ }
 }
 
 function init() {
@@ -104,6 +123,8 @@ function init() {
   loadCapStyle();
   renderUsageMini();
   setInterval(renderUsageMini, 20000);
+  queueBadge();
+  setInterval(queueBadge, 30000);
   render();
   resumeRunning();
 }

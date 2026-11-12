@@ -221,6 +221,10 @@ está na fila. Cada clipe na fila mostra a hora (⏱) e pode ser tirado com ✕.
 na hora marcada ele liga o n8n se estiver desligado. Com o app fechado, os atrasados saem um por vez ao abrir.
 A fila fica em `data/publish_queue.json`.
 
+A barra lateral tem a aba **⏱ Fila de postagem**: todos os clipes programados, de todos os vídeos, por ordem
+de horário. Mostra o próximo envio (com contagem), quantos faltam, os publicados hoje (com link ↗) e o erro de
+quem falhou, com **Tentar de novo** (volta para o fim da fila). Atualiza sozinha a cada 15 s.
+
 **Postar agora:** na etapa **Exportar**, **Enviar N clipe(s) agora** — ou ligue **"Enviar para postar ao exportar"**.
 Cada clipe mostra o status por rede (→ enviado, ✓ publicado com link, ⚠ falhou); clipes já publicados numa rede
 não são reenviados sem confirmação. O histórico fica em `data/publish_log.json`.

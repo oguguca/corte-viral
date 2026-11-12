@@ -523,3 +523,24 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 .q-time { font-weight: 650; white-space: nowrap; }
 .q-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-x { min-height: 26px; padding: 0 8px; }
+
+/* ---------- aba Fila de postagem ---------- */
+.qp-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
+@media (max-width: 900px) { .qp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.qp-stats .stat b { font-size: 22px; }
+.qp-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.qp-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 14px; align-items: center; min-width: 0;
+          padding: 10px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.qp-row.next { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.qp-row.done .qp-title { color: var(--text-2); }
+.qp-time { display: grid; gap: 2px; font-weight: 700; font-size: 15px; }
+.qp-main { display: grid; gap: 3px; min-width: 0; }
+.qp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.qp-meta a { color: inherit; }
+.qp-err { font-size: 12px; color: var(--bad); overflow-wrap: anywhere; }
+.qp-status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end; }
+.qp-status a { text-decoration: none; }
+@media (max-width: 700px) {
+  .qp-row { grid-template-columns: 70px minmax(0, 1fr); }
+  .qp-status { grid-column: 1 / -1; justify-content: flex-start; }
+}
