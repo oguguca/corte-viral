@@ -246,7 +246,8 @@ def program_progress(yt: dict | None, manual: dict) -> list[dict]:
 
 
 def daily_counts(data_dir: Path, goal: int, days: int = 7) -> dict:
-    """Clipes exportados por dia (data/history.json) e postados hoje (data/publish_log.json)."""
+    """Clipes soltos por dia: exportados (history.json), enviados pela fila (publish_queue.json) ou postados
+    (publish_log.json). O mesmo clipe conta uma vez só por dia."""
     data_dir = Path(data_dir)
 
     def read(name, default):
@@ -255,10 +256,23 @@ def daily_counts(data_dir: Path, goal: int, days: int = 7) -> dict:
         except (OSError, json.JSONDecodeError):
             return default
 
-    per_day: dict[str, int] = {}
-    for e in read("history.json", []):
-        d = datetime.fromtimestamp(e.get("ts", 0)).date().isoformat()
-        per_day[d] = per_day.get(d, 0) + 1
+    seen: dict[str, set] = {}
+
+    def add(ts, key) -> None:
+        if ts:
+            seen.setdefault(datetime.fromtimestamp(ts).date().isoformat(), set()).add(key)
+
+    for i, e in enumerate(read("history.json", [])):
+        key = (e["project"], e["clip_id"]) if e.get("project") and e.get("clip_id") else ("export", e.get("file") or i)
+        add(e.get("ts"), key)
+    queue = read("publish_queue.json", {})
+    for e in (queue.get("items", []) if isinstance(queue, dict) else []):
+        if e.get("status") == "sent":
+            add(e.get("sent_at"), (e.get("project"), e.get("clip_id")))
+    for e in read("publish_log.json", {}).values():
+        if e.get("status") in ("sent", "published"):
+            add(e.get("ts"), (e.get("project"), e.get("clip_id")))
+    per_day = {d: len(keys) for d, keys in seen.items()}
     today = date.today()
     posted = {(e.get("project"), e.get("clip_id")) for e in read("publish_log.json", {}).values()
               if e.get("status") == "published" and datetime.fromtimestamp(e.get("ts", 0)).date() == today}

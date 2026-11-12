@@ -49,10 +49,12 @@ class HistoryStore:
                 out.append(e)
         return out
 
-    def add(self, source: str, start: float, end: float, file: str) -> None:
+    def add(self, source: str, start: float, end: float, file: str, project: str | None = None,
+            clip_id: str | None = None) -> None:
         with _LOCK:
             items = self._load()
-            items.append({"source": source, "start": start, "end": end, "file": file, "ts": time.time()})
+            items.append({"source": source, "start": start, "end": end, "file": file, "ts": time.time(),
+                          "project": project, "clip_id": clip_id})
             self.path.parent.mkdir(parents=True, exist_ok=True)
             write_json_atomic(self.path, items)
 
@@ -174,7 +176,7 @@ def export_approved(project: Project, settings: Settings, on_progress: ProgressF
             errors.append({"id": m["id"], "error": str(e)[:300]})
             continue
         mp4 = clip_dir / f"{name}.mp4"
-        _history(settings).add(_source(project), m["start"], m["end"], str(mp4))
+        _history(settings).add(_source(project), m["start"], m["end"], str(mp4), project.dir.name, m["id"])
         files.append({"id": m["id"], "mp4": mp4, "dir": clip_dir})
     if on_progress:
         on_progress(1.0, f"{len(files)} clipes exportados")

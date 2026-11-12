@@ -3,6 +3,7 @@ import { $, api, esc, nf } from "../api.js";
 import { openNewVideo } from "../sheets/newvideo.js";
 import { toast } from "../ui.js";
 
+let homeTimer = null;
 const ICON = { youtube: "▶", tiktok: "♪", instagram: "◎", kwai: "K" };
 const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
 const big = (n) => (n >= 10000 ? compact.format(n) : nf.format(n));
@@ -24,7 +25,7 @@ function weekChart(days, goal) {
   const bw = W / days.length, y = (v) => padT + (H - padB - padT) * (1 - v / max);
   const gy = y(goal);
   return `<svg class="week-chart" viewBox="0 0 ${W} ${H}" role="img"
-      aria-label="Clipes exportados nos últimos 7 dias: ${days.map((d) => `${dayName(d.date)} ${d.count}`).join(", ")}. Meta ${goal} por dia.">
+      aria-label="Clipes soltos nos últimos 7 dias: ${days.map((d) => `${dayName(d.date)} ${d.count}`).join(", ")}. Meta ${goal} por dia.">
     <line class="goal-line" x1="0" x2="${W}" y1="${gy}" y2="${gy}"></line>
     ${days.map((d, i) => {
       const x = i * bw + bw * 0.22, w = bw * 0.56, top = y(d.count), h = H - padB - top, today = i === days.length - 1;
@@ -47,7 +48,7 @@ function dailyCard(d) {
       ${d.streak ? `<span class="badge good">🔥 ${d.streak} dia(s) seguidos</span>` : ""}</div>
     <div class="row" style="align-items:baseline;gap:10px">
       <b class="t-display num">${d.today}<span class="muted" style="font-size:.55em"> / ${d.goal}</span></b>
-      <span class="muted">clipes exportados hoje${d.posted_today ? ` · ${d.posted_today} postado(s)` : ""}</span></div>
+      <span class="muted">clipes soltos hoje${d.posted_today ? ` · ${d.posted_today} publicado(s)` : ""}</span></div>
     ${meter(pct, "Meta de clipes de hoje", done)}
     <div class="${done ? "good-text" : "muted"}">${done ? "✓ Meta do dia batida. Constância é o que faz o algoritmo te mostrar." : `Faltam <b>${left}</b> clipe(s) para bater a meta.`}</div>
     ${weekChart(d.last7, d.goal)}
@@ -163,4 +164,10 @@ export async function renderHome(root, { rerender } = {}) {
     });
   }
   paint();
+  clearInterval(homeTimer);  // clipe saiu da fila: a meta de hoje sobe sozinha enquanto o painel está aberto
+  homeTimer = setInterval(async () => {
+    if (!root.isConnected || !["", "#", "#/"].includes(location.hash)) { clearInterval(homeTimer); return; }
+    if (root.querySelector("input:focus, details[open]")) return;  // não atrapalha quem está digitando
+    try { g = await api("/api/goals"); paint(); } catch (e) { /* tenta de novo no próximo ciclo */ }
+  }, 30000);
 }

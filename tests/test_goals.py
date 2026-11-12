@@ -34,9 +34,9 @@ def test_daily_counts_from_exports_and_posts(tmp_path):
     (tmp_path / "publish_log.json").write_text(json.dumps(
         {"a": {"status": "published", "ts": now, "clip_id": "x"}, "b": {"status": "error", "ts": now}}))
     d = daily_counts(tmp_path, goal=3)
-    assert d["today"] == 2 and d["posted_today"] == 1
-    assert len(d["last7"]) == 7 and d["last7"][-1]["count"] == 2 and d["last7"][-2]["count"] == 1
-    assert d["goal"] == 3 and d["streak"] == 0  # hoje 2 de 3: ainda não bateu
+    assert d["today"] == 3 and d["posted_today"] == 1  # 2 exportados + 1 postado
+    assert len(d["last7"]) == 7 and d["last7"][-1]["count"] == 3 and d["last7"][-2]["count"] == 1
+    assert d["goal"] == 3 and d["streak"] == 1  # hoje 3 de 3: bateu
 
 
 def test_program_progress_uses_youtube_and_manual_numbers():
@@ -102,3 +102,15 @@ def test_api_goals_roundtrip(settings_tmp, monkeypatch):
     tt = next(p for p in g["programs"] if p["network"] == "tiktok")
     assert tt["requirements"][0]["current"] == 7
     assert c.put("/api/goals", json={"daily_videos": 0}).status_code == 422
+
+
+def test_daily_counts_queue_releases_once_per_clip(tmp_path):
+    now = time.time()
+    (tmp_path / "history.json").write_text(json.dumps([{"ts": now, "project": "p", "clip_id": "m1"}]))
+    (tmp_path / "publish_queue.json").write_text(json.dumps({"items": [
+        {"project": "p", "clip_id": "m1", "status": "sent", "sent_at": now},    # exportado e soltou: conta 1
+        {"project": "p", "clip_id": "m2", "status": "sent", "sent_at": now},
+        {"project": "p", "clip_id": "m3", "status": "waiting", "at": now + 900}]}))  # ainda na fila: não conta
+    (tmp_path / "publish_log.json").write_text(json.dumps(
+        {"k": {"project": "p", "clip_id": "m2", "status": "published", "ts": now}}))
+    assert daily_counts(tmp_path, goal=3)["today"] == 2
