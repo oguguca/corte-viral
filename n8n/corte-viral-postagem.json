@@ -407,7 +407,7 @@
           "tags": "={{ ($('Preparar').all().find(i => i.json.network === 'youtube').json.post.tags || []).join(',') }}",
           "privacyStatus": "={{ $('Preparar').all().find(i => i.json.network === 'youtube').json.post.privacy || 'private' }}",
           "selfDeclaredMadeForKids": false,
-          "defaultLanguage": "pt"
+          "defaultLanguage": "pt-BR"
         }
       },
       "id": "6e316e16-4e2f-53ff-aea6-f2f03a0ad748",
@@ -500,6 +500,40 @@
           "parameters": [
             {
               "name": "part",
+              "value": "snippet"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: ($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id), snippet: { title: $('Preparar').all().find(i => i.json.network === 'youtube').json.post.title, description: $('Preparar').all().find(i => i.json.network === 'youtube').json.post.description, tags: $('Preparar').all().find(i => i.json.network === 'youtube').json.post.tags || [], categoryId: '20', defaultLanguage: 'pt-BR', defaultAudioLanguage: 'pt-BR' } }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "182ec60f-6120-529d-9fba-95a6242adb0c",
+      "name": "YouTube: idioma",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        820
+      ],
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
               "value": "paidProductPlacementDetails"
             }
           ]
@@ -559,7 +593,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst up = $('YouTube: enviar').first().json;\nconst id = up.uploadId || up.id;\nconst it = (($input.first().json.items || [])[0]) || {};\nconst st = it.status || {}, pp = it.paidProductPlacementDetails || {};\nconst errOf = (n) => { try { const j = $(n).first().json; return j && j.error ? String(j.error.message || j.error.description || j.error).slice(0, 160) : ''; } catch (e) { return ''; } };\nconst notes = [];\nif (it.status) {\n  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === false ? 'Não ✓' : st.containsSyntheticMedia === true ? 'Sim ⚠' : 'sem resposta ⚠'));\n  notes.push('Promoção paga: ' + (pp.hasPaidProductPlacement === true ? 'Sim ⚠' : 'Não ✓'));\n  notes.push('Visibilidade: ' + (st.privacyStatus || '?'));\n} else notes.push('não consegui conferir o vídeo' + (errOf('YouTube: conferir') ? ' (' + errOf('YouTube: conferir') + ')' : ''));\nif (errOf('YouTube: declarar')) notes.push('declarar falhou: ' + errOf('YouTube: declarar'));\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: id ? 'published' : 'error', url: id ? 'https://youtube.com/shorts/' + id : '',\n  error: id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o',\n  note: notes.join(' · ') } } }];"
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst up = $('YouTube: enviar').first().json;\nconst id = up.uploadId || up.id;\nconst it = (($input.first().json.items || [])[0]) || {};\nconst st = it.status || {}, pp = it.paidProductPlacementDetails || {};\nconst errOf = (n) => { try { const j = $(n).first().json; return j && j.error ? String(j.error.message || j.error.description || j.error).slice(0, 160) : ''; } catch (e) { return ''; } };\nconst notes = [];\nif (it.status) {\n  // a API não devolve esse campo na leitura: vale o que o \"declarar\" mandou (Não), se ele não falhou\n  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === true ? 'Sim ⚠' : errOf('YouTube: declarar') ? 'não marcado ⚠' : 'Não ✓'));\n  notes.push('Promoção paga: ' + (pp.hasPaidProductPlacement === true ? 'Sim ⚠' : 'Não ✓'));\n  notes.push('Visibilidade: ' + (st.privacyStatus || '?'));\n} else notes.push('não consegui conferir o vídeo' + (errOf('YouTube: conferir') ? ' (' + errOf('YouTube: conferir') + ')' : ''));\nif (errOf('YouTube: declarar')) notes.push('declarar falhou: ' + errOf('YouTube: declarar'));\nif (errOf('YouTube: idioma')) notes.push('idioma falhou: ' + errOf('YouTube: idioma'));\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: id ? 'published' : 'error', url: id ? 'https://youtube.com/shorts/' + id : '',\n  error: id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o',\n  note: notes.join(' · ') } } }];"
       },
       "id": "de8cc87f-da90-511a-9816-8702a6707cab",
       "name": "YouTube: resultado",
@@ -1129,6 +1163,17 @@
       ]
     },
     "YouTube: declarar": {
+      "main": [
+        [
+          {
+            "node": "YouTube: idioma",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: idioma": {
       "main": [
         [
           {

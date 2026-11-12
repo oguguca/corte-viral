@@ -114,5 +114,6 @@ def test_shipped_workflow_declares_no_synthetic_media():
     assert wf["connections"]["YouTube: enviar"]["main"][0][0]["node"] == "YouTube: ver status"
     assert wf["connections"]["YouTube: ver status"]["main"][0][0]["node"] == "YouTube: declarar"
     assert "uploadId" in decl["parameters"]["jsonBody"]
-    assert wf["connections"]["YouTube: declarar"]["main"][0][0]["node"] == "YouTube: promoção paga"
+    assert wf["connections"]["YouTube: declarar"]["main"][0][0]["node"] == "YouTube: idioma"
+    assert wf["connections"]["YouTube: idioma"]["main"][0][0]["node"] == "YouTube: promoção paga"
     assert wf["connections"]["YouTube: conferir"]["main"][0][0]["node"] == "YouTube: resultado"

@@ -219,7 +219,7 @@ node("YouTube: enviar", "n8n-nodes-base.youTube", 1,
       "categoryId": "20", "binaryProperty": "data",
       "options": {"description": f"={{{{ {Y}.post.description }}}}", "tags": f"={{{{ ({Y}.post.tags || []).join(',') }}}}",
                   "privacyStatus": f"={{{{ {Y}.post.privacy || 'private' }}}}", "selfDeclaredMadeForKids": False,
-                  "defaultLanguage": "pt"}},
+                  "defaultLanguage": "pt-BR"}},
      [1340, 800], onError="continueErrorOutput", disabled=True)  # religar depois de escolher a credencial
 # Depois do envio: declara o que a tela do YouTube Studio pergunta (o nó do YouTube não tem esses campos).
 # containsSyntheticMedia=false → "conteúdo alterado ou sintético: Não" (cortes de live reais);
@@ -247,6 +247,17 @@ node("YouTube: declarar", "n8n-nodes-base.httpRequest", 4.2,
                   "selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
       "options": {"timeout": 60000}},
      [1450, 760], onError="continueRegularOutput", disabled=True)
+# Idioma do vídeo e do áudio em português do Brasil (o canal estava em pt-PT, de Portugal): ajuda a
+# recomendação e a busca no Brasil. O "snippet" vai completo, senão o YouTube apaga título/descrição/tags.
+node("YouTube: idioma", "n8n-nodes-base.httpRequest", 4.2,
+     {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
+      "sendQuery": True, "queryParameters": {"parameters": [{"name": "part", "value": "snippet"}]},
+      "sendBody": True, "contentType": "json", "specifyBody": "json",
+      "jsonBody": f"={{{{ JSON.stringify({{ id: {VID}, snippet: {{ title: {Y}.post.title, "
+                  f"description: {Y}.post.description, tags: {Y}.post.tags || [], categoryId: '20', "
+                  "defaultLanguage: 'pt-BR', defaultAudioLanguage: 'pt-BR' } }) }}",
+      "options": {"timeout": 60000}},
+     [1450, 820], onError="continueRegularOutput", disabled=True)
 # Promoção paga: a API não documenta esse campo como gravável; tenta e ignora a recusa (o padrão já é "Não").
 node("YouTube: promoção paga", "n8n-nodes-base.httpRequest", 4.2,
      {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
@@ -271,11 +282,13 @@ const st = it.status || {}, pp = it.paidProductPlacementDetails || {};
 const errOf = (n) => { try { const j = $(n).first().json; return j && j.error ? String(j.error.message || j.error.description || j.error).slice(0, 160) : ''; } catch (e) { return ''; } };
 const notes = [];
 if (it.status) {
-  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === false ? 'Não ✓' : st.containsSyntheticMedia === true ? 'Sim ⚠' : 'sem resposta ⚠'));
+  // a API não devolve esse campo na leitura: vale o que o "declarar" mandou (Não), se ele não falhou
+  notes.push('Uso de IA: ' + (st.containsSyntheticMedia === true ? 'Sim ⚠' : errOf('YouTube: declarar') ? 'não marcado ⚠' : 'Não ✓'));
   notes.push('Promoção paga: ' + (pp.hasPaidProductPlacement === true ? 'Sim ⚠' : 'Não ✓'));
   notes.push('Visibilidade: ' + (st.privacyStatus || '?'));
 } else notes.push('não consegui conferir o vídeo' + (errOf('YouTube: conferir') ? ' (' + errOf('YouTube: conferir') + ')' : ''));
 if (errOf('YouTube: declarar')) notes.push('declarar falhou: ' + errOf('YouTube: declarar'));
+if (errOf('YouTube: idioma')) notes.push('idioma falhou: ' + errOf('YouTube: idioma'));
 return [{ json: { callback_url: p.callback_url, body: {
   token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',
   status: id ? 'published' : 'error', url: id ? 'https://youtube.com/shorts/' + id : '',
@@ -287,7 +300,8 @@ for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "Yo
     link(a, b, 0)
     link(a, "YouTube: falhou", 1)
 link("YouTube: ver status", "YouTube: declarar")
-link("YouTube: declarar", "YouTube: promoção paga")  # falhar aqui não desfaz o vídeo publicado
+link("YouTube: declarar", "YouTube: idioma")
+link("YouTube: idioma", "YouTube: promoção paga")  # falhar aqui não desfaz o vídeo publicado
 link("YouTube: promoção paga", "YouTube: conferir")
 link("YouTube: conferir", "YouTube: resultado")
 link("YouTube: resultado", AV)
