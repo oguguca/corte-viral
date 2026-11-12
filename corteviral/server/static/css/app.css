@@ -546,3 +546,5 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 }
 .qp-note { font-size: 12px; color: var(--good); overflow-wrap: anywhere; }
 .qp-note.warn { color: var(--warn); }
+.exp-auto { align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+.exp-auto .track { flex: none; margin-top: 2px; }

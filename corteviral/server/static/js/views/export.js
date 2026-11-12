@@ -132,6 +132,11 @@ export async function renderExport(root, name, project, ctx = {}) {
           <div class="row">
             <button class="btn primary" id="exp" ${approved.length ? "" : "disabled"}>Exportar ${approved.length} clipe(s)</button>
             <button class="btn" id="openDir">Abrir pasta</button></div>
+          ${pcfg ? `<label class="switch exp-auto"><input type="checkbox" id="expAuto" ${pcfg.config.auto_send ? "checked" : ""}
+              ${netsOn.length ? "" : "disabled"}><span class="track"></span>
+            <span><b>Enviar para postar ao exportar</b><br><span class="t-small">${netsOn.length
+              ? "Os clipes exportados entram no fim da fila e saem 1 por vez, no intervalo da fila."
+              : "Ligue uma rede em Contas conectadas para usar."}</span></span></label>` : ""}
           <div id="result"></div>
         </section>
 
@@ -150,6 +155,14 @@ export async function renderExport(root, name, project, ctx = {}) {
   $("#aiAll", root)?.addEventListener("click", () => startJob({ kind: "posts", project: name, ids: approved.map((m) => m.id) }));
   const openDir = () => api(P("/open-exports"), { method: "POST" }).catch((e) => toast(e.message, "bad"));
   $("#openDir", root).onclick = openDir;
+  $("#expAuto", root)?.addEventListener("change", async (e) => {
+    const on = e.target.checked;
+    try {
+      await api("/api/publish/config", { method: "PUT", body: { ...pcfg.config, auto_send: on } });
+      pcfg.config.auto_send = on;
+      toast(on ? "Ligado: ao exportar, os clipes vão para a fila de postagem." : "Desligado: exportar só gera os arquivos.", "good");
+    } catch (err) { e.target.checked = !on; toast(err.message, "bad"); }
+  });
 
   // --- fila programada ---
   const qInt = $("#qInt", root);
