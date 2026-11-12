@@ -552,6 +552,16 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                     break
             else:
                 return "o n8n não ligou a tempo"
+            # o n8n responde antes de registrar o fluxo: espera o webhook aceitar o teste (senão dá 404)
+            cfg = publish_store.load()
+            for _ in range(45):
+                try:
+                    test_connection(cfg.webhook_url, cfg.token, timeout=10)
+                    break
+                except PublishError:
+                    time.sleep(2)
+            else:
+                return "o fluxo do n8n não ficou pronto a tempo"
         project = Project.load(_project_dir(item["project"]))
         res = publish_clips(project, settings, publish_store, [item["clip_id"]],
                             base["url"] + "api/publish/callback")
