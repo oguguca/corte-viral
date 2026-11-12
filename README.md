@@ -64,6 +64,19 @@ Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela
 você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
 sincronizada com o vídeo (clique numa palavra para pular até ela).
 
+### Painel inicial (metas de monetização)
+
+O app abre no **Painel** — e clicar em **Corte Viral** (no alto da barra lateral) volta para ele:
+
+- **Meta de hoje**: quantos clipes você exportou hoje contra a meta diária (padrão 3, editável), quantos foram
+  postados, gráfico dos últimos 7 dias e sequência de dias batendo a meta.
+- **Canal do YouTube**: com uma **chave da YouTube Data API v3** (grátis, no Google Cloud) e o @ do canal, o
+  painel lê inscritos, views do dia/semana e as views dos Shorts dos últimos 90 dias (atualiza a cada 30 min ou
+  no botão **Atualizar**; a chave fica só em `data/goals.json`, nunca volta para a tela).
+- **Metas de monetização** com barra de progresso: YouTube (1.000 inscritos + 10 mi de views de Shorts em 90 dias),
+  TikTok (10 mil seguidores + 100 mil views em 30 dias; só vídeos com mais de 1 min), Instagram e Kwai.
+  TikTok, Instagram e Kwai não têm API grátis para contas pessoais: digite os números em **Digitar os números de hoje**.
+
 ### Encontrar os melhores momentos
 
 Abra um projeto transcrito, escolha o perfil (**Viral** 15–60 s ou **Monetização**

@@ -466,3 +466,37 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 .pv-switch { width: 248px; }
 .pv-switch button { flex: 1; }
 .cap-stage:has(.live-pv) .cap-marker { background: transparent; }  /* na prévia, a legenda de verdade aparece por baixo */
+
+/* painel inicial: metas */
+.brand { text-decoration: none; color: inherit; border-radius: 12px; }
+.brand:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.brand:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.brand[aria-current="page"] b { text-decoration: none; }
+.good-text { color: var(--good); }
+.meter > i { background: var(--accent); }
+.meter > i.done { background: var(--good); }
+:root[data-theme="gta"] .meter > i:not(.done) { background: var(--vice-x); }
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; align-items: start; }
+.goal-card h3 { margin: 0; }
+.goal-pct { font-size: 22px; }
+.net-kwai { background: #ff7a00; color: #fff; font-weight: 900; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.stat b { font-size: 24px; letter-spacing: -0.01em; }
+.stat .delta { font-size: 12px; color: var(--good); }
+.stat .delta.muted { color: var(--text-3); }
+.week-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.week-chart .bar { fill: var(--accent); opacity: .55; }
+.week-chart .bar.met { opacity: 1; }
+:root[data-theme="gta"] .week-chart .bar { fill: #f04ea6; }
+.week-chart .hit { fill: transparent; }
+.week-chart .col:hover .bar { opacity: 1; }
+.week-chart .base { stroke: var(--line-strong); stroke-width: 1; }
+.week-chart .goal-line { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 4 4; }
+.week-chart text { font: 600 11px var(--font); fill: var(--text-3); }
+.week-chart .day.today, .week-chart .val { fill: var(--text); font-weight: 800; }
+@media (max-width: 900px) { .stat-grid { grid-template-columns: minmax(0, 1fr); } }
+.chart-key { display: flex; align-items: center; gap: 6px; color: var(--text-3); margin-top: -4px; }
+.chart-key .key-dash { width: 18px; border-top: 1px dashed var(--text-3); }
+.chart-key .key-bar { width: 10px; height: 10px; border-radius: 3px; background: var(--accent); margin-left: 10px; }
+:root[data-theme="gta"] .chart-key .key-bar { background: #f04ea6; }

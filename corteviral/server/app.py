@@ -31,6 +31,7 @@ from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
 from corteviral.publish import (NETWORKS, PublishConfig, PublishError, PublishStore, apply_callback,
                                 publish_clips, setup_account, test_connection)
+from corteviral.goals import GoalsError, GoalsStore, daily_counts, parse_channel, program_progress
 from corteviral.metadata import generate_posts
 from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
@@ -122,6 +123,18 @@ class PublishConfigBody(BaseModel):
     auto_send: bool = False
 
 
+class YouTubeGoalBody(BaseModel):
+    api_key: str = Field(default="", max_length=200)
+    channel: str | None = Field(default=None, max_length=300)
+    remove: bool = False
+
+
+class GoalsBody(BaseModel):
+    daily_videos: int | None = Field(default=None, ge=1, le=50)
+    youtube: YouTubeGoalBody | None = None
+    manual: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+
 class AccountBody(BaseModel):
     fields: dict[str, str] = Field(default_factory=dict)
 
@@ -153,6 +166,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     yt_cookies = data_dir / "session-cookies.txt"
     yt_status = data_dir / "session-status.json"
     publish_store = PublishStore(data_dir)
+    goals_store = GoalsStore(data_dir)
     n8n_proc: dict = {"p": None}
 
     def _yt_sync() -> dict:
@@ -388,6 +402,26 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
 
     def _public_cfg() -> dict:
         return publish_store.load().model_dump(exclude={"token"})
+
+    @app.get("/api/goals")
+    def get_goals(refresh: bool = False):
+        """Painel inicial: metas de monetização de cada rede e meta diária de clipes."""
+        cfg = goals_store.load()
+        yt = goals_store.youtube(refresh=refresh)
+        return {**goals_store.public(), "youtube": {**goals_store.public()["youtube"], **yt},
+                "programs": program_progress(yt.get("stats"), cfg["manual"]),
+                "daily": daily_counts(data_dir, cfg["daily_videos"])}
+
+    @app.put("/api/goals")
+    def put_goals(body: GoalsBody):
+        patch = body.model_dump(exclude_none=True)
+        if body.youtube and body.youtube.channel:
+            try:
+                parse_channel(body.youtube.channel)
+            except GoalsError as e:
+                raise HTTPException(422, str(e))
+        goals_store.save(patch)
+        return goals_store.public()
 
     @app.get("/api/publish")
     def get_publish():

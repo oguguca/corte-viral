@@ -11,6 +11,7 @@ import { toast } from "./ui.js";
 import { renderAccounts } from "./views/accounts.js";
 import { renderClips } from "./views/clips.js";
 import { renderExport } from "./views/export.js";
+import { renderHome } from "./views/home.js";
 import { renderMoments } from "./views/moments.js";
 import { renderVideo } from "./views/video.js";
 
@@ -23,16 +24,6 @@ function stepsBar(name, step, project) {
     ${i ? '<span class="step-sep" aria-hidden="true">›</span>' : ""}
     <button class="step ${done[k] && k !== step ? "done" : ""}" data-step="${k}" ${k === step ? 'aria-current="step"' : ""}>
       <span class="n">${done[k] && k !== step ? "✓" : i + 1}</span>${label}</button>`).join("")}</nav>`;
-}
-
-function homeView() {
-  return `<div class="page"><div class="hero">
-    <div class="brand-mark" style="width:72px;height:72px;font-size:28px;border-radius:20px">CV</div>
-    <h1 class="t-display">Transforme lives e vídeos em cortes virais</h1>
-    <p>Cole o link de uma live ou de um vídeo (YouTube, Twitch, Kick) ou escolha um arquivo do computador. O Corte Viral encontra os melhores
-      momentos e entrega os clipes verticais prontos para postar.</p>
-    <button class="btn primary large" id="homeNew">＋ Novo vídeo</button>
-  </div></div>`;
 }
 
 async function render({ keepFocus = false } = {}) {
@@ -51,9 +42,13 @@ async function render({ keepFocus = false } = {}) {
     if (!keepFocus) { const h1 = $("#page h1"); h1?.setAttribute("tabindex", "-1"); h1?.focus({ preventScroll: true }); }
     return;
   }
+  if (route.view === "home") $("#brandHome").setAttribute("aria-current", "page");
+  else $("#brandHome").removeAttribute("aria-current");
   if (route.view === "home") {
-    main.innerHTML = homeView();
-    $("#homeNew").onclick = (e) => openNewVideo(e.currentTarget);
+    main.innerHTML = '<div class="page" id="page"></div>';
+    if (!keepFocus) main.scrollTop = 0;
+    await renderHome($("#page"));
+    if (!keepFocus) { const h1 = $("#page h1"); h1?.setAttribute("tabindex", "-1"); h1?.focus({ preventScroll: true }); }
     return;
   }
   if (route.view === "bad") { main.innerHTML = '<div class="page"><div class="empty"><div class="big">🔍</div>Endereço inválido.</div></div>'; return; }
