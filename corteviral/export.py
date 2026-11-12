@@ -108,29 +108,43 @@ def _approved(project: Project) -> list[dict]:
     return sorted(by_id.values(), key=lambda m: -m["score"])
 
 
+def _chosen(project: Project, ids: list[str] | None) -> list[dict]:
+    """Aprovados (exportação em lote) ou só os clipes pedidos, aprovados ou não (exportar um clipe direto)."""
+    if ids is None:
+        return _approved(project)
+    from corteviral.pipeline.analyze import load_moments
+    data = load_moments(project) or {}
+    by_id = {}
+    for m in data.get("moments", []) + data.get("all", []):
+        if m["id"] in ids and m["id"] not in by_id:
+            by_id[m["id"]] = m
+    return sorted(by_id.values(), key=lambda m: -m["score"])
+
+
 def _source(project: Project) -> str:
     return project.data.get("source") or str(project.dir)
 
 
-def export_check(project: Project, settings: Settings) -> dict:
+def export_check(project: Project, settings: Settings, ids: list[str] | None = None) -> dict:
     """O que vai acontecer ao exportar (sem renderizar nada)."""
     preset = load_preset(settings.render.presets_dir, project.data.get("streamer"))
     hist = _history(settings)
-    moments = _approved(project)
+    moments = _chosen(project, ids)
     dups = [{"id": m["id"], "previous_file": hit[0]["file"]}
             for m in moments if (hit := hist.overlaps(_source(project), m["start"], m["end"]))]
     return {"approved": len(moments), "unauthorized": not (preset and preset.authorized),
             "duplicates": dups, "folder": str(Path(settings.paths.exports_dir) / project.dir.name)}
 
 
-def export_approved(project: Project, settings: Settings, on_progress: ProgressFn | None = None) -> dict:
-    check = export_check(project, settings)
+def export_approved(project: Project, settings: Settings, on_progress: ProgressFn | None = None,
+                    ids: list[str] | None = None) -> dict:
+    check = export_check(project, settings, ids)
     preset = load_preset(settings.render.presets_dir, project.data.get("streamer"))
     credit = preset.credit_handle if preset else None
     streamer = project.data.get("streamer")
     folder = Path(check["folder"])
     folder.mkdir(parents=True, exist_ok=True)
-    moments = _approved(project)
+    moments = _chosen(project, ids)
     files, errors, used = [], [], set()
     for i, m in enumerate(moments, 1):
         if on_progress:

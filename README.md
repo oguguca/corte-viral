@@ -154,6 +154,8 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
      no único campo de texto dessas redes;
    - `YouTube Shorts.txt`: título, descrição e **tags** (separadas por vírgula) em blocos, um para cada campo.
    - Clipe aprovado ainda sem textos: a IA escreve antes de exportar (sem apagar textos que você editou).
+   - Só um clipe, agora: na tela **Clipes**, **⬇ Exportar este clipe** exporta o clipe aberto (aprovado ou não)
+     e abre a pasta. Se você mudou o corte e não salvou, ele pergunta e salva antes.
    - Avisa se o streamer não está marcado como autorizado (Layout do vertical → "Tenho autorização") e se o
      trecho já foi exportado antes (`data/history.json`).
    - Com **Crédito** preenchido no layout, o vídeo mostra "@streamer" discreto no canto e a descrição termina

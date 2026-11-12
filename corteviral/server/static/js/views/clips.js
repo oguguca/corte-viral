@@ -185,6 +185,7 @@ export async function renderClips(root, name, project, ctx = {}) {
         <button class="btn ${m.status === "approved" ? "on" : ""}" data-status="approved" aria-pressed="${m.status === "approved"}">${m.status === "approved" ? "✓ Aprovado" : "Aprovar"}</button>
         <button class="btn ${m.status === "discarded" ? "on" : ""}" data-status="discarded" aria-pressed="${m.status === "discarded"}">${m.status === "discarded" ? "Descartado" : "Descartar"}</button>
         <span class="spacer"></span>
+        <button class="btn" id="expOne" title="Gera o MP4 final e os textos de cada rede deste clipe agora">⬇ Exportar este clipe</button>
         <button class="btn primary" id="gen">${ready ? "Gerar de novo" : "Gerar clipe"}</button>
       </div>
       <div class="row" style="align-items:flex-start;gap:18px">
@@ -274,6 +275,22 @@ export async function renderClips(root, name, project, ctx = {}) {
       try { await patch(m.id, { status }); renderList(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }
     });
     $("#gen", box).onclick = () => startJob({ kind: "render", project: name, ids: [m.id] });
+    $("#expOne", box).onclick = async () => {  // exporta só este clipe, sem esperar os outros
+      const cs = +$("#cs", box).value, ce = +$("#ce", box).value;
+      if (Math.abs(cs - m.start) > 0.01 || Math.abs(ce - m.end) > 0.01) {  // corte mudado e não salvo
+        if (!confirmAction("Você mudou o corte e não salvou. Salvar o corte novo e exportar?")) return;
+        try { await patch(m.id, { start: cs, end: ce }); } catch (err) { toast(err.message, "bad"); return; }
+      }
+      let chk;
+      try { chk = await api(P("/export-check")); } catch (err) { toast(err.message, "bad"); return; }
+      if (chk.unauthorized && !confirmAction("O streamer não está marcado como autorizado. Exportar mesmo assim?")) return;
+      const job = await startJob({ kind: "export", project: name, ids: [m.id] });
+      const r = job && job.status === "done" ? job.result : null;
+      if (!r) return;
+      if (r.errors && r.errors.length) { toast("Não exportou: " + r.errors[0].error, "bad"); return; }
+      toast("Clipe exportado: MP4 + textos de cada rede. Abrindo a pasta…", "good");
+      api(P("/open-exports"), { method: "POST" }).catch(() => {});
+    };
     // corte
     const src = $("#cutSrc", box);
     box.querySelectorAll("[data-n]").forEach((b) => b.onclick = () => {

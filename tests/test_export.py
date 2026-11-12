@@ -146,3 +146,20 @@ def test_export_job_writes_missing_texts_first(rs, sample_video, monkeypatch):
     c = TestClient(create_app(rs))
     job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name}).json()["id"], timeout=120)
     assert job["status"] == "done" and asked == [["m1"]]  # só o que não tinha textos (não apaga edições)
+
+
+def test_export_only_chosen_clip_even_if_not_approved(rs, sample_video):
+    p = _project(rs, sample_video, [_m(1, 0.5, 3.0), _m(2, 4.0, 7.0, status="pending", score=70)])
+    res = export_approved(p, rs, ids=["m2"])
+    assert [f["id"] for f in res["files"]] == ["m2"]  # só o clipe escolhido, mesmo ainda não aprovado
+    assert (res["files"][0]["dir"] / "Kwai.txt").exists()
+
+
+def test_api_export_one_clip(rs, sample_video):
+    from corteviral.server.app import create_app
+    from tests.test_server import _wait
+    p = _project(rs, sample_video, [_m(1, 0.5, 3.0), _m(2, 4.0, 7.0, score=70)])
+    c = TestClient(create_app(rs))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name, "ids": ["m2"]}).json()["id"],
+                timeout=120)
+    assert job["status"] == "done" and [f["id"] for f in job["result"]["files"]] == ["m2"]

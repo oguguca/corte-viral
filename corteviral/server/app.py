@@ -26,7 +26,7 @@ from corteviral.ffmpeg import FFmpegError
 from corteviral.caption_style import load_style, save_style
 from corteviral.config import AnalysisSettings, CaptionStyle
 from corteviral import n8n_local
-from corteviral.export import _approved as approved_moments
+from corteviral.export import _chosen as chosen_moments
 from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
 from corteviral.publish import (NETWORKS, PublishConfig, PublishError, PublishStore, apply_callback,
@@ -240,11 +240,12 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             elif req.kind == "export":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="export", project=project.dir.name)
-                missing = [m["id"] for m in approved_moments(project) if not m.get("meta")]
+                # ids: exportar um clipe direto da tela Clipes (aprovado ou não); sem ids: todos os aprovados
+                missing = [m["id"] for m in chosen_moments(project, req.ids) if not m.get("meta")]
                 if missing:  # sem textos ainda: a IA escreve antes, para os .txt já saírem com o melhor título
                     job.update(stage="posts", message=f"IA escrevendo os textos de {len(missing)} clipe(s)")
                     generate_posts(project, missing, s)
-                res = export_approved(project, s, on_progress=lambda f, m: progress("export", f, m))
+                res = export_approved(project, s, on_progress=lambda f, m: progress("export", f, m), ids=req.ids)
                 job["result"] = {"folder": str(res["folder"]), "duplicates": res["duplicates"],
                                  "unauthorized": res["unauthorized"], "errors": res["errors"],
                                  "files": [{"id": f["id"], "mp4": str(f["mp4"]), "dir": str(f["dir"])}
