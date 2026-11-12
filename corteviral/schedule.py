@@ -45,7 +45,36 @@ class ScheduleStore:
         d = self._load()
         waiting = [i for i in d["items"] if i["status"] == "waiting"]
         return {"waiting": len(waiting), "ends_at": max((i["at"] for i in waiting), default=None),
-                "next_at": min((i["at"] for i in waiting), default=None), "last_sent_at": d.get("last_sent_at")}
+                "next_at": min((i["at"] for i in waiting), default=None), "last_sent_at": d.get("last_sent_at"),
+                "paused": bool(d.get("paused"))}
+
+    def default_interval(self) -> int:
+        """Intervalo da fila atual (o do último programado); 15 min se nunca programou."""
+        items = sorted(self._load()["items"], key=lambda i: i["at"])
+        return int(items[-1].get("interval") or 15) if items else 15
+
+    def pause(self) -> None:
+        """Nada sai até continuar."""
+        with _LOCK:
+            d = self._load()
+            d["paused"] = True
+            self._save(d)
+
+    def resume(self, now: float | None = None) -> None:
+        """Continua de onde parou: os que esperam ganham horários novos a partir de agora (mesma ordem e intervalo)."""
+        now = time.time() if now is None else now
+        with _LOCK:
+            d = self._load()
+            d["paused"] = False
+            waiting = sorted((i for i in d["items"] if i["status"] == "waiting"), key=lambda i: i["at"])
+            t = now
+            if d.get("last_sent_at") and waiting:
+                t = max(now, d["last_sent_at"] + waiting[0]["interval"] * 60)
+            for k, i in enumerate(waiting):
+                if k:
+                    t += i["interval"] * 60
+                i["at"] = round(t, 1)
+            self._save(d)
 
     def plan(self, project: str, clip_ids: list[str], interval_min: int, now: float | None = None) -> list[dict]:
         """Põe os clipes na fila, um a cada `interval_min`, começando depois da última leva."""
@@ -95,6 +124,8 @@ class ScheduleStore:
         """O próximo a sair agora (no máximo um por intervalo, mesmo se vários estiverem atrasados)."""
         now = time.time() if now is None else now
         d = self._load()
+        if d.get("paused"):
+            return None
         waiting = sorted((i for i in d["items"] if i["status"] == "waiting"), key=lambda i: i["at"])
         if not waiting or waiting[0]["at"] > now:
             return None

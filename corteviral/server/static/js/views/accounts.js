@@ -86,7 +86,7 @@ export async function renderAccounts(root) {
         <button class="btn" id="n8nTest">Testar ligação</button>
         <span class="spacer"></span>
         <label class="switch"><input type="checkbox" id="autoSend" ${cfg.auto_send ? "checked" : ""}><span class="track"></span>
-          <span>Enviar para postar ao exportar</span></label></div>
+          <span>Ao exportar, pôr na fila de postagem</span></label></div>
       <div id="testOut"></div>
       <details><summary class="t-small" style="cursor:pointer">Endereço do fluxo (avançado)</summary>
         <div class="row" style="margin-top:8px;align-items:flex-end"><div class="field" style="flex:1"><label for="hookUrl">Webhook do fluxo “Corte Viral — postagem”</label>

@@ -226,7 +226,9 @@ A barra lateral tem a aba **⏱ Fila de postagem**: todos os clipes programados,
 de horário. Mostra o próximo envio (com contagem), quantos faltam, os publicados hoje (com link ↗) e o erro de
 quem falhou, com **Tentar de novo** (volta para o fim da fila). Atualiza sozinha a cada 15 s.
 
-**Postar agora:** na etapa **Exportar**, **Enviar N clipe(s) agora** — ou ligue **"Enviar para postar ao exportar"**.
+**Postar agora:** na etapa **Exportar**, **Enviar N clipe(s) agora** manda todos de uma vez.
+Com **"Ao exportar, pôr na fila de postagem"** ligado (Contas conectadas), cada exportação põe os clipes no fim
+da fila — eles saem um por vez, no intervalo da fila, nunca todos juntos.
 Cada clipe mostra o status por rede (→ enviado, ✓ publicado com link, ⚠ falhou); clipes já publicados numa rede
 não são reenviados sem confirmação. O histórico fica em `data/publish_log.json`.
 

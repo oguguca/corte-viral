@@ -273,13 +273,12 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                                  "files": [{"id": f["id"], "mp4": str(f["mp4"]), "dir": str(f["dir"])}
                                            for f in res["files"]]}
                 cfg = publish_store.load()
-                if cfg.auto_send and cfg.enabled() and res["files"] and req.callback_url:
-                    try:  # envio automático para postar: falhar aqui não desfaz a exportação
-                        job["result"]["publish"] = publish_clips(
-                            project, s, publish_store, [f["id"] for f in res["files"]], req.callback_url,
-                            on_progress=lambda f, m: progress("publish", f, m))
-                    except PublishError as e:
-                        job["result"]["publish"] = {"sent": 0, "errors": [{"id": "-", "error": str(e)}]}
+                if cfg.auto_send and cfg.enabled() and res["files"]:
+                    # nunca posta tudo de uma vez: os exportados entram no fim da fila e saem um por vez
+                    ids = [f["id"] for f in res["files"]]
+                    new = schedule_store.plan(project.dir.name, ids, schedule_store.default_interval())
+                    job["result"]["publish"] = {"queued": len(new), "first_at": new[0]["at"] if new else None,
+                                                "last_at": new[-1]["at"] if new else None}
                     job["stage"] = "export"
             elif req.kind == "publish":
                 project = Project.load(_project_dir(req.project))
@@ -629,8 +628,19 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         return {"removed": schedule_store.cancel(item_id=item_id)}
 
     @app.delete("/api/schedule")
-    def delete_schedule(project: str):
+    def delete_schedule(project: str | None = None):
+        """Exclui a fila de um vídeo (project) ou a fila inteira (sem project). Só os que ainda não saíram."""
         return {"removed": schedule_store.cancel(project=project)}
+
+    @app.post("/api/schedule/pause")
+    def pause_schedule():
+        schedule_store.pause()
+        return schedule_store.summary()
+
+    @app.post("/api/schedule/resume")
+    def resume_schedule():
+        schedule_store.resume()
+        return schedule_store.summary()
 
     @app.post("/api/n8n/open")
     def post_n8n_open():

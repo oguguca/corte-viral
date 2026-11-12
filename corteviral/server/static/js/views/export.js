@@ -138,7 +138,7 @@ export async function renderExport(root, name, project, ctx = {}) {
         ${netsOn.length ? `<section class="card pad stack">
           <h2 class="t-head">🚀 Postar agora</h2>
           <div class="muted">Manda todos os aprovados de uma vez para o n8n.
-            ${pcfg.config.auto_send ? "Também acontece sozinho a cada exportação." : ""}</div>
+</div>
           <div class="row"><button class="btn" id="pubBtn" ${approved.length ? "" : "disabled"}>Enviar ${approved.length} clipe(s) agora</button>
             <a class="btn plain" href="#/contas">Contas conectadas ›</a></div>
         </section>` : ""}
@@ -219,8 +219,8 @@ export async function renderExport(root, name, project, ctx = {}) {
     $("#result", root).innerHTML = `<div class="note ${(r.errors || []).length ? "warn" : "good"}"><span>${(r.errors || []).length ? "⚠" : "✓"}</span>
       <span>${(r.files || []).length} clipe(s) exportado(s)${(r.errors || []).length ? ` · ${r.errors.length} falharam:` : "."}
       ${(r.errors || []).map((e) => `<br>• ${esc(e.id)}: ${esc(e.error)}`).join("")}
-      ${r.publish ? `<br>Postagem: ${r.publish.sent || 0} clipe(s) entregues ao n8n${(r.publish.errors || []).length
-        ? ` · ${r.publish.errors.length} falharam: ${esc(r.publish.errors[0].error)}` : ""}.` : ""}
+      ${r.publish && r.publish.queued != null ? `<br>⏱ ${r.publish.queued} clipe(s) foram para a fila de postagem${r.publish.first_at
+        ? ` (o primeiro sai ${esc(when(r.publish.first_at))})` : ""}. Acompanhe em <a href="#/fila">Fila de postagem</a>.` : ""}
       <br><button class="btn small" id="openRes" style="margin-top:8px">Abrir pasta</button></span></div>`;
     $("#openRes", root).onclick = openDir;
   }

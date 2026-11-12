@@ -80,7 +80,8 @@ export async function renderQueue(root) {
   const now = d.now;
   const waiting = d.items.filter((i) => i.status === "waiting").sort((a, b) => a.at - b.at);
   const done = d.items.filter((i) => i.status !== "waiting").sort((a, b) => (b.sent_at || 0) - (a.sent_at || 0));
-  const next = waiting[0];
+  const paused = !!d.summary.paused;
+  const next = paused ? null : waiting[0];
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const doneToday = done.filter((i) => (i.sent_at || 0) * 1000 >= today.getTime());
   const published = doneToday.filter((i) => stateOf(i, now)[1] === "Publicado").length;
@@ -89,11 +90,17 @@ export async function renderQueue(root) {
   root.innerHTML = `
     <header class="page-head"><div>
       <h1 class="t-display">Fila de postagem</h1>
-      <div class="sub">Todos os clipes programados, de todos os vídeos. Atualiza sozinha.</div></div></header>
+      <div class="sub">Todos os clipes programados, de todos os vídeos. Atualiza sozinha.</div></div>
+      <div class="row">
+        ${paused ? '<button class="btn primary" id="qpResume">▶ Continuar</button>'
+          : `<button class="btn" id="qpPause" ${waiting.length ? "" : "disabled"}>⏸ Pausar</button>`}
+        <button class="btn" id="qpDelete" ${waiting.length ? "" : "disabled"}>🗑 Excluir fila</button></div></header>
+    ${paused ? `<div class="note warn"><span>⏸</span><span><b>Fila pausada.</b> Nada sai até você clicar em <b>Continuar</b>.
+      Ao continuar, o primeiro sai logo e os outros seguem o intervalo de cada um.</span></div>` : ""}
     ${!d.networks.length ? `<div class="note warn"><span>⚠</span><span>Nenhuma rede ligada. Ligue o YouTube em <a href="#/contas">Contas conectadas</a>.</span></div>` : ""}
     <section class="stat-grid qp-stats">
-      <div class="stat"><span class="t-small">Próximo envio</span><b class="num">${next ? esc(when(next.at)) : "—"}</b>
-        <span class="t-small">${next ? esc(inMin(next.at - now)) : "fila vazia"}</span></div>
+      <div class="stat"><span class="t-small">Próximo envio</span><b class="num">${paused ? "pausada" : next ? esc(when(next.at)) : "—"}</b>
+        <span class="t-small">${paused ? "clique em Continuar" : next ? esc(inMin(next.at - now)) : "fila vazia"}</span></div>
       <div class="stat"><span class="t-small">Na fila</span><b class="num">${waiting.length}</b>
         <span class="t-small">${d.summary.ends_at ? `termina ${esc(when(d.summary.ends_at))}` : "—"}</span></div>
       <div class="stat"><span class="t-small">Publicados hoje</span><b class="num good-text">${published}</b>
@@ -104,7 +111,7 @@ export async function renderQueue(root) {
 
     <section class="card pad stack">
       <div class="row"><h2 class="t-head">Próximos</h2><span class="spacer"></span>
-        ${waiting.length ? '<button class="btn plain small" id="qpClear">Cancelar a fila toda</button>' : ""}</div>
+</div>
       ${waiting.length ? `<ol class="qp-list">${waiting.map((it) => row(it, now, next)).join("")}</ol>`
         : `<div class="empty"><div class="big">⏱</div>Nada programado. Na etapa <b>Exportar</b> de um vídeo, use <b>Programar postagem</b>.</div>`}
     </section>
@@ -128,13 +135,16 @@ export async function renderQueue(root) {
       renderQueue(root);
     } catch (e) { toast(e.message, "bad"); }
   });
-  $("#qpClear", root)?.addEventListener("click", async () => {
-    if (!confirmAction(`Tirar da fila os ${waiting.length} clipe(s) que ainda não saíram?`)) return;
-    const projects = [...new Set(waiting.map((i) => i.project))];
-    try {
-      for (const p of projects) await api(`/api/schedule?project=${encodeURIComponent(p)}`, { method: "DELETE" });
-      renderQueue(root);
-    } catch (e) { toast(e.message, "bad"); }
+  const act = async (path, method, msg) => {
+    try { await api(path, { method }); toast(msg, "good"); renderQueue(root); document.dispatchEvent(new Event("queuechange")); }
+    catch (e) { toast(e.message, "bad"); }
+  };
+  $("#qpPause", root)?.addEventListener("click", () => act("/api/schedule/pause", "POST", "Fila pausada."));
+  $("#qpResume", root)?.addEventListener("click", () => act("/api/schedule/resume", "POST", "Fila continuando."));
+  $("#qpDelete", root)?.addEventListener("click", () => {
+    if (!confirmAction(`Excluir a fila? Os ${waiting.length} clipe(s) que ainda não saíram deixam de ser postados.
+(Os que já saíram continuam no YouTube.)`)) return;
+    act("/api/schedule", "DELETE", "Fila excluída.");
   });
   timer = setInterval(() => {  // atualiza enquanto a aba está aberta
     if (!root.isConnected || location.hash !== "#/fila") { clearInterval(timer); return; }

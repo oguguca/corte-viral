@@ -44,7 +44,7 @@ class PublishConfig(BaseModel):
     webhook_url: str = "http://127.0.0.1:5678/webhook/corte-viral"
     networks: dict[str, bool] = Field(default_factory=lambda: {k: False for k in NETWORKS})
     youtube_privacy: Literal["private", "unlisted", "public"] = "private"
-    auto_send: bool = False       # envia logo depois de exportar
+    auto_send: bool = False       # ao exportar, põe os clipes no fim da fila de postagem
     token: str = ""               # segredo que o n8n devolve no retorno (gerado no primeiro uso)
 
     @field_validator("webhook_url")

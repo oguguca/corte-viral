@@ -84,7 +84,7 @@ async function queueBadge() {  // "Fila de postagem · 14 na fila · próximo 19
   try {
     const q = await api("/api/schedule");
     const s = q.summary, el = $("#queueSub");
-    el.textContent = s.waiting ? `${s.waiting} na fila · próximo ${new Date(s.next_at * 1000)
+    el.textContent = s.waiting && s.paused ? `${s.waiting} na fila · pausada` : s.waiting ? `${s.waiting} na fila · próximo ${new Date(s.next_at * 1000)
       .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "nada programado";
   } catch (e) { /* app reiniciando */ }
 }
@@ -125,6 +125,7 @@ function init() {
   setInterval(renderUsageMini, 20000);
   queueBadge();
   setInterval(queueBadge, 30000);
+  document.addEventListener("queuechange", queueBadge);
   render();
   resumeRunning();
 }

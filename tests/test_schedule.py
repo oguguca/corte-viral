@@ -114,3 +114,51 @@ def test_api_queue_lists_all_with_titles_and_retry(settings_tmp, sample_video):
     assert c.post(f"/api/schedule/{b['id']}/retry").status_code == 409  # ainda esperando
     r = c.post(f"/api/schedule/{a['id']}/retry").json()
     assert r["item"]["clip_id"] == "m1" and r["item"]["at"] > b["at"]  # volta depois do último
+
+
+def test_pause_holds_and_resume_reschedules_from_now(tmp_path):
+    s = ScheduleStore(tmp_path)
+    s.plan("p1", ["a", "b"], 15, now=T0)
+    s.pause()
+    assert s.summary(now=T0)["paused"] and run_due(s, lambda i: None, now=T0 + 3600) is None  # nada sai pausado
+    s.resume(now=T0 + 7200)
+    assert [i["at"] for i in s.items()] == [T0 + 7200, T0 + 8100]  # recomeça agora, mesmo intervalo
+    assert run_due(s, lambda i: None, now=T0 + 7200)["clip_id"] == "a"
+
+
+def test_api_pause_resume_and_delete_all(settings_tmp):
+    from fastapi.testclient import TestClient
+
+    from corteviral.server.app import create_app
+    s = ScheduleStore(settings_tmp.paths.data_dir)
+    s.plan("p1", ["a"], 15)
+    s.plan("p2", ["b"], 15)
+    c = TestClient(create_app(settings_tmp))
+    assert c.post("/api/schedule/pause").json()["paused"] is True
+    assert c.post("/api/schedule/resume").json()["paused"] is False
+    assert c.delete("/api/schedule").json()["removed"] == 2 and s.items() == []
+
+
+def test_export_with_auto_send_queues_instead_of_posting(settings_tmp, sample_video, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import corteviral.server.app as appmod
+    from corteviral.publish import PublishConfig, PublishStore
+    from corteviral.server.app import create_app
+    from tests.test_export import _m, _project
+    from tests.test_server import _wait
+    rs = settings_tmp
+    rs.render.presets_dir = rs.paths.data_dir / "presets"
+    rs.render.encoder = "libx264"
+    rs.paths.exports_dir = rs.paths.data_dir / "exports"
+    rs.captions.enabled = False
+    p = _project(rs, sample_video, [_m(1, 0.5, 3.0), _m(2, 4.0, 7.0, score=70)])
+    PublishStore(rs.paths.data_dir).save(PublishConfig(networks={"youtube": True}, auto_send=True))
+    posted = []
+    monkeypatch.setattr(appmod, "publish_clips", lambda *a, **k: posted.append(a) or {"sent": 9, "errors": []})
+    c = TestClient(create_app(rs))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name}).json()["id"], timeout=120)
+    assert job["status"] == "done" and posted == []  # nada postado de uma vez
+    assert job["result"]["publish"]["queued"] == 2
+    items = ScheduleStore(rs.paths.data_dir).items(p.dir.name)
+    assert len(items) == 2 and items[1]["at"] - items[0]["at"] == 900
