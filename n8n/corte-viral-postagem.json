@@ -423,6 +423,40 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "status"
+            },
+            {
+              "name": "id",
+              "value": "={{ ($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id) }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "23c963ff-a0a1-56e7-8a1a-ff9a9627f4de",
+      "name": "YouTube: ver status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1450,
+        640
+      ],
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
         "method": "PUT",
         "url": "https://www.googleapis.com/youtube/v3/videos",
         "authentication": "predefinedCredentialType",
@@ -439,7 +473,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ id: $('YouTube: enviar').first().json.id, status: { privacyStatus: ($('YouTube: enviar').first().json.status && $('YouTube: enviar').first().json.status.privacyStatus) || $('Preparar').all().find(i => i.json.network === 'youtube').json.post.privacy || 'private', embeddable: true, license: 'youtube', publicStatsViewable: true, selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
+        "jsonBody": "={{ JSON.stringify({ id: ($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id), status: { privacyStatus: (($json.items && $json.items[0] && $json.items[0].status) || {}).privacyStatus || $('Preparar').all().find(i => i.json.network === 'youtube').json.post.privacy || 'private', embeddable: (($json.items && $json.items[0] && $json.items[0].status) || {}).embeddable !== false, license: (($json.items && $json.items[0] && $json.items[0].status) || {}).license || 'youtube', publicStatsViewable: (($json.items && $json.items[0] && $json.items[0].status) || {}).publicStatsViewable !== false, selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
         "options": {
           "timeout": 60000
         }
@@ -450,14 +484,14 @@
       "typeVersion": 4.2,
       "position": [
         1450,
-        700
+        760
       ],
       "onError": "continueRegularOutput",
       "disabled": true
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\nconst r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.id });\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
+        "jsCode": "const p = $('Preparar').all().find(i => i.json.network === 'youtube').json;\nconst r = $input.first().json;\nconst r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.uploadId || r2.id });\nreturn [{ json: { callback_url: p.callback_url, body: {\n  token: p.token, send_id: p.send_id, project: p.project, clip_id: p.clip_id, network: 'youtube',\n  status: r.id ? 'published' : 'error', url: r.id ? 'https://youtube.com/shorts/' + r.id : '', error: r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o' } } }];"
       },
       "id": "de8cc87f-da90-511a-9816-8702a6707cab",
       "name": "YouTube: resultado",
@@ -1001,7 +1035,7 @@
       "main": [
         [
           {
-            "node": "YouTube: declarar",
+            "node": "YouTube: ver status",
             "type": "main",
             "index": 0
           }
@@ -1009,6 +1043,17 @@
         [
           {
             "node": "YouTube: falhou",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube: ver status": {
+      "main": [
+        [
+          {
+            "node": "YouTube: declarar",
             "type": "main",
             "index": 0
           }

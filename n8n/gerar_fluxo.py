@@ -224,29 +224,40 @@ node("YouTube: enviar", "n8n-nodes-base.youTube", 1,
 # Depois do envio: declara o que a tela do YouTube Studio pergunta (o nó do YouTube não tem esses campos).
 # containsSyntheticMedia=false → "conteúdo alterado ou sintético: Não" (cortes de live reais);
 # promoção paga não pode ser marcada pela API e já fica "Não" por padrão.
-# Ao atualizar "status", o YouTube apaga o que não vier no pedido: por isso vão todos os campos.
-YUP = "$('YouTube: enviar').first().json"
+# Ao atualizar "status", o YouTube apaga o que não vier no pedido: por isso lê o status atual antes
+# (o vídeo pode ter ficado privado à força, se o app do Google não for verificado) e manda todos os campos.
+# O nó do YouTube devolve o código do vídeo em "uploadId".
+VID = "($('YouTube: enviar').first().json.uploadId || $('YouTube: enviar').first().json.id)"
+YT_CRED = {"authentication": "predefinedCredentialType", "nodeCredentialType": "youTubeOAuth2Api"}
+node("YouTube: ver status", "n8n-nodes-base.httpRequest", 4.2,
+     {"method": "GET", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
+      "sendQuery": True, "queryParameters": {"parameters": [{"name": "part", "value": "status"},
+                                                            {"name": "id", "value": f"={{{{ {VID} }}}}"}]},
+      "options": {"timeout": 60000}},
+     [1450, 640], onError="continueRegularOutput", disabled=True)  # usa a mesma credencial do nó YouTube: enviar
+CUR = "(($json.items && $json.items[0] && $json.items[0].status) || {})"
 node("YouTube: declarar", "n8n-nodes-base.httpRequest", 4.2,
-     {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos",
-      "authentication": "predefinedCredentialType", "nodeCredentialType": "youTubeOAuth2Api",
+     {"method": "PUT", "url": "https://www.googleapis.com/youtube/v3/videos", **YT_CRED,
       "sendQuery": True, "queryParameters": {"parameters": [{"name": "part", "value": "status"}]},
       "sendBody": True, "contentType": "json", "specifyBody": "json",
-      "jsonBody": f"={{{{ JSON.stringify({{ id: {YUP}.id, status: {{ "
-                  f"privacyStatus: ({YUP}.status && {YUP}.status.privacyStatus) || {Y}.post.privacy || 'private', "
-                  "embeddable: true, license: 'youtube', publicStatsViewable: true, "
+      "jsonBody": f"={{{{ JSON.stringify({{ id: {VID}, status: {{ "
+                  f"privacyStatus: {CUR}.privacyStatus || {Y}.post.privacy || 'private', "
+                  f"embeddable: {CUR}.embeddable !== false, license: {CUR}.license || 'youtube', "
+                  f"publicStatsViewable: {CUR}.publicStatsViewable !== false, "
                   "selfDeclaredMadeForKids: false, containsSyntheticMedia: false } }) }}",
       "options": {"timeout": 60000}},
-     [1450, 700], onError="continueRegularOutput", disabled=True)  # usa a mesma credencial do nó YouTube: enviar
+     [1450, 760], onError="continueRegularOutput", disabled=True)
 code("YouTube: resultado", cb_js("youtube", "r.id ? 'published' : 'error'",
                                  "r.id ? 'https://youtube.com/shorts/' + r.id : ''",
                                  "r.id ? '' : 'YouTube ainda não conectado: no n8n, escolha a credencial no nó YouTube: enviar e ative-o'",
-                                 pre="const r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.id });"),
+                                 pre="const r2 = $('YouTube: enviar').first().json; Object.assign(r, { id: r2.uploadId || r2.id });"),
      [1560, 800])
 code("YouTube: falhou", FAIL_JS("youtube", "YouTube"), [1560, 940])
 link("Qual rede?", "YouTube: ler vídeo", 1)
-for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "YouTube: declarar")):
+for a, b in (("YouTube: ler vídeo", "YouTube: enviar"), ("YouTube: enviar", "YouTube: ver status")):
     link(a, b, 0)
     link(a, "YouTube: falhou", 1)
+link("YouTube: ver status", "YouTube: declarar")
 link("YouTube: declarar", "YouTube: resultado")  # falhar ao declarar não desfaz o vídeo publicado
 link("YouTube: resultado", AV)
 link("YouTube: falhou", AV)

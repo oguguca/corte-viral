@@ -111,4 +111,6 @@ def test_shipped_workflow_declares_no_synthetic_media():
     decl = next(n for n in wf["nodes"] if n["name"] == "YouTube: declarar")
     assert "containsSyntheticMedia: false" in decl["parameters"]["jsonBody"]
     assert "selfDeclaredMadeForKids: false" in decl["parameters"]["jsonBody"]
-    assert wf["connections"]["YouTube: enviar"]["main"][0][0]["node"] == "YouTube: declarar"
+    assert wf["connections"]["YouTube: enviar"]["main"][0][0]["node"] == "YouTube: ver status"
+    assert wf["connections"]["YouTube: ver status"]["main"][0][0]["node"] == "YouTube: declarar"
+    assert "uploadId" in decl["parameters"]["jsonBody"]
