@@ -143,26 +143,37 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int = 1080, height:
     lines = [_header(style, width, height)]
     band = (bottom / sy - style.size * 1.25, bottom / sy) if words else None  # faixa ocupada pela legenda
     lines += _overlay_events(style, hook, credit, duration, layout, sx, sy, hook_top, band)
-    chunks = chunk_words(words, style.max_words, style.max_chars)
-    for ci, chunk in enumerate(chunks):
-        nxt = chunks[ci + 1][0]["start"] if ci + 1 < len(chunks) else None
-        last_end = chunk[-1]["end"]
-        chunk_end = nxt if nxt is not None and nxt - last_end < JOIN_GAP else last_end + HOLD
-        texts = [ass_escape(w["w"].upper() if style.uppercase else w["w"]) for w in chunk]
+    for ev in caption_events(words, style):
+        texts = [ass_escape(t) for t in ev["words"]]
         # grupo largo demais (ex.: palavra enorme): encolhe para caber, em vez de vazar pelas bordas
-        est = len(" ".join(w["w"] for w in chunk)) * size * CHAR_W
+        est = len(" ".join(ev["words"])) * size * CHAR_W
         scale = min(100, int(safe_w / est * 100)) if est else 100
         fit = rf"\fscx{scale}\fscy{scale}" if scale < 100 else ""
         big = round(scale * 1.15)
         pop = rf"\fscx{big}\fscy{big}\t(0,80,\fscx{scale}\fscy{scale})" if style.pop else ""
         restore = rf"\c{prim}" + (rf"\fscx{scale}\fscy{scale}" if (style.pop or fit) else "")
+        parts = ["{" + rf"\c{hl}{pop}" + "}" + t + "{" + restore + "}" if j == ev["hl"] else t
+                 for j, t in enumerate(texts)]
+        lines.append(f"Dialogue: 0,{ass_time(ev['start'])},{ass_time(ev['end'])},Default,,0,0,0,,"
+                     "{" + rf"\an2\pos({x},{bottom}){fit}" + "}" + " ".join(parts))
+    return "\n".join(lines) + "\n"
+
+
+def caption_events(words: list[dict], style: CaptionStyle) -> list[dict]:
+    """Quadros da legenda: o grupo de palavras na tela e qual delas está em destaque (hl), com início/fim.
+
+    Fonte única para o .ass do vídeo final e para a prévia ao vivo da interface.
+    """
+    out = []
+    chunks = chunk_words(words, style.max_words, style.max_chars)
+    for ci, chunk in enumerate(chunks):
+        nxt = chunks[ci + 1][0]["start"] if ci + 1 < len(chunks) else None
+        last_end = chunk[-1]["end"]
+        chunk_end = nxt if nxt is not None and nxt - last_end < JOIN_GAP else last_end + HOLD
+        texts = [w["w"].upper() if style.uppercase else w["w"] for w in chunk]
         for i, w in enumerate(chunk):
             start = w["start"]
             end = chunk[i + 1]["start"] if i + 1 < len(chunk) else chunk_end
-            if end <= start:
-                continue
-            parts = ["{" + rf"\c{hl}{pop}" + "}" + t + "{" + restore + "}" if j == i else t
-                     for j, t in enumerate(texts)]
-            lines.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Default,,0,0,0,,"
-                         "{" + rf"\an2\pos({x},{bottom}){fit}" + "}" + " ".join(parts))
-    return "\n".join(lines) + "\n"
+            if end > start:
+                out.append({"start": round(start, 3), "end": round(end, 3), "words": texts, "hl": i})
+    return out

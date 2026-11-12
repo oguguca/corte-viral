@@ -1,16 +1,9 @@
 // Painel "Layout do vertical": câmeras/gameplay detectadas, caixas arrastáveis 1:1 e prévia 9:16.
 import { $, api, esc, projectApi } from "../api.js";
+import { coverCrop } from "../livepreview.js";
 import { openSheet, toast } from "../ui.js";
 
 const R = (a) => (a ? a.map((v) => Math.round(v * 10000) / 10000) : null);
-
-function coverCrop([x, y, w, h], aspect, anchorY) {
-  let cw, ch;
-  if (w / h > aspect) { ch = h; cw = h * aspect; } else { cw = w; ch = w / aspect; }
-  let cy = y + anchorY * h - ch / 2;
-  cy = Math.min(Math.max(cy, y), y + h - ch);
-  return [x + (w - cw) / 2, cy, cw, ch];
-}
 
 export async function openLayout(from, name, onSaved = null) {
   const P = projectApi(name);

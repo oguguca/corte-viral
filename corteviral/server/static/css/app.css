@@ -453,3 +453,16 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 .cap-marker:hover, .cap-marker.dragging { background: color-mix(in srgb, var(--info) 34%, transparent); }
 .cap-marker.dragging { cursor: grabbing; }
 .cap-marker:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+/* prévia ao vivo do clipe (canvas 9:16 desenhado no navegador) */
+.live-pv { width: auto; height: 440px; aspect-ratio: 9 / 16; cursor: pointer; }
+.lp-bar { display: flex; align-items: center; gap: 8px; width: 248px; }
+.lp-play { flex: none; width: 34px; height: 34px; border-radius: 99px; border: 0; cursor: pointer;
+           background: var(--accent); color: var(--accent-ink); font: 700 12px/1 var(--font); }
+:root[data-theme="gta"] .lp-play { background: var(--vice); color: #fff; box-shadow: 0 0 0 2px var(--edge); }
+.lp-play:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.lp-seek { flex: 1; min-width: 0; accent-color: var(--accent); }
+.lp-time { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.pv-switch { width: 248px; }
+.pv-switch button { flex: 1; }
+.cap-stage:has(.live-pv) .cap-marker { background: transparent; }  /* na prévia, a legenda de verdade aparece por baixo */

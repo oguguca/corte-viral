@@ -1,4 +1,5 @@
-"""Exportação em lote: MP4 final de cada clipe aprovado + .txt com os textos de cada rede."""
+"""Exportação em lote: uma pasta por clipe aprovado, com o MP4 final e um .txt por rede (TikTok, YouTube
+Shorts, Instagram Reels, Kwai) no formato do formulário de envio de cada uma."""
 from __future__ import annotations
 
 import json
@@ -19,7 +20,8 @@ from corteviral.utils import slugify, write_json_atomic
 
 log = logging.getLogger(__name__)
 ProgressFn = Callable[[float, str], None]
-LABELS = {"tiktok": "TIKTOK", "shorts": "YOUTUBE SHORTS", "reels": "INSTAGRAM REELS", "kwai": "KWAI"}
+FILES = {"tiktok": ("TikTok.txt", "TIKTOK"), "shorts": ("YouTube Shorts.txt", "YOUTUBE SHORTS"),
+         "reels": ("Instagram Reels.txt", "INSTAGRAM REELS"), "kwai": ("Kwai.txt", "KWAI")}
 OVERLAP = 0.5
 _LOCK = threading.Lock()
 
@@ -62,18 +64,34 @@ def _meta(moment: dict, streamer: str | None, credit: str | None) -> dict:
     posts = {}
     for plat, fpost in fb["posts"].items():
         post = (meta.get("posts") or {}).get(plat) or {}
-        posts[plat] = {k: (post.get(k) or fpost[k]) for k in ("title", "description", "hashtags")}
+        posts[plat] = {k: (post.get(k) or v) for k, v in fpost.items()}  # inclui as tags do YouTube
     return {"hook": meta.get("hook") or fb["hook"], "ai": bool(meta.get("ai")), "posts": posts}
 
 
-def posts_txt(moment: dict, streamer: str | None = None, credit: str | None = None) -> str:
+def _block(*parts: str) -> str:
+    return "\n\n".join(p.strip() for p in parts if p and p.strip())
+
+
+def platform_texts(moment: dict, streamer: str | None = None, credit: str | None = None) -> dict[str, str]:
+    """Um .txt por rede, no formato do formulário de envio de cada uma (nome do arquivo → texto)."""
     meta = _meta(moment, streamer, credit)
-    parts = [f"GANCHO (texto no vídeo): {meta.get('hook', '')}", ""]
-    for plat, label in LABELS.items():
+    out = {}
+    for plat, (fname, label) in FILES.items():
         post = meta["posts"].get(plat) or {}
-        parts += [f"=== {label} ===", f"Título: {post.get('title', '')}", "",
-                  post.get("description", ""), "", " ".join(post.get("hashtags", [])), ""]
-    return "\n".join(parts).strip() + "\n"
+        title, desc = post.get("title", ""), post.get("description", "")
+        tags = " ".join(post.get("hashtags", []))
+        if plat == "shorts":  # YouTube: título, descrição e tags são campos separados
+            body = (f"{label}\n\n"
+                    f"TÍTULO (campo \"Título\", até 100 caracteres):\n{title}\n\n"
+                    f"DESCRIÇÃO (campo \"Descrição\"; as 3 primeiras hashtags aparecem em cima do título):\n"
+                    f"{_block(desc, tags)}\n\n"
+                    f"TAGS (em \"Mostrar mais\" › \"Tags\", já separadas por vírgula):\n"
+                    f"{', '.join(post.get('tags', []))}\n")
+        else:  # TikTok, Reels e Kwai: um campo só, então vai tudo junto e pronto para colar
+            field = "Legenda" if plat == "reels" else "Descrição"
+            body = f"{label} — copie tudo abaixo da linha e cole no campo \"{field}\"\n{'-' * 40}\n{_block(title, desc, tags)}\n"
+        out[fname] = body
+    return out
 
 
 def _history(settings: Settings) -> HistoryStore:
@@ -121,31 +139,28 @@ def export_approved(project: Project, settings: Settings, on_progress: ProgressF
         title = (meta["posts"].get("tiktok") or {}).get("title") or meta.get("hook") or m["id"]
         base = f"{i:02d}-{slugify(title, 50)}"
         name, n = base, 2
-        while name in used or (folder / f"{name}.mp4").exists() or (folder / f"{name}.txt").exists():
+        while name in used or (folder / name).exists() or (folder / f"{name}.mp4").exists():
             name, n = f"{base}-{n}", n + 1  # nunca sobrescreve uma exportação anterior
         used.add(name)
-        mp4, txt = folder / f"{name}.mp4", folder / f"{name}.txt"
-        tmp_mp4, tmp_txt = folder / f".{name}.part.mp4", folder / f".{name}.part.txt"
-        created = []
+        # uma pasta por clipe: o MP4 + um .txt por rede. Montada numa pasta temporária e renomeada no fim
+        # (ou tudo, ou nada: falha no meio não deixa pasta pela metade).
+        clip_dir, tmp_dir = folder / name, folder / f".{name}.part"
         try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            tmp_dir.mkdir()
             clip = render_clip(project, m, settings)
-            shutil.copyfile(clip, tmp_mp4)
-            tmp_txt.write_text(posts_txt(m, streamer, credit), encoding="utf-8")
-            os.replace(tmp_mp4, mp4)
-            created.append(mp4)
-            os.replace(tmp_txt, txt)
-            created.append(txt)
+            shutil.copyfile(clip, tmp_dir / f"{name}.mp4")
+            for fname, text in platform_texts(m, streamer, credit).items():
+                (tmp_dir / fname).write_text(text, encoding="utf-8")
+            os.replace(tmp_dir, clip_dir)
         except Exception as e:  # noqa: BLE001 — um clipe com problema não impede os outros
             log.warning("Falha ao exportar %s: %s", m["id"], e)
-            for f in (tmp_mp4, tmp_txt, *created):  # só apaga o que esta tentativa criou
-                try:
-                    f.unlink(missing_ok=True)
-                except OSError:
-                    pass
+            shutil.rmtree(tmp_dir, ignore_errors=True)  # só apaga o que esta tentativa criou
             errors.append({"id": m["id"], "error": str(e)[:300]})
             continue
+        mp4 = clip_dir / f"{name}.mp4"
         _history(settings).add(_source(project), m["start"], m["end"], str(mp4))
-        files.append({"id": m["id"], "mp4": mp4, "txt": txt})
+        files.append({"id": m["id"], "mp4": mp4, "dir": clip_dir})
     if on_progress:
         on_progress(1.0, f"{len(files)} clipes exportados")
     return {"folder": folder, "files": files, "errors": errors, "duplicates": check["duplicates"],

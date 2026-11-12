@@ -137,3 +137,13 @@ def test_clip_caption_position_overrides_style():
     assert caption_style_for({"caption_pos": 0.9}, style).position == 0.9
     assert caption_style_for({}, style).position == 0.70
     assert style.position == 0.70  # o estilo global não muda
+
+
+def test_caption_events_match_the_ass():
+    from corteviral.pipeline.captions import caption_events
+    words = [{"w": "olha", "start": 0.0, "end": 0.4}, {"w": "isso", "start": 0.4, "end": 0.8},
+             {"w": "mano", "start": 3.0, "end": 3.5}]
+    ev = caption_events(words, CaptionStyle(max_words=3))
+    assert [(e["words"], e["hl"]) for e in ev] == [(["OLHA", "ISSO"], 0), (["OLHA", "ISSO"], 1), (["MANO"], 0)]
+    assert ev[0]["start"] == 0.0 and ev[1]["end"] == 0.8 + 0.3  # último do grupo fica HOLD s na tela
+    assert len(ev) == build_ass(words, CaptionStyle(max_words=3)).count("Default,,")

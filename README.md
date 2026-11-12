@@ -121,11 +121,20 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
 1. Em cada momento: **Aprovar** / **Descartar** (clicar de novo desfaz) e **Revisar corte e textos**:
    - ajuste início/fim (±1 s ou "= player", usando o ponto atual do vídeo) e **Salvar corte**;
    - **gancho** — frase escrita nos 3 primeiros segundos do vídeo (desligável por clipe);
-   - abas **TikTok / Shorts / Reels / Kwai** com título, descrição e hashtags editáveis e **Copiar tudo**.
-2. **Gerar textos com IA** escreve gancho, títulos, descrições e hashtags de cada rede (para os aprovados;
-   sem nenhum aprovado, para todos). Sem IA, o app gera textos simples.
-3. **Exportar aprovados** gera em `exports/<projeto>/` um MP4 final (1080x1920) e um `.txt` com os textos de
-   cada rede por clipe (`01-titulo.mp4`, `01-titulo.txt`, …) e abre a pasta.
+   - abas **TikTok / Shorts / Reels / Kwai** com título, descrição e hashtags editáveis e **Copiar tudo**
+     (no Shorts também as **tags do YouTube**; no Reels no máximo 5 hashtags, limite do Instagram).
+   - **Prévia ao vivo**: ao lado, o clipe aparece em 9:16 já montado (câmera + gameplay), com legenda, gancho e
+     crédito, tocando direto do vídeo original — sem gerar nada. Arrastar a faixa LEGENDA, mudar o gancho ou
+     ligar/desligar a legenda muda a prévia na hora. Com o clipe gerado, alterne entre **Prévia ao vivo** e
+     **Clipe gerado**.
+2. **Gerar textos com IA** escreve gancho, títulos (feitos para ganhar views), descrições, hashtags e tags de
+   cada rede (para os aprovados; sem nenhum aprovado, para todos). Sem IA, o app gera textos simples.
+3. **Exportar aprovados** cria em `exports/<projeto>/` **uma pasta por clipe** com o MP4 final (1080x1920) e
+   **um .txt por rede**, cada um no formato do envio daquela rede, e abre a pasta:
+   - `TikTok.txt`, `Instagram Reels.txt` e `Kwai.txt`: título + descrição + hashtags juntos, prontos para colar
+     no único campo de texto dessas redes;
+   - `YouTube Shorts.txt`: título, descrição e **tags** (separadas por vírgula) em blocos, um para cada campo.
+   - Clipe aprovado ainda sem textos: a IA escreve antes de exportar (sem apagar textos que você editou).
    - Avisa se o streamer não está marcado como autorizado (Layout do vertical → "Tenho autorização") e se o
      trecho já foi exportado antes (`data/history.json`).
    - Com **Crédito** preenchido no layout, o vídeo mostra "@streamer" discreto no canto e a descrição termina

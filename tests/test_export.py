@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from corteviral.export import HistoryStore, export_approved, export_check, posts_txt
+from corteviral.export import HistoryStore, export_approved, export_check, platform_texts
 from corteviral.metadata import fallback_posts
 from corteviral.pipeline.analyze import MOMENTS
 from corteviral.presets import LayoutPreset, save_preset
@@ -41,11 +41,16 @@ def _m(i, start, end, status="approved", score=80, title="Olha isso"):
             "meta": _meta(title)}
 
 
-def test_posts_txt_has_all_platforms():
-    txt = posts_txt({"id": "m1", "meta": _meta("Perseguição insana")})
-    for label in ("TIKTOK", "YOUTUBE SHORTS", "INSTAGRAM REELS", "KWAI", "GANCHO"):
-        assert label in txt
-    assert "#gta6" in txt and "Perseguição insana" in txt
+def test_one_text_file_per_platform_in_its_upload_format():
+    files = platform_texts({"id": "m1", "meta": _meta("Perseguição insana")})
+    assert list(files) == ["TikTok.txt", "YouTube Shorts.txt", "Instagram Reels.txt", "Kwai.txt"]
+    yt = files["YouTube Shorts.txt"]
+    assert "TÍTULO" in yt and "DESCRIÇÃO" in yt and "TAGS" in yt
+    tags_line = yt.split("TAGS", 1)[1].splitlines()[1]
+    assert "gta6" in tags_line and "#" not in tags_line and ", " in tags_line  # campo Tags: vírgulas, sem #
+    for name in ("TikTok.txt", "Instagram Reels.txt", "Kwai.txt"):  # um campo só: tudo junto, pronto p/ colar
+        txt = files[name]
+        assert "Perseguição insana" in txt and "#gta6" in txt and "TAGS" not in txt
 
 
 def test_export_names_unique_and_windows_safe(rs, sample_video):
@@ -62,8 +67,11 @@ def test_export_only_approved_and_writes_txt(rs, sample_video):
     res = export_approved(p, rs)
     assert [f["id"] for f in res["files"]] == ["m1"]
     f = res["files"][0]
-    assert f["mp4"].exists() and f["txt"].exists() and "TIKTOK" in f["txt"].read_text(encoding="utf-8")
-    assert f["mp4"].parent == rs.paths.exports_dir / p.dir.name
+    assert f["mp4"].exists() and f["mp4"].parent == f["dir"]
+    assert sorted(x.name for x in f["dir"].iterdir() if x.suffix == ".txt") == sorted(
+        ["TikTok.txt", "YouTube Shorts.txt", "Instagram Reels.txt", "Kwai.txt"])
+    assert "#gta6" in (f["dir"] / "TikTok.txt").read_text(encoding="utf-8")
+    assert f["dir"].parent == rs.paths.exports_dir / p.dir.name  # uma pasta por clipe
 
 
 def test_second_export_reports_duplicate(rs, sample_video):
@@ -88,7 +96,7 @@ def test_failed_render_leaves_no_partial_files(rs, sample_video, monkeypatch):
     res = export_approved(p, rs)
     assert [f["id"] for f in res["files"]] == ["m1"] and res["errors"][0]["id"] == "m2"
     folder = rs.paths.exports_dir / p.dir.name
-    assert sorted(x.suffix for x in folder.iterdir()) == [".mp4", ".txt"]  # só os do m1, nada pela metade
+    assert [x.name[:3] for x in folder.iterdir()] == ["01-"]  # só a pasta do m1, nada pela metade
 
 
 def test_unauthorized_streamer_flagged(rs, sample_video):
@@ -124,3 +132,17 @@ def test_cli_export(rs, sample_video, capsys, tmp_path, monkeypatch):
     monkeypatch.setattr(climod, "load_settings", lambda path=None: rs)
     assert main(["export", str(p.dir)]) == 0
     assert ".mp4" in capsys.readouterr().out
+
+
+def test_export_job_writes_missing_texts_first(rs, sample_video, monkeypatch):
+    import corteviral.server.app as appmod
+    from corteviral.server.app import create_app
+    from tests.test_server import _wait
+    m1 = _m(1, 0.5, 3.0)
+    m1.pop("meta")  # clipe aprovado ainda sem textos
+    p = _project(rs, sample_video, [m1, _m(2, 4.0, 7.0, score=70)])
+    asked = []
+    monkeypatch.setattr(appmod, "generate_posts", lambda project, ids, s: asked.append(ids) or {"ai": 0})
+    c = TestClient(create_app(rs))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name}).json()["id"], timeout=120)
+    assert job["status"] == "done" and asked == [["m1"]]  # só o que não tinha textos (não apaga edições)

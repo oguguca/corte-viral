@@ -108,3 +108,20 @@ def test_write_posts_request_shape(monkeypatch):
     schema = seen["body"]["generationConfig"]["responseSchema"]
     assert schema["type"] == "array" and set(PLATFORMS) <= set(schema["items"]["properties"])
     assert "explode" in seen["body"]["contents"][0]["parts"][0]["text"]
+
+
+def test_reels_keeps_at_most_5_hashtags():
+    p = normalize_post({"title": "t", "description": "x", "hashtags": [f"t{i}" for i in range(9)]}, "reels", None)
+    assert len(p["hashtags"]) == 5  # o Instagram aceita no máximo 5 hashtags por post
+    t = normalize_post({"title": "t", "description": "x", "hashtags": [f"t{i}" for i in range(9)]}, "tiktok", None)
+    assert len(t["hashtags"]) == 9
+
+
+def test_shorts_has_youtube_tags():
+    ai = normalize_post({"title": "t", "description": "x", "hashtags": ["#gta6"],
+                         "tags": ["GTA 6", "#gta6", "gta 6", "trailer gta 6", "x" * 600]}, "shorts", None)
+    assert ai["tags"][:2] == ["GTA 6", "gta6"]          # sem # e sem repetir (ignora maiúsculas)
+    assert "trailer gta 6" in ai["tags"] and len(", ".join(ai["tags"])) <= 450
+    derived = normalize_post({"title": "t", "description": "x", "hashtags": ["#gta6", "#cortes"]}, "shorts", None)
+    assert derived["tags"] == ["gta6", "cortes"]        # sem tags da IA: vêm das hashtags
+    assert "tags" not in normalize_post({"title": "t", "description": "x", "hashtags": []}, "tiktok", None)

@@ -84,3 +84,19 @@ def test_blank_caption_text_restores_original(settings_tmp):
     assert load_moments(p)["moments"][0]["caption_words"]
     apply_patch(p, "m1", {"caption_text": "   "}, settings_tmp)  # caixa vazia = volta ao texto original
     assert "caption_words" not in load_moments(p)["moments"][0]
+
+
+def test_live_preview_spec_follows_clip_settings(settings_tmp):
+    p = _project(settings_tmp)
+    p.data["layout_detect"] = {"cams": [{"rect": [0.7, 0.05, 0.25, 0.3]}], "gameplay": None, "source": [1280, 720]}
+    p.save()
+    apply_patch(p, "m1", {"caption_pos": 0.4, "meta": {"hook": "Olha isso"}}, settings_tmp)
+    c = TestClient(create_app(settings_tmp))
+    s = c.get(f"/api/projects/{p.dir.name}/moments/m1/preview").json()
+    assert s["layout"] == "split" and s["facecam"] == [0.7, 0.05, 0.25, 0.3]
+    assert s["style"]["position"] == 0.4 and s["hook"] == "Olha isso" and s["hook_top"] > 0
+    assert s["events"][0]["start"] == 0.0 and s["events"][0]["words"][0] == "W100"  # tempo relativo ao clipe
+    assert s["duration"] == 30.0 and 0 < s["render"]["facecam_ratio"] < 1
+    apply_patch(p, "m1", {"captions": False}, settings_tmp)
+    assert c.get(f"/api/projects/{p.dir.name}/moments/m1/preview").json()["events"] == []
+    assert c.get(f"/api/projects/{p.dir.name}/moments/nada/preview").status_code == 404

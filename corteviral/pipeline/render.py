@@ -11,7 +11,7 @@ from corteviral import ffmpeg
 from corteviral.caption_style import load_style
 from corteviral.config import Settings
 from corteviral.models import Transcript
-from corteviral.pipeline.captions import build_ass, clip_words
+from corteviral.pipeline.captions import build_ass, caption_events, clip_words
 from corteviral.ffmpeg import FFmpegError
 from corteviral.pipeline.layout import build_filter
 from corteviral.presets import LayoutPreset, resolve_layout
@@ -93,6 +93,33 @@ def captions_wanted(moment: dict, captions: bool | None, style) -> bool:
     return bool(style.enabled)
 
 
+def _overlay_parts(project: Project, moment: dict, settings: Settings, preset: LayoutPreset,
+                   captions: bool | None = None):
+    """Estilo, palavras, gancho e crédito que vão em cima do vídeo (mesma regra no MP4 e na prévia)."""
+    style = caption_style_for(moment, load_style(settings))
+    start, end = float(moment["start"]), float(moment["end"])
+    words = _caption_words(project, moment, start, end) if captions_wanted(moment, captions, style) else []
+    hook_on = moment["hook_on"] if moment.get("hook_on") is not None else style.hook
+    hook = ((moment.get("meta") or {}).get("hook") or moment.get("hook") or "") if hook_on else ""
+    credit = preset.credit_handle if (style.credit and preset.credit_handle) else ""
+    return style, words, hook, credit
+
+
+def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
+    """Tudo o que a prévia ao vivo da interface precisa para desenhar o clipe como ele vai sair."""
+    rs = settings.render
+    preset = resolve_layout(project, settings)
+    style, words, hook, credit = _overlay_parts(project, moment, settings, preset)
+    layout = "fallback" if preset.layout == "split" and not preset.facecam else preset.layout
+    return {"layout": layout, "facecam": preset.facecam, "gameplay": preset.gameplay,
+            "start": float(moment["start"]), "end": float(moment["end"]),
+            "duration": round(float(moment["end"]) - float(moment["start"]), 3),
+            "render": {"facecam_ratio": rs.facecam_ratio, "divider_px": rs.divider_px,
+                       "divider_color": rs.divider_color},
+            "style": style.model_dump(), "events": caption_events(words, style), "hook": hook,
+            "hook_top": hook_top_for(preset.layout, bool(preset.facecam), rs), "credit": credit}
+
+
 def render_clip(project: Project, moment: dict, settings: Settings, preview: bool = False,
                 preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None,
                 captions: bool | None = None) -> Path:
@@ -108,11 +135,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     out = out_dir / f"{moment['id']}{'.preview' if preview else ''}.mp4"
     meta_file = out.with_suffix(".json")
 
-    style = caption_style_for(moment, load_style(settings))
-    words = _caption_words(project, moment, start, end) if captions_wanted(moment, captions, style) else []
-    hook_on = moment["hook_on"] if moment.get("hook_on") is not None else style.hook
-    hook = ((moment.get("meta") or {}).get("hook") or moment.get("hook") or "") if hook_on else ""
-    credit = preset.credit_handle if (style.credit and preset.credit_handle) else ""
+    style, words, hook, credit = _overlay_parts(project, moment, settings, preset, captions)
     ass_text = None
     if words or hook or credit:
         ass_text = build_ass(words, style, hook=hook or None, credit=credit or None,

@@ -26,6 +26,7 @@ from corteviral.ffmpeg import FFmpegError
 from corteviral.caption_style import load_style, save_style
 from corteviral.config import AnalysisSettings, CaptionStyle
 from corteviral import n8n_local
+from corteviral.export import _approved as approved_moments
 from corteviral.export import export_approved, export_check
 from corteviral.feedback import FeedbackStore
 from corteviral.publish import (NETWORKS, PublishConfig, PublishError, PublishStore, apply_callback,
@@ -219,10 +220,14 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             elif req.kind == "export":
                 project = Project.load(_project_dir(req.project))
                 job.update(stage="export", project=project.dir.name)
+                missing = [m["id"] for m in approved_moments(project) if not m.get("meta")]
+                if missing:  # sem textos ainda: a IA escreve antes, para os .txt já saírem com o melhor título
+                    job.update(stage="posts", message=f"IA escrevendo os textos de {len(missing)} clipe(s)")
+                    generate_posts(project, missing, s)
                 res = export_approved(project, s, on_progress=lambda f, m: progress("export", f, m))
                 job["result"] = {"folder": str(res["folder"]), "duplicates": res["duplicates"],
                                  "unauthorized": res["unauthorized"], "errors": res["errors"],
-                                 "files": [{"id": f["id"], "mp4": str(f["mp4"]), "txt": str(f["txt"])}
+                                 "files": [{"id": f["id"], "mp4": str(f["mp4"]), "dir": str(f["dir"])}
                                            for f in res["files"]]}
                 cfg = publish_store.load()
                 if cfg.auto_send and cfg.enabled() and res["files"] and req.callback_url:
@@ -349,6 +354,17 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         except ReviewError as e:
             raise HTTPException(422, str(e))
         return {"ok": True, "moment": moment}
+
+    @app.get("/api/projects/{name}/moments/{moment_id}/preview")
+    def get_preview_spec(name: str, moment_id: str):
+        """Layout, legenda já agrupada, gancho e crédito para a prévia ao vivo (desenhada no navegador)."""
+        from corteviral.pipeline.render import preview_spec
+        project = Project.load(_project_dir(name))
+        data = load_moments(project) or {}
+        m = next((x for x in data.get("moments", []) + data.get("all", []) if x["id"] == moment_id), None)
+        if not m:
+            raise HTTPException(404, "momento não encontrado")
+        return preview_spec(project, m, settings)
 
     @app.get("/api/projects/{name}/export-check")
     def get_export_check(name: str):

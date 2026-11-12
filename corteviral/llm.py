@@ -145,7 +145,8 @@ def _valid_review(d) -> bool:
 
 _POST_ITEM = {"type": "object", "properties": {
     "title": {"type": "string"}, "description": {"type": "string"},
-    "hashtags": {"type": "array", "items": {"type": "string"}}},
+    "hashtags": {"type": "array", "items": {"type": "string"}},
+    "tags": {"type": "array", "items": {"type": "string"}}},
     "required": ["title", "description", "hashtags"]}
 POSTS_SCHEMA = {"type": "array", "items": {"type": "object", "properties": {
     "id": {"type": "string"}, "hook": {"type": "string"},
@@ -155,9 +156,16 @@ POSTS_INSTRUCTIONS = """Você é social media de cortes de lives de games (GTA) 
 Para cada clipe, escreva os textos de postagem em {lang}:
 - hook: frase de gancho que aparece escrita no vídeo nos 3 primeiros segundos (até 8 palavras, sem hashtag,
   provoca curiosidade, sem entregar o final; ex.: "Ele não esperava por isso").
-- Para cada rede (tiktok, shorts, reels, kwai): title (até 70 caracteres, chamativo, sem clickbait mentiroso),
-  description (1–2 frases + uma pergunta para gerar comentários) e hashtags (6–8: amplas como #gta6 #gaming,
-  de nicho do momento, e o nome do streamer sem espaços).
+- Para cada rede (tiktok, shorts, reels, kwai): title, description e hashtags.
+  - title: o melhor título possível para ganhar views (até 70 caracteres). Use o que funciona em cortes virais:
+    curiosidade aberta ("…e ninguém esperava isso"), reação forte, número ou detalhe concreto do momento,
+    palavra-chave do jogo no começo (GTA 6). Nada de clickbait mentiroso, nada de CAIXA ALTA no título todo,
+    no máximo 1 emoji.
+  - description: 1–2 frases + uma pergunta que faça a pessoa comentar.
+  - hashtags: tiktok/kwai/shorts 6–8 (amplas como #gta6 #gaming + de nicho do momento + nome do streamer
+    sem espaços); reels no máximo 5 (o Instagram limita a 5).
+- Só em shorts, também tags: 10–15 palavras-chave de busca do YouTube, sem #, do mais buscado para o mais
+  específico (ex.: "gta 6", "gta vi", "trailer gta 6", nome do streamer, assunto do momento).
 - Adapte o tom: tiktok/kwai mais informal e com gírias; shorts direto e com palavra-chave no início do título
   (bom para busca); reels mais visual e com emoji.
 - Hashtags do jogo devem ser do jogo certo: se for GTA 6 (trailer, gameplay ou react de GTA VI), use #gta6

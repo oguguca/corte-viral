@@ -59,7 +59,7 @@ def test_failed_reexport_keeps_previous_files(settings_tmp, sample_video, monkey
     first = export_approved(p, settings_tmp)["files"][0]
     monkeypatch.setattr(mod, "render_clip", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("ffmpeg caiu")))
     res = export_approved(p, settings_tmp)
-    assert res["errors"] and first["mp4"].exists() and first["txt"].exists()
+    assert res["errors"] and first["mp4"].exists() and (first["dir"] / "TikTok.txt").exists()
 
 
 def test_reexport_uses_new_name_instead_of_overwriting(settings_tmp, sample_video):

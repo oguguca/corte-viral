@@ -145,7 +145,8 @@ def build_payload(project: str, moment: dict, meta: dict, networks: list[str], c
             if "#shorts" not in desc.lower():
                 desc += " #Shorts"
             out[net] = {"title": (post.get("title") or meta.get("hook") or "Corte")[:100], "description": desc[:4900],
-                        "tags": _tags(post.get("hashtags", []))[:15], "privacy": cfg.youtube_privacy}
+                        "tags": (post.get("tags") or _tags(post.get("hashtags", [])))[:15],
+                        "privacy": cfg.youtube_privacy}
         else:
             out[net] = {"caption": _caption(post), "title": post.get("title", "")}
     return out

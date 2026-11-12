@@ -1,6 +1,7 @@
 // Etapa ③ Clipes: revisar cada clipe (aprovar/descartar, corte, textos por rede, legenda) e gerar os MP4.
 import { $, api, enc, esc, fmt, projectApi } from "../api.js";
 import { startJob } from "../jobs.js";
+import { mountLivePreview } from "../livepreview.js";
 import { go } from "../router.js";
 import { openLayout } from "../sheets/layout.js";
 import { saveCapStyle, state } from "../state.js";
@@ -21,6 +22,11 @@ export async function renderClips(root, name, project, ctx = {}) {
     return;
   }
   const ui = state.clipsUi;  // aba, filtro e rede sobrevivem aos redesenhos após tarefas
+  let live = null;           // prévia ao vivo do clipe aberto
+  const refreshLive = async (id) => {  // depois de salvar algo que muda o que aparece no vídeo
+    if (!live) return;
+    try { live.update(await api(P("/moments/") + enc(id) + "/preview")); } catch (e) { /* a prévia fica como estava */ }
+  };
   const byScore = [...d.moments].sort((a, b) => b.score - a.score);
   if (!d.moments.some((m) => m.id === state.selected)) state.selected = byScore[0]?.id;
 
@@ -122,6 +128,7 @@ export async function renderClips(root, name, project, ctx = {}) {
       mk.setAttribute("aria-valuetext", `${Math.round(pos * 100)}% da altura`);
       info.textContent = `Altura: ${Math.round(pos * 100)}% ${m.caption_pos != null ? "· só neste clipe" : "· padrão de Ajustes"}`;
       reset.hidden = m.caption_pos == null;
+      live?.setPosition(pos);  // a legenda da prévia anda junto com a faixa
     };
     const save = () => {
       clearTimeout(saveTimer);
@@ -163,6 +170,7 @@ export async function renderClips(root, name, project, ctx = {}) {
     const m = d.moments.find((x) => x.id === state.selected);
     if (!m) { box.innerHTML = '<div class="empty">Escolha um clipe na lista.</div>'; return; }
     const ready = (d.clips || {})[m.id]?.final;
+    const view = ready ? (ui.view || "clip") : "live";
     const capOn = m.captions ?? state.capStyle.enabled ?? true;
     const hookOn = m.hook_on ?? state.capStyle.hook ?? true;
     const posts = (m.meta && m.meta.posts) || {};
@@ -180,12 +188,22 @@ export async function renderClips(root, name, project, ctx = {}) {
         <button class="btn primary" id="gen">${ready ? "Gerar de novo" : "Gerar clipe"}</button>
       </div>
       <div class="row" style="align-items:flex-start;gap:18px">
-        <div class="cap-stage" style="flex:none">${ready
-          ? `<video class="vertical" style="height:440px" controls preload="metadata" src="${P("/clips/")}${enc(m.id)}?t=${Date.now()}"></video>`
-          : `<div class="preview-9x16 empty" style="height:440px;width:248px;background:var(--surface-2);color:var(--text-3)">
-               <div class="big">🎬</div>Clipe ainda não gerado</div>`}
-          <div class="cap-marker" id="capMarker" role="slider" tabindex="0" aria-label="Posição da legenda neste clipe"
-               aria-valuemin="2" aria-valuemax="98" ${ui.tab === "legenda" ? "" : "hidden"}><span>↕ LEGENDA</span></div></div>
+        <div class="stack" style="flex:none;gap:8px">
+          ${ready ? `<div class="seg pv-switch" role="group" aria-label="O que mostrar">
+              <button data-view="live" aria-pressed="${view === "live"}">Prévia ao vivo</button>
+              <button data-view="clip" aria-pressed="${view === "clip"}">Clipe gerado</button></div>` : ""}
+          <div class="cap-stage">${view === "clip"
+            ? `<video class="vertical" style="height:440px" controls preload="metadata" src="${P("/clips/")}${enc(m.id)}?t=${Date.now()}"></video>`
+            : `<canvas class="preview-9x16 live-pv" id="livePv" width="540" height="960" role="img"
+                 aria-label="Prévia ao vivo do clipe: clique para tocar ou pausar"></canvas>`}
+            <div class="cap-marker" id="capMarker" role="slider" tabindex="0" aria-label="Posição da legenda neste clipe"
+                 aria-valuemin="2" aria-valuemax="98" ${ui.tab === "legenda" ? "" : "hidden"}><span>↕ LEGENDA</span></div></div>
+          ${view === "live" ? `<div class="lp-bar" id="lpBar"><button class="lp-play" type="button">▶</button>
+              <input class="lp-seek" type="range" min="0" step="0.05" value="0" aria-label="Posição na prévia">
+              <span class="lp-time num"></span></div>
+            <div class="t-small" style="width:248px">Prévia ao vivo: mostra na hora a legenda, o gancho e o layout.
+              ${ready ? "Mudou algo? “Gerar de novo” aplica no MP4." : "O MP4 só é feito em “Gerar clipe”."}</div>` : ""}
+        </div>
         <div style="flex:1;min-width:260px">
           <div class="tabs" role="tablist">
             ${[["corte", "Corte"], ["textos", "Textos"], ["legenda", "Legenda"]].map(([k, l]) =>
@@ -211,7 +229,9 @@ export async function renderClips(root, name, project, ctx = {}) {
             ${PLATS.map(([k]) => { const p = posts[k] || {}; return `<div class="stack" data-platpane="${k}" ${k === ui.plat ? "" : "hidden"}>
               <div class="field"><label>Título</label><input class="input" data-f="title" value="${esc(p.title || "")}"></div>
               <div class="field"><label>Descrição</label><textarea class="textarea" data-f="description">${esc(p.description || "")}</textarea></div>
-              <div class="field"><label>Hashtags</label><input class="input" data-f="hashtags" value="${esc((p.hashtags || []).join(" "))}"></div>
+              <div class="field"><label>Hashtags${k === "reels" ? " (o Instagram aceita até 5)" : ""}</label><input class="input" data-f="hashtags" value="${esc((p.hashtags || []).join(" "))}"></div>
+              ${k === "shorts" ? `<div class="field"><label>Tags do YouTube (palavras-chave de busca, separadas por vírgula)</label>
+                <input class="input" data-f="tags" value="${esc((p.tags || []).join(", "))}"></div>` : ""}
               <div class="row"><button class="btn small" data-copy="${k}">Copiar tudo</button></div></div>`; }).join("")}
             <div class="row"><button class="btn primary" id="saveTexts">Salvar textos</button>
               <button class="btn" id="aiTexts">✨ Escrever com IA</button>
@@ -239,6 +259,16 @@ export async function renderClips(root, name, project, ctx = {}) {
       $("#capMarker", box).hidden = ui.tab !== "legenda";
     });
     bindCapMarker(box, m);
+    live?.destroy();
+    live = null;
+    if (view === "live") {
+      const cv = $("#livePv", box), bar = $("#lpBar", box);
+      api(P("/moments/") + enc(m.id) + "/preview").then((spec) => {
+        if (!cv.isConnected) return;  // trocou de clipe antes de chegar
+        live = mountLivePreview(cv, bar, P("/video"), spec);
+      }).catch((err) => { $(".lp-time", bar).textContent = "Prévia indisponível: " + err.message; });
+    }
+    box.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => { ui.view = b.dataset.view; renderDetail(); });
     box.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
       const status = m.status === b.dataset.status ? "pending" : b.dataset.status;
       try { await patch(m.id, { status }); renderList(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }
@@ -264,15 +294,21 @@ export async function renderClips(root, name, project, ctx = {}) {
     box.querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
       const pane = box.querySelector(`[data-platpane="${b.dataset.copy}"]`);
       const v = (f) => pane.querySelector(`[data-f="${f}"]`).value;
-      try { await navigator.clipboard.writeText([v("title"), "", v("description"), "", v("hashtags")].join(String.fromCharCode(10))); toast("Copiado.", "good"); }
+      const tags = pane.querySelector('[data-f="tags"]');
+      const parts = [v("title"), "", v("description"), "", v("hashtags")].concat(tags ? ["", "Tags: " + tags.value] : []);
+      try { await navigator.clipboard.writeText(parts.join(String.fromCharCode(10))); toast("Copiado.", "good"); }
       catch (err) { toast("Não consegui copiar.", "bad"); }
     });
-    $("#hookOn", box).onchange = (e) => patch(m.id, { hook_on: e.target.checked }).catch((err) => toast(err.message, "bad"));
+    $("#hookOn", box).onchange = (e) => patch(m.id, { hook_on: e.target.checked }).then(() => refreshLive(m.id))
+      .catch((err) => toast(err.message, "bad"));
+    $("#hook", box).oninput = (e) => { if ($("#hookOn", box).checked) live?.setHook(e.target.value); };
     $("#saveTexts", box).onclick = async () => {
       const out = {};
       box.querySelectorAll("[data-platpane]").forEach((p) => {
         const v = (f) => p.querySelector(`[data-f="${f}"]`).value;
         out[p.dataset.platpane] = { title: v("title"), description: v("description"), hashtags: v("hashtags").split(/[ ,]+/).filter(Boolean) };
+        const tags = p.querySelector('[data-f="tags"]');
+        if (tags) out[p.dataset.platpane].tags = tags.value.split(",").map((t) => t.trim()).filter(Boolean);
       });
       try { await patch(m.id, { meta: { hook: $("#hook", box).value, posts: out } }); toast("Textos salvos.", "good"); renderDetail(); }
       catch (err) { toast(err.message, "bad"); }
@@ -282,7 +318,8 @@ export async function renderClips(root, name, project, ctx = {}) {
       startJob({ kind: "posts", project: name, ids: [m.id] });
     };
     // legenda
-    $("#clipCap", box).onchange = (e) => patch(m.id, { captions: e.target.checked }).catch((err) => toast(err.message, "bad"));
+    $("#clipCap", box).onchange = (e) => patch(m.id, { captions: e.target.checked }).then(() => refreshLive(m.id))
+      .catch((err) => toast(err.message, "bad"));
     $("#saveCap", box).onclick = async () => {
       try { await patch(m.id, { caption_text: $("#capText", box).value }); toast("Legenda salva. Gere o clipe de novo para aplicar.", "good"); renderDetail(); }
       catch (err) { toast(err.message, "bad"); }

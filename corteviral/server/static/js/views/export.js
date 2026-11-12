@@ -55,8 +55,9 @@ export async function renderExport(root, name, project, ctx = {}) {
           <button class="btn small" id="aiAll" style="margin-top:8px">✨ Escrever com IA para os aprovados</button></span></div>` : ""}
         <section class="card pad stack">
           <h2 class="t-head">O que vai sair</h2>
-          <div class="muted">Para cada clipe: um <b>MP4 vertical 1080×1920</b> e um <b>.txt</b> com título, descrição e hashtags para
-            TikTok, Shorts, Reels e Kwai. Pasta: <span class="num">${esc(chk ? chk.folder : "exports")}</span></div>
+          <div class="muted">Para cada clipe, uma pasta com o <b>MP4 vertical 1080×1920</b> e <b>um .txt por rede</b>
+            (TikTok, YouTube Shorts, Instagram Reels e Kwai), já no formato do envio de cada uma: título, descrição,
+            hashtags e, no YouTube, as tags. Pasta: <span class="num">${esc(chk ? chk.folder : "exports")}</span></div>
           <button class="btn primary large" id="exp" ${approved.length ? "" : "disabled"}>Exportar ${approved.length} clipe(s)</button>
           <button class="btn plain" id="openDir">Abrir pasta de exportação</button>
           <div id="result"></div>
