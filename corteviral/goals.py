@@ -26,20 +26,29 @@ _LOCK = threading.Lock()
 
 # Requisitos públicos de cada programa (conferidos em 2026; as redes mudam as regras — os textos avisam).
 PROGRAMS = [
-    {"network": "youtube", "name": "YouTube Shorts", "program": "Programa de Parcerias do YouTube",
+    {"id": "youtube1", "network": "youtube", "name": "YouTube — 1º nível",
+     "program": "Parcerias: Super Thanks, clubes de canais e loja",
+     "requirements": [("subscribers", "Inscritos", 500), ("shorts_90d", "Shorts publicados em 90 dias", 3),
+                      ("shorts_views_90d", "Views de Shorts em 90 dias", 3_000_000)],
+     "note": "Também vale 3.000 horas de exibição em vídeos longos (12 meses) no lugar das views de Shorts."},
+    {"id": "youtube2", "network": "youtube", "name": "YouTube — anúncios",
+     "program": "Parcerias: receita de anúncios dos Shorts",
      "requirements": [("subscribers", "Inscritos", 1_000), ("shorts_views_90d", "Views de Shorts em 90 dias", 10_000_000)],
      "note": "Também vale 4.000 horas de exibição em vídeos longos (12 meses) no lugar das views de Shorts."},
-    {"network": "tiktok", "name": "TikTok", "program": "Programa de Recompensas para Criadores",
+    {"id": "tiktok", "network": "tiktok", "name": "TikTok", "program": "Programa de Recompensas para Criadores",
      "requirements": [("followers", "Seguidores", 10_000), ("views_30d", "Views em 30 dias", 100_000)],
      "note": "Só paga vídeos com mais de 1 minuto. Precisa ter 18 anos ou mais."},
-    {"network": "instagram", "name": "Instagram", "program": "Monetização (assinaturas e presentes)",
+    {"id": "instagram", "network": "instagram", "name": "Instagram", "program": "Monetização (assinaturas e presentes)",
      "requirements": [("followers", "Seguidores", 10_000)],
      "note": "Alguns programas do Instagram são só por convite. Confira em Painel profissional › Monetização."},
-    {"network": "kwai", "name": "Kwai", "program": "Meta de crescimento",
+    {"id": "kwai", "network": "kwai", "name": "Kwai", "program": "Meta de crescimento",
      "requirements": [("followers", "Seguidores", 10_000)],
      "note": "O Kwai não divulga uma meta fixa: use como meta de crescimento do perfil."},
 ]
-MANUAL_KEYS = {p["network"]: [k for k, _, _ in p["requirements"]] for p in PROGRAMS}
+MANUAL_KEYS: dict[str, list[str]] = {}
+for _p in PROGRAMS:  # as duas metas do YouTube dividem os mesmos números
+    MANUAL_KEYS.setdefault(_p["network"], [])
+    MANUAL_KEYS[_p["network"]] += [k for k, _, _ in _p["requirements"] if k not in MANUAL_KEYS[_p["network"]]]
 
 
 class GoalsError(Exception):
@@ -230,7 +239,7 @@ def program_progress(yt: dict | None, manual: dict) -> list[dict]:
             cur = int(src.get(key) or 0)
             reqs.append({"key": key, "label": label, "target": target, "current": cur,
                          "percent": round(min(100.0, cur / target * 100), 1), "done": cur >= target})
-        out.append({"network": net, "name": p["name"], "program": p["program"], "note": p["note"], "auto": auto,
+        out.append({"id": p["id"], "network": net, "name": p["name"], "program": p["program"], "note": p["note"], "auto": auto,
                     "requirements": reqs, "percent": round(sum(r["percent"] for r in reqs) / len(reqs), 1),
                     "done": all(r["done"] for r in reqs)})
     return out

@@ -108,9 +108,9 @@ function programCard(p) {
     ${p.auto ? '<span class="badge info">atualiza sozinho pelo canal</span>'
       : `<details><summary class="t-small" style="cursor:pointer">${p.network === "youtube" ? "Ligue o canal acima ou digite os números" : "Digitar os números de hoje"}</summary>
         <div class="row" style="margin-top:8px;align-items:flex-end">${p.requirements.map((r) => `
-          <div class="field" style="width:130px"><label for="m-${p.network}-${r.key}">${esc(r.label)}</label>
-            <input class="input num" id="m-${p.network}-${r.key}" type="number" min="0" data-net="${p.network}" data-key="${r.key}" value="${r.current}"></div>`).join("")}
-          <button class="btn small" data-save-manual="${p.network}">Salvar</button></div></details>`}
+          <div class="field" style="width:130px"><label for="m-${p.id}-${r.key}">${esc(r.label)}</label>
+            <input class="input num" id="m-${p.id}-${r.key}" type="number" min="0" data-net="${p.network}" data-key="${r.key}" value="${r.current}"></div>`).join("")}
+          <button class="btn small" data-save-manual="${p.id}" data-net="${p.network}">Salvar</button></div></details>`}
     <div class="t-small muted">${esc(p.note)}</div>
   </section>`;
 }
@@ -157,8 +157,8 @@ export async function renderHome(root, { rerender } = {}) {
       try { g = await api("/api/goals?refresh=1"); paint(); } catch (err) { toast(err.message, "bad"); e.currentTarget.disabled = false; }
     });
     root.querySelectorAll("[data-save-manual]").forEach((b) => b.onclick = () => {
-      const net = b.dataset.saveManual, vals = {};
-      root.querySelectorAll(`input[data-net="${net}"]`).forEach((i) => { vals[i.dataset.key] = Math.max(0, Math.round(+i.value || 0)); });
+      const net = b.dataset.net, vals = {};
+      b.closest(".goal-card").querySelectorAll(`input[data-net="${net}"]`).forEach((i) => { vals[i.dataset.key] = Math.max(0, Math.round(+i.value || 0)); });
       save({ manual: { [net]: vals } }, "Números salvos.");
     });
   }

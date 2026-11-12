@@ -41,12 +41,15 @@ def test_daily_counts_from_exports_and_posts(tmp_path):
 
 def test_program_progress_uses_youtube_and_manual_numbers():
     yt = {"subscribers": 250, "shorts_views_90d": 2_500_000}
-    out = {p["network"]: p for p in program_progress(yt, {"tiktok": {"followers": 5000, "views_30d": 150000}})}
-    sub = next(r for r in out["youtube"]["requirements"] if r["key"] == "subscribers")
+    out = {p["id"]: p for p in program_progress(yt, {"tiktok": {"followers": 5000, "views_30d": 150000}})}
+    first = {r["key"]: r for r in out["youtube1"]["requirements"]}  # 1º nível: 500 inscritos + 3 mi de views
+    assert first["subscribers"]["target"] == 500 and first["subscribers"]["percent"] == 50.0
+    assert first["shorts_views_90d"]["target"] == 3_000_000 and first["shorts_90d"]["target"] == 3
+    sub = next(r for r in out["youtube2"]["requirements"] if r["key"] == "subscribers")
     assert sub["current"] == 250 and sub["target"] == 1000 and sub["percent"] == 25.0
     views = next(r for r in out["tiktok"]["requirements"] if r["key"] == "views_30d")
     assert views["percent"] == 100.0 and views["done"] is True
-    assert out["youtube"]["auto"] is True and out["tiktok"]["auto"] is False
+    assert out["youtube1"]["auto"] is True and out["tiktok"]["auto"] is False
 
 
 class _Resp:
