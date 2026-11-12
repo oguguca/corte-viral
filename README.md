@@ -64,6 +64,11 @@ Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela
 você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
 sincronizada com o vídeo (clique numa palavra para pular até ela).
 
+**Só um trecho do vídeo:** já assistiu e sabe onde estão os momentos? Em **Novo vídeo › Só um trecho do vídeo**,
+informe onde começa e onde termina (`1:20:00` até `1:45:00`, ou `80:00`, ou `1h20m`). Só esse trecho é baixado
+(link) ou separado do arquivo (sem recodificar) e transcrito — muito mais rápido que o VOD inteiro. Cada trecho
+vira um projeto próprio, com o trecho no nome.
+
 ### Painel inicial (metas de monetização)
 
 O app abre no **Painel** — e clicar em **Corte Viral** (no alto da barra lateral) volta para ele:
@@ -214,6 +219,8 @@ não são reenviados sem confirmação. O histórico fica em `data/publish_log.j
 # Baixa/importa e transcreve
 .venv\Scripts\python -m corteviral ingest "https://www.twitch.tv/videos/123456789"
 .venv\Scripts\python -m corteviral ingest "C:\Videos\live.mp4"
+# Só um trecho (baixa e transcreve apenas de 1:20:00 a 1:45:00)
+.venv\Scripts\python -m corteviral ingest "https://www.twitch.tv/videos/123456789" --inicio 1:20:00 --fim 1:45:00
 
 # Opções
 #   --model small        modelo mais rápido (menos preciso)

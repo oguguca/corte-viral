@@ -39,6 +39,9 @@ class DownloadSettings(_Strict):
     cookies_file: Path | None = None
     max_height: int = 1080
     concurrent_fragments: int = 4
+    # Só um trecho do vídeo (segundos no vídeo original): baixa/corta e transcreve apenas essa parte
+    section_start: float | None = None
+    section_end: float | None = None
 
 
 class AnalysisSettings(_Strict):

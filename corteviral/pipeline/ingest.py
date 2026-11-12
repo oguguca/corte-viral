@@ -82,7 +82,41 @@ def _probe_url(url: str, settings: Settings) -> dict:
         raise IngestError(f"não foi possível acessar o link: {_friendly_error(str(e))}") from e
 
 
-def _download(url: str, project: Project, settings: Settings, on_progress: ProgressFn | None) -> Path:
+def _hms(t: float) -> str:
+    t = int(t)
+    return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
+
+
+def _section(settings: Settings) -> tuple[float, float] | None:
+    a, b = settings.download.section_start, settings.download.section_end
+    if a is None or b is None:
+        return None
+    if a < 0 or b - a < 1:
+        raise IngestError("trecho inválido: o fim precisa vir depois do início")
+    return float(a), float(b)
+
+
+def _check_section(section: tuple[float, float], duration: float | None) -> tuple[float, float]:
+    """Encaixa o trecho na duração do vídeo (o fim pode passar um pouco: vai até o final)."""
+    a, b = section
+    if duration:
+        if a >= duration - 5:
+            raise IngestError(f"o trecho começa depois do fim do vídeo (o vídeo tem {_hms(duration)})")
+        b = min(b, duration)
+    return a, b
+
+
+def _cut_local(src: Path, project: Project, section: tuple[float, float]) -> Path:
+    """Copia só o trecho do arquivo (sem recodificar: rápido e sem perder qualidade)."""
+    a, b = section
+    dst = project.dir / f"source{src.suffix.lower() or '.mp4'}"
+    ffmpeg.run(["-y", "-ss", f"{a:.3f}", "-i", str(src), "-t", f"{b - a:.3f}", "-map", "0:v:0?", "-map", "0:a:0?",
+                "-c", "copy", "-avoid_negative_ts", "make_zero", str(dst)])
+    return dst
+
+
+def _download(url: str, project: Project, settings: Settings, on_progress: ProgressFn | None,
+              section: tuple[float, float] | None = None) -> Path:
     import yt_dlp
 
     def hook(d: dict) -> None:
@@ -101,6 +135,8 @@ def _download(url: str, project: Project, settings: Settings, on_progress: Progr
         "ffmpeg_location": str(Path(ffmpeg.binary("ffmpeg")).parent),
         "concurrent_fragment_downloads": settings.download.concurrent_fragments,
     }
+    if section:  # baixa só o trecho escolhido (o yt-dlp corta com o ffmpeg)
+        opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [section])
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -153,22 +189,38 @@ def ingest(source: str, settings: Settings, on_progress: ProgressFn | None = Non
         path = path.resolve()
         key = str(path)
 
+    section = _section(settings)
+    if section:
+        if info is not None:
+            section = _check_section(section, info.get("duration"))
+        else:
+            section = _check_section(section, ffmpeg.probe_duration(path))
+        key = f"{key}#trecho={int(section[0])}-{int(section[1])}"  # cada trecho é um projeto próprio
+
     params = {"source": key, "ar": AUDIO_RATE}
     project = Project.find_by_source(projects_dir, key)
     if project and project.is_stage_done("ingest", params) and project.path("audio.wav").exists():
         return project
 
+    suffix = f" · trecho {_hms(section[0])}–{_hms(section[1])}" if section else ""
     if info is not None:
         if project is None:
-            project = Project.create(projects_dir, key, info.get("title") or "video")
+            project = Project.create(projects_dir, key, (info.get("title") or "video") + suffix)
             project.data["url"] = source.strip()
             project.data["streamer"] = info.get("channel") or info.get("uploader") or None
             project.save()
-        video = _download(source.strip(), project, settings, on_progress)
+        if on_progress and section:
+            on_progress(0.0, f"baixando só o trecho {_hms(section[0])}–{_hms(section[1])}")
+        video = _download(source.strip(), project, settings, on_progress, section)
     else:
         if project is None:
-            project = Project.create(projects_dir, key, path.stem)
-        video = _link_local(path, project)
+            project = Project.create(projects_dir, key, path.stem + suffix)
+        if section:
+            if on_progress:
+                on_progress(0.0, f"separando o trecho {_hms(section[0])}–{_hms(section[1])}")
+            video = _cut_local(path, project, section)
+        else:
+            video = _link_local(path, project)
 
     if on_progress:
         on_progress(0.0, "extraindo áudio")
@@ -178,6 +230,8 @@ def ingest(source: str, settings: Settings, on_progress: ProgressFn | None = Non
     project.data["video_path"] = str(video)
     project.data["duration"] = round(ffmpeg.probe_duration(video), 3)
     project.data["ingest_params"] = params
+    if section:
+        project.data["section"] = [section[0], section[1]]  # tempos no vídeo original
     project.invalidate_from("transcribe")  # áudio novo: tudo que veio dele precisa ser refeito
     project.mark_stage("ingest", params)
     if on_progress:

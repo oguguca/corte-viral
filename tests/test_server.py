@@ -409,3 +409,11 @@ def test_api_posts_job(settings_tmp, monkeypatch):
     c = TestClient(create_app(settings_tmp))
     job = _wait(c, c.post("/api/jobs", json={"kind": "posts", "project": p.dir.name, "ids": ["m1"]}).json()["id"])
     assert job["status"] == "done" and seen["ids"] == ["m1"] and job["result"] == {"ai": 1, "fallback": 0}
+
+
+def test_job_section_must_be_valid(settings_tmp):
+    from corteviral.server.app import create_app
+    c = TestClient(create_app(settings_tmp, pipeline=lambda *a: None))
+    bad = {"kind": "ingest", "source": "x.mp4", "section_start": 100, "section_end": 90}
+    assert c.post("/api/jobs", json=bad).status_code == 422
+    assert c.post("/api/jobs", json={**bad, "section_end": None}).status_code == 422

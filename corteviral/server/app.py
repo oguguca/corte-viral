@@ -70,12 +70,17 @@ class JobRequest(BaseModel):
     language: Literal["auto", "pt", "en"] | None = None
     cookies_from_browser: str | None = None
     cookies_file: str | None = None
+    section_start: float | None = Field(default=None, ge=0, le=7 * 86400)  # ingest: só um trecho (s)
+    section_end: float | None = Field(default=None, ge=0, le=7 * 86400)
     callback_url: str | None = Field(default=None, exclude=True)  # preenchido pelo servidor (publish/export)
 
     @model_validator(mode="after")
     def _check(self):
         if self.kind == "ingest" and not self.source:
             raise ValueError("source é obrigatório para ingest")
+        if (self.section_start is None) != (self.section_end is None) or (
+                self.section_start is not None and self.section_end - self.section_start < 10):
+            raise ValueError("trecho inválido: informe início e fim, com o fim ao menos 10 s depois")
         if (self.min_seconds is None) != (self.max_seconds is None) or (
                 self.min_seconds is not None and self.max_seconds - self.min_seconds < 5):
             raise ValueError("duração inválida: informe mínimo e máximo, com o máximo ao menos 5 s maior")
@@ -204,6 +209,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             s.whisper.language = req.language
         s.download.cookies_from_browser = req.cookies_from_browser or None
         s.download.cookies_file = Path(req.cookies_file) if req.cookies_file else None
+        s.download.section_start, s.download.section_end = req.section_start, req.section_end
 
         if req.provider:
             s.llm.provider = req.provider

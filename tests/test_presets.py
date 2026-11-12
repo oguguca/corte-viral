@@ -61,7 +61,7 @@ def test_ingest_stores_streamer_from_channel(settings_tmp, monkeypatch):
     monkeypatch.setattr("corteviral.pipeline.ingest._probe_url", lambda url, settings: {
         "title": "Live", "id": "abc", "extractor_key": "Youtube", "channel": "Flow Games", "live_status": "was_live"})
 
-    def fake_download(url, project, settings, on_progress):
+    def fake_download(url, project, settings, on_progress, section=None):
         f = project.path("source.mp4")
         f.write_bytes(b"x")
         return f

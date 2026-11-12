@@ -85,7 +85,7 @@ def test_same_video_with_different_url_params_reuses_project(monkeypatch, settin
     monkeypatch.setattr("corteviral.pipeline.ingest._probe_url", lambda url, settings: info)
     downloads = []
 
-    def fake_download(url, project, settings, on_progress):
+    def fake_download(url, project, settings, on_progress, section=None):
         downloads.append(url)
         dst = project.path("source.mp4")
         dst.write_bytes(b"x")
@@ -132,3 +132,48 @@ def test_ydl_opts_include_cookie_file(settings_tmp, tmp_path):
 def test_ydl_opts_enable_node_js_runtime(settings_tmp):
     from corteviral.pipeline.ingest import _ydl_base_opts
     assert "node" in _ydl_base_opts(settings_tmp)["js_runtimes"]
+
+
+# --- só um trecho do vídeo (não transcreve o vídeo inteiro) ---------------------------------
+def test_local_section_cuts_only_that_part(sample_video, settings_tmp):
+    from corteviral import ffmpeg
+    full = ingest(str(sample_video), settings_tmp)
+    settings_tmp.download.section_start, settings_tmp.download.section_end = 2.0, 6.0
+    part = ingest(str(sample_video), settings_tmp)
+    assert part.dir != full.dir                      # trecho é outro projeto (o inteiro continua lá)
+    assert part.data["section"] == [2.0, 6.0] and "trecho" in part.data["title"]
+    assert 3.0 <= part.data["duration"] <= 6.5       # só os ~4 s escolhidos
+    assert 3.0 <= ffmpeg.probe_duration(part.path("audio.wav")) <= 6.5
+    assert Path(part.data["video_path"]).parent == part.dir  # o original nunca é alterado
+
+
+def test_section_past_the_end_is_rejected(sample_video, settings_tmp):
+    settings_tmp.download.section_start, settings_tmp.download.section_end = 50.0, 90.0
+    with pytest.raises(IngestError, match="depois do fim"):
+        ingest(str(sample_video), settings_tmp)
+
+
+def test_url_section_downloads_only_that_part(monkeypatch, settings_tmp):
+    from corteviral.pipeline import ingest as mod
+    info = {"title": "Live", "id": "abc", "extractor_key": "Youtube", "live_status": "was_live", "duration": 3600}
+    monkeypatch.setattr(mod, "_probe_url", lambda url, settings: info)
+    seen = {}
+
+    class FakeYDL:
+        def __init__(self, opts): seen.update(opts)
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def extract_info(self, url, download=False):
+            out = Path(seen["outtmpl"].replace("%(ext)s", "mp4"))
+            out.write_bytes(b"x")
+            return {"requested_downloads": [{"filepath": str(out)}]}
+
+    import yt_dlp
+    monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+    monkeypatch.setattr("corteviral.ffmpeg.run", lambda args: Path(args[-1]).write_bytes(b"RIFF"))
+    monkeypatch.setattr("corteviral.ffmpeg.probe_duration", lambda p: 600.0)
+    settings_tmp.download.section_start, settings_tmp.download.section_end = 600.0, 1200.0
+    p = ingest("https://www.youtube.com/watch?v=abc", settings_tmp)
+    ranges = list(seen["download_ranges"]({}, None))
+    assert ranges[0]["start_time"] == 600.0 and ranges[0]["end_time"] == 1200.0
+    assert p.data["source"] == "youtube:abc#trecho=600-1200" and p.data["section"] == [600.0, 1200.0]
