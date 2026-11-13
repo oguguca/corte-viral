@@ -217,8 +217,15 @@ export async function renderExport(root, name, project, ctx = {}) {
     try { now = await api(P("/export-check")); } catch (e) { toast(e.message, "bad"); return; }  // sempre a checagem atual
     if (now.unauthorized && !confirmAction("O streamer não está marcado como autorizado. Exportar mesmo assim?")) return;
     if (now.duplicates.length && !confirmAction(`${now.duplicates.length} trecho(s) já foram exportados antes. Exportar de novo?`)) return;
+    // postar só com um "sim" agora, mesmo com a chave ligada (nunca sobe vídeo sem o usuário confirmar)
+    const post = !!(pcfg && pcfg.config.auto_send && netsOn.length) && confirmAction(
+      `A chave "Enviar para postar ao exportar" está ligada.
+
+Pôr os ${approved.length} clipe(s) na fila de postagem do ${netsOn.join(", ")}?
+` +
+      "OK = exportar e postar (1 por vez) · Cancelar = só exportar os arquivos");
     delete state.exportResults[name];
-    await startJob({ kind: "export", project: name });  // ao terminar, a tela é redesenhada e mostra o resultado
+    await startJob({ kind: "export", project: name, post });  // ao terminar, a tela é redesenhada e mostra o resultado
   };
   $("#pubBtn", root)?.addEventListener("click", async () => {
     const already = approved.filter(wentOut).length;

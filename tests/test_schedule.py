@@ -158,7 +158,11 @@ def test_export_with_auto_send_queues_instead_of_posting(settings_tmp, sample_vi
     monkeypatch.setattr(appmod, "publish_clips", lambda *a, **k: posted.append(a) or {"sent": 9, "errors": []})
     c = TestClient(create_app(rs))
     job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name}).json()["id"], timeout=120)
-    assert job["status"] == "done" and posted == []  # nada postado de uma vez
+    assert job["status"] == "done" and "publish" not in job["result"]  # chave ligada, mas sem o "sim": não posta
+    assert ScheduleStore(rs.paths.data_dir).items() == []
+    job = _wait(c, c.post("/api/jobs", json={"kind": "export", "project": p.dir.name, "post": True}).json()["id"],
+                timeout=120)
+    assert job["status"] == "done" and posted == []  # com o "sim": vai para a fila, nada postado de uma vez
     assert job["result"]["publish"]["queued"] == 2
     items = ScheduleStore(rs.paths.data_dir).items(p.dir.name)
     assert len(items) == 2 and items[1]["at"] - items[0]["at"] == 900

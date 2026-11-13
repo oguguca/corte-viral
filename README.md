@@ -232,8 +232,9 @@ de horário. Mostra o próximo envio (com contagem), quantos faltam, os publicad
 quem falhou, com **Tentar de novo** (volta para o fim da fila). Atualiza sozinha a cada 15 s.
 
 **Postar agora:** na etapa **Exportar**, **Enviar N clipe(s) agora** manda todos de uma vez.
-Com **"Ao exportar, pôr na fila de postagem"** ligado (Contas conectadas), cada exportação põe os clipes no fim
-da fila — eles saem um por vez, no intervalo da fila, nunca todos juntos.
+Com **"Enviar para postar ao exportar"** ligado (na etapa Exportar ou em Contas conectadas), cada exportação
+**pergunta antes** se deve pôr os clipes na fila (só os aprovados). Sem o "OK", só exporta os arquivos — nada sobe
+sem confirmação. Na fila, eles saem um por vez, no intervalo da fila.
 Cada clipe mostra o status por rede (→ enviado, ✓ publicado com link, ⚠ falhou); clipes já publicados numa rede
 não são reenviados sem confirmação. O histórico fica em `data/publish_log.json`.
 

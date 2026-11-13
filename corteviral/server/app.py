@@ -67,6 +67,7 @@ class JobRequest(BaseModel):
     ids: list[str] | None = None    # render
     preview: bool = False           # render
     force: bool = False             # analyze: ignora o cache e reavalia
+    post: bool = False              # export: também pôr na fila de postagem (só com confirmação do usuário)
     captions: bool | None = None    # render: força legendas ligadas/desligadas
     profile: Literal["viral", "monetizacao"] | None = None
     provider: Literal["none", "gemini", "anthropic"] | None = None
@@ -285,9 +286,10 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                                  "files": [{"id": f["id"], "mp4": str(f["mp4"]), "dir": str(f["dir"])}
                                            for f in res["files"]]}
                 cfg = publish_store.load()
-                if cfg.auto_send and cfg.enabled() and res["files"]:
-                    # nunca posta tudo de uma vez: os exportados entram no fim da fila e saem um por vez
-                    ids = [f["id"] for f in res["files"]]
+                if req.post and cfg.enabled() and res["files"]:
+                    # só com o "sim" do usuário nesta exportação; entram no fim da fila e saem um por vez
+                    ok = {m["id"] for m in chosen_moments(project, None)}  # a fila só posta aprovados
+                    ids = [f["id"] for f in res["files"] if f["id"] in ok]
                     new = schedule_store.plan(project.dir.name, ids, schedule_store.default_interval())
                     job["result"]["publish"] = {"queued": len(new), "first_at": new[0]["at"] if new else None,
                                                 "last_at": new[-1]["at"] if new else None}

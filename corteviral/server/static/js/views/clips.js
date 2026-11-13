@@ -286,7 +286,18 @@ export async function renderClips(root, name, project, ctx = {}) {
       let chk;
       try { chk = await api(P("/export-check")); } catch (err) { toast(err.message, "bad"); return; }
       if (chk.unauthorized && !confirmAction("O streamer não está marcado como autorizado. Exportar mesmo assim?")) return;
-      const job = await startJob({ kind: "export", project: name, ids: [m.id] });
+      let post = false;  // postar só com um "sim" agora, mesmo com a chave ligada
+      const pc = await api("/api/publish").catch(() => null);
+      const nets = pc ? Object.entries(pc.config.networks).filter(([, on]) => on).map(([k]) => pc.networks[k]) : [];
+      if (pc && pc.config.auto_send && nets.length) {
+        post = confirmAction(`A chave "Enviar para postar ao exportar" está ligada.
+
+Pôr este clipe na fila de postagem do ${nets.join(", ")}?
+` +
+          "OK = exportar e postar · Cancelar = só exportar o arquivo");
+        if (post && m.status !== "approved") { toast("Só clipes aprovados vão para a fila. Aprove este clipe antes.", "bad"); post = false; }
+      }
+      const job = await startJob({ kind: "export", project: name, ids: [m.id], post });
       const r = job && job.status === "done" ? job.result : null;
       if (!r) return;
       if (r.errors && r.errors.length) { toast("Não exportou: " + r.errors[0].error, "bad"); return; }
