@@ -76,8 +76,10 @@ O app abre no **Painel** — e clicar em **Corte Viral** (no alto da barra later
 - **Meta de hoje**: quantos clipes você exportou hoje contra a meta diária (padrão 3, editável), quantos foram
   postados, gráfico dos últimos 7 dias e sequência de dias batendo a meta.
 - **Canal do YouTube**: com uma **chave da YouTube Data API v3** (grátis, no Google Cloud) e o @ do canal, o
-  painel lê inscritos, views do dia/semana e as views dos Shorts dos últimos 90 dias (atualiza a cada 30 min ou
-  no botão **Atualizar**; a chave fica só em `data/goals.json`, nunca volta para a tela).
+  painel lê inscritos, views do dia/semana e as views dos Shorts dos últimos 90 dias (atualiza a cada 10 min ou
+  no botão **Atualizar**; a chave fica só em `data/goals.json`, nunca volta para a tela). As views de hoje contam
+  desde a última leitura de ontem, pela soma das views de cada vídeo (o total do canal no YouTube atrasa horas).
+  A API arredonda os inscritos para 3 dígitos (ex.: 3.420).
 - **Metas de monetização** com barra de progresso: YouTube 1º nível (500 inscritos + 3 Shorts + 3 mi de views de
   Shorts em 90 dias), YouTube anúncios (1.000 inscritos + 10 mi de views de Shorts em 90 dias),
   TikTok (10 mil seguidores + 100 mil views em 30 dias; só vídeos com mais de 1 min), Instagram e Kwai.

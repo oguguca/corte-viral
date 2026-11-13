@@ -83,7 +83,8 @@ function youtubeCard(yt) {
       <div class="stat"><span class="t-label">Inscritos</span><b class="num">${big(s.subscribers)}</b>
         ${g.today_subscribers ? `<span class="delta">+${nf.format(g.today_subscribers)} hoje</span>` : ""}</div>
       <div class="stat"><span class="t-label">Views hoje</span><b class="num">${big(g.today_views || 0)}</b>
-        <span class="delta muted">desde a 1ª leitura do dia</span></div>
+        <span class="delta muted">${g.today_from_yesterday ? "desde ontem" : "desde a 1ª leitura de hoje"}${g.today_since
+          ? " às " + new Date(g.today_since * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""}</span></div>
       <div class="stat"><span class="t-label">Views na semana</span><b class="num">${big(g.week_views || 0)}</b>
         ${g.since ? `<span class="delta muted">medindo desde ${new Date(g.since + "T12:00:00").toLocaleDateString("pt-BR")}</span>` : ""}</div>
       <div class="stat"><span class="t-label">Shorts em 90 dias</span><b class="num">${nf.format(s.shorts_90d)}</b>

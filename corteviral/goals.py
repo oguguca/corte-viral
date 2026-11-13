@@ -18,7 +18,7 @@ from pathlib import Path
 from corteviral.utils import write_json_atomic
 
 API = "https://www.googleapis.com/youtube/v3"
-CACHE_SECONDS = 30 * 60      # a cota grátis é de 10.000 unidades/dia; cada atualização gasta ~20
+CACHE_SECONDS = 10 * 60      # a cota grátis é de 10.000 unidades/dia; cada atualização gasta ~20 (≤ 2.900/dia)
 SHORT_MAX_SECONDS = 180       # Shorts podem ter até 3 minutos
 WINDOW_DAYS = 90              # o YouTube conta as views de Shorts dos últimos 90 dias
 MAX_PAGES = 10                # até 500 envios recentes
@@ -122,7 +122,15 @@ class GoalsStore:
                 stats = youtube_stats(cfg["api_key"], cfg["channel"])
                 today = date.today().isoformat()
                 daily = saved.get("daily") or {}
-                daily.setdefault(today, {"subscribers": stats["subscribers"], "views": stats["views"]})
+                snap = {"subscribers": stats["subscribers"], "views": stats["views"],
+                        "views_recent": stats.get("views_recent"), "ts": time.time()}
+                day = daily.get(today) or {}
+                if "first" not in day:  # formato antigo (só a 1ª leitura) vira {"first", "last"}
+                    day = {"first": day or snap}
+                if day["first"].get("views_recent") is None:  # base antiga sem a soma por vídeo: conta daqui
+                    day["first"] = {**day["first"], "views_recent": snap["views_recent"], "ts": snap["ts"]}
+                day["last"] = snap
+                daily[today] = day
                 cutoff = (date.today() - timedelta(days=40)).isoformat()
                 daily = {d: v for d, v in daily.items() if d >= cutoff}
                 saved = {"last": stats, "ts": time.time(), "daily": daily}
@@ -133,16 +141,38 @@ class GoalsStore:
         out = {"connected": True, "channel": cfg["channel"], "error": err, "stats": stats,
                "updated": saved.get("ts")}
         if stats:
-            daily = saved.get("daily") or {}
-            first_today = daily.get(date.today().isoformat())
-            week = daily.get((date.today() - timedelta(days=7)).isoformat()) or (
-                daily[min(daily)] if daily else None)
-            out["gained"] = {
-                "today_views": stats["views"] - first_today["views"] if first_today else 0,
-                "today_subscribers": stats["subscribers"] - first_today["subscribers"] if first_today else 0,
-                "week_views": stats["views"] - week["views"] if week else 0,
-                "since": min(daily) if daily else None}
+            out["gained"] = gained(stats, saved.get("daily") or {})
         return out
+
+
+def _snap(day: dict | None, which: str) -> dict | None:
+    if not day:
+        return None
+    if "views" in day:  # formato antigo: só guardava a 1ª leitura do dia
+        return day if which == "first" else None
+    return day.get(which) or day.get("first")
+
+
+def _views_delta(now: dict, base: dict | None) -> int:
+    """Views ganhas: pela soma por vídeo quando as duas leituras têm (mais atual), senão pelo total do canal."""
+    if not base:
+        return 0
+    if now.get("views_recent") is not None and base.get("views_recent") is not None:
+        return max(0, now["views_recent"] - base["views_recent"])
+    return max(0, now["views"] - base["views"])
+
+
+def gained(stats: dict, daily: dict, today: date | None = None) -> dict:
+    """Ganho de hoje (desde a última leitura de ontem) e da semana."""
+    today = today or date.today()
+    yday = daily.get((today - timedelta(days=1)).isoformat())
+    base_today = _snap(yday, "last") or _snap(daily.get(today.isoformat()), "first")
+    past = [d for d in sorted(daily) if d <= (today - timedelta(days=7)).isoformat()]
+    base_week = _snap(daily[past[-1]], "last") if past else (_snap(daily[min(daily)], "first") if daily else None)
+    return {"today_views": _views_delta(stats, base_today),
+            "today_subscribers": stats["subscribers"] - base_today["subscribers"] if base_today else 0,
+            "today_since": (base_today or {}).get("ts"), "today_from_yesterday": bool(_snap(yday, "last")),
+            "week_views": _views_delta(stats, base_week), "since": min(daily) if daily else None}
 
 
 # ---------------- YouTube Data API ----------------
@@ -215,16 +245,20 @@ def youtube_stats(key: str, channel: str) -> dict:
         token = page.get("nextPageToken")
         if old or not token:
             break
-    views, shorts = 0, 0
+    views, shorts, all_views = 0, 0, 0
     for i in range(0, len(recent), 50):
         vids = _get("videos", {"part": "statistics,contentDetails", "id": ",".join(recent[i:i + 50])}, key)
         for v in vids.get("items") or []:
+            n = int((v.get("statistics") or {}).get("viewCount") or 0)
+            all_views += n
             if 0 < _seconds((v.get("contentDetails") or {}).get("duration", "")) <= SHORT_MAX_SECONDS:
                 shorts += 1
-                views += int((v.get("statistics") or {}).get("viewCount") or 0)
+                views += n
     return {"title": (ch.get("snippet") or {}).get("title", ""), "channel_id": ch.get("id"),
             "subscribers": int(st.get("subscriberCount") or 0), "views": int(st.get("viewCount") or 0),
-            "videos": int(st.get("videoCount") or 0), "shorts_views_90d": views, "shorts_90d": shorts}
+            "videos": int(st.get("videoCount") or 0), "shorts_views_90d": views, "shorts_90d": shorts,
+            # soma das views de cada vídeo dos últimos 90 dias: atualiza bem antes do total do canal
+            "views_recent": all_views}
 
 
 # ---------------- progresso ----------------

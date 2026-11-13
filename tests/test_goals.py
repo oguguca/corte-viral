@@ -114,3 +114,20 @@ def test_daily_counts_queue_releases_once_per_clip(tmp_path):
     (tmp_path / "publish_log.json").write_text(json.dumps(
         {"k": {"project": "p", "clip_id": "m2", "status": "published", "ts": now}}))
     assert daily_counts(tmp_path, goal=3)["today"] == 2
+
+
+def test_gained_today_counts_from_yesterdays_last_reading():
+    from datetime import date
+
+    from corteviral.goals import gained
+    today = date(2026, 11, 13)
+    daily = {"2026-11-12": {"first": {"subscribers": 3400, "views": 70000, "views_recent": 10000, "ts": 1},
+                            "last": {"subscribers": 3410, "views": 76000, "views_recent": 15000, "ts": 2}},
+             "2026-11-13": {"first": {"subscribers": 3420, "views": 76000, "views_recent": 18000, "ts": 3}}}
+    now = {"subscribers": 3420, "views": 76000, "views_recent": 21000}  # total do canal parado; vídeos andando
+    g = gained(now, daily, today)
+    assert g["today_views"] == 6000 and g["today_from_yesterday"] and g["today_subscribers"] == 10
+    old = {"2026-11-12": {"subscribers": 3410, "views": 76530}, "2026-11-13": {"subscribers": 3420, "views": 93898}}
+    g = gained({"subscribers": 3420, "views": 94000}, old, today)  # formato antigo: conta desde a 1ª leitura de hoje
+    assert g["today_views"] == 102 and not g["today_from_yesterday"]
+    assert g["week_views"] == 94000 - 76530
