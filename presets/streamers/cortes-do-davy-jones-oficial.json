@@ -1,0 +1,17 @@
+{
+  "layout": "split",
+  "facecam": [
+    0.0127,
+    0.2089,
+    0.1771,
+    0.2941
+  ],
+  "gameplay": [
+    0.2627,
+    0.201,
+    0.4072,
+    0.6088
+  ],
+  "credit_handle": "",
+  "authorized": true
+}
