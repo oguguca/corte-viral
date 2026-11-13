@@ -73,11 +73,15 @@ def hook_top_for(layout: str, has_cam: bool, rs, band=None) -> int:
     if layout == "split" and has_cam:
         cam_h = max(2, int(round(1920 * rs.facecam_ratio / 2)) * 2)
         top = cam_h + (rs.divider_px or 0) + 40
-        return max(top, band_bottom(band, rs) + 30) if band else top
-    if layout == "face-follow":
-        return 300
-    band = 1080 * 9 / 16
-    return int((1920 - band) / 2) + 30
+    elif layout == "face-follow":
+        top = 300
+    else:
+        top = int((1920 - 1080 * 9 / 16) / 2) + 30
+    if band:  # gancho começando dentro da faixa: desce para logo abaixo dela
+        _, by, _, bh = band_box(band, rs)
+        if by - 10 < top < by + bh + 30:
+            top = by + bh + 30
+    return top
 
 
 def caption_style_for(moment: dict, style):
@@ -109,9 +113,8 @@ def _overlay_parts(project: Project, moment: dict, settings: Settings, preset: L
 
 
 def _band_for(preset: LayoutPreset, settings: Settings):
-    """Faixa da divisa: só no layout câmera + jogo (é onde existe a divisa)."""
-    if preset.layout != "split" or not preset.facecam:
-        return None
+    """Faixa da divisa em qualquer layout: no câmera + jogo começa na divisa; nos outros, na mesma altura
+    (o usuário ajusta, ex.: na divisa que já existe dentro de um vídeo vertical)."""
     return BandStore(Path(settings.paths.data_dir)).active()
 
 
@@ -129,6 +132,7 @@ def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
                        "divider_color": rs.divider_color},
             "style": style.model_dump(), "events": caption_events(words, style), "hook": hook,
             "hook_top": hook_top_for(preset.layout, bool(preset.facecam), rs, band), "credit": credit,
+            "hook_base": hook_top_for(preset.layout, bool(preset.facecam), rs),
             "band": dict(zip(("x", "y", "w", "h"), band_box(band, rs, 0.5)), version=band.version, raw_w=band.w,
                          raw_h=band.h, scale=band.scale, offset=band.offset) if band else None}
 

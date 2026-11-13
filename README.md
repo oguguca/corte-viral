@@ -149,7 +149,8 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
    - **Faixa da divisa** (aba **Faixa** do clipe): escolha um PNG com fundo transparente (pode ser 1080×1920 com a
      faixa no meio — o app usa só a parte visível) e ele vai por cima da divisa entre a câmera e o jogo. Ajuste
      **Altura** e **Tamanho** olhando a prévia ao vivo; o gancho desce para não ficar embaixo da faixa. Vale para
-     todos os clipes com câmera + jogo e salva sozinho em `data/` (fora do git).
+     todos os clipes (no layout câmera + jogo começa na divisa; nos outros, ajuste a altura) e salva sozinho
+     em `data/` (fora do git).
 2. **Gerar textos com IA** escreve gancho, títulos (feitos para ganhar views), descrições, hashtags e tags de
    cada rede (para os aprovados; sem nenhum aprovado, para todos). Sem IA, o app gera textos simples.
 3. **Exportar aprovados** cria em `exports/<projeto>/` **uma pasta por clipe** com o MP4 final (1080x1920) e

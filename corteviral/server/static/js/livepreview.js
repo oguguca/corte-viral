@@ -204,12 +204,12 @@ export function mountLivePreview(canvas, bar, videoUrl, spec) {
     },
     setBand(adj) {  // ajuste da faixa (altura/tamanho/ligada) na hora, sem esperar o servidor
       if (!S.band && !adj.base) return;
-      if (adj.enabled === false) { S = { ...S, band: null, hook_top: S.hook_top_nob ?? S.hook_top }; if (v.paused) draw(); return; }
+      if (adj.enabled === false) { S = { ...S, band: null, hook_top: S.hook_base ?? S.hook_top }; if (v.paused) draw(); return; }
       const b = { ...(S.band || adj.base), ...adj };
       const at = bandBox(b, S.render, 0.5), full = bandBox(b, S.render, 1);
-      const base = even(1920 * S.render.facecam_ratio) + (S.render.divider_px || 0) + 40;
-      S = { ...S, band: { ...b, ...at }, hook_top_nob: S.hook_top_nob ?? (S.band ? null : S.hook_top),
-            hook_top: S.layout === "split" ? Math.max(base, full.y + full.h + 30) : S.hook_top };
+      const base = S.hook_base ?? S.hook_top;  // gancho sem faixa (o servidor manda)
+      const top = base > full.y - 10 && base < full.y + full.h + 30 ? full.y + full.h + 30 : base;
+      S = { ...S, band: { ...b, ...at }, hook_top: top };
       loadBand();
       if (v.paused) draw();
     },

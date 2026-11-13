@@ -373,14 +373,16 @@ export async function renderClips(root, name, project, ctx = {}) {
     pane.innerHTML = `
       <div class="band-thumb"><img src="${esc(b.image_url)}" alt="Imagem da faixa da divisa"></div>
       <label class="switch"><input type="checkbox" id="bandOn" ${b.enabled ? "checked" : ""}><span class="track"></span>
-        <span>Faixa na divisa <span class="t-small">(todos os clipes com câmera + jogo)</span></span></label>
+        <span>Faixa no vídeo <span class="t-small">(todos os clipes)</span></span></label>
       <div class="field"><label for="bandOff">Altura <span class="t-small num" id="bandOffV"></span></label>
-        <input type="range" id="bandOff" min="-400" max="400" step="2" value="${b.offset}" ${b.enabled ? "" : "disabled"}></div>
+        <input type="range" id="bandOff" min="-700" max="700" step="2" value="${b.offset}" ${b.enabled ? "" : "disabled"}></div>
       <div class="field"><label for="bandSc">Tamanho <span class="t-small num" id="bandScV"></span></label>
         <input type="range" id="bandSc" min="50" max="150" step="1" value="${pct}" ${b.enabled ? "" : "disabled"}></div>
       <div class="row"><button class="btn small" id="bandReset" ${b.enabled ? "" : "disabled"}>Centralizar na divisa</button>
         <button class="btn small plain" id="bandPick">Trocar imagem…</button></div>
-      <div class="t-small">Ajuste olhando a <b>prévia ao vivo</b> (o gancho desce para não ficar embaixo da faixa).
+      ${document.getElementById("livePv") ? "" : '<div class="note warn"><span>👁</span><span>Clique em <b>Prévia ao vivo</b> (ao lado do vídeo) para ver a faixa enquanto ajusta.</span></div>'}
+      <div class="t-small">Ajuste olhando a <b>prévia ao vivo</b>: no layout câmera + jogo ela começa na divisa; nos outros,
+        mova a <b>Altura</b> até onde quiser (o gancho desce para não ficar embaixo da faixa).
         Salva sozinho. “Gerar de novo” aplica no MP4; exportar e a fila já usam o ajuste novo.</div>`;
     const off = $("#bandOff", pane), sc = $("#bandSc", pane);
     const label = () => {

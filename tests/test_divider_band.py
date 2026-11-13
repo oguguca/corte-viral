@@ -80,3 +80,13 @@ def test_api_band(settings_tmp, tmp_path):
     assert r["offset"] == -40 and r["scale"] == 1.2
     assert c.put("/api/divider-band", json={"scale": 9}).status_code == 422
     assert c.post("/api/divider-band/image", json={"path": str(tmp_path / "nao.txt")}).status_code == 422
+
+
+def test_band_works_without_camera_layout_and_pushes_hook(tmp_path):
+    from corteviral.pipeline.render import hook_top_for
+    rs = RenderSettings()
+    b = DividerBand(enabled=True, w=1080, h=138, offset=100)   # faixa em 610–748
+    assert hook_top_for("fallback", False, rs) == 686
+    assert hook_top_for("fallback", False, rs, b) == band_box(b, rs)[1] + 138 + 30  # gancho desce
+    far = DividerBand(enabled=True, w=1080, h=138, offset=600)
+    assert hook_top_for("fallback", False, rs, far) == 686  # faixa longe: gancho fica onde estava
