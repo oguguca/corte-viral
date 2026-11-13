@@ -207,7 +207,7 @@ export async function renderClips(root, name, project, ctx = {}) {
         </div>
         <div style="flex:1;min-width:260px">
           <div class="tabs" role="tablist">
-            ${[["corte", "Corte"], ["textos", "Textos"], ["legenda", "Legenda"]].map(([k, l]) =>
+            ${[["corte", "Corte"], ["textos", "Textos"], ["legenda", "Legenda"], ["faixa", "Faixa"]].map(([k, l]) =>
               `<button class="tab" role="tab" data-tab="${k}" aria-selected="${ui.tab === k}">${l}</button>`).join("")}
           </div>
           <div data-pane="corte" ${ui.tab === "corte" ? "" : "hidden"} class="stack">
@@ -248,6 +248,8 @@ export async function renderClips(root, name, project, ctx = {}) {
             <div class="row"><button class="btn primary" id="saveCap">Salvar legenda</button>
               <button class="btn plain" id="resetCap" ${m.caption_words ? "" : "disabled"}>Voltar ao texto original</button></div>
           </div>
+          <div data-pane="faixa" ${ui.tab === "faixa" ? "" : "hidden"} class="stack" id="bandPane">
+            <div class="empty"><span class="spinner"></span></div></div>
         </div>
       </div>
       ${m.description || m.criteria ? `<div class="divider" style="margin:16px 0"></div>
@@ -343,6 +345,65 @@ export async function renderClips(root, name, project, ctx = {}) {
     };
     $("#resetCap", box).onclick = async () => {
       try { await patch(m.id, { reset_caption: true }); delete m.caption_words; renderDetail(); } catch (err) { toast(err.message, "bad"); }
+    };
+    bandControls($("#bandPane", box), m);
+  }
+
+  // faixa da divisa: imagem entre a câmera e o jogo, ajustada olhando a prévia ao vivo (vale para todos os clipes)
+  async function bandControls(pane, m) {
+    let b;
+    try { b = await api("/api/divider-band"); } catch (e) { pane.innerHTML = `<div class="note bad">⚠ ${esc(e.message)}</div>`; return; }
+    if (!pane.isConnected) return;
+    const pick = async () => {
+      const r = await api("/api/pick-file?kind=image", { method: "POST" }).catch(() => null);
+      if (!r || !r.path) return;
+      try { await api("/api/divider-band/image", { method: "POST", body: { path: r.path } }); toast("Faixa pronta. Ajuste olhando a prévia.", "good"); }
+      catch (e) { toast(e.message, "bad"); return; }
+      await refreshLive(m.id); bandControls(pane, m);
+    };
+    if (!b.has_image) {
+      pane.innerHTML = `<div class="note info"><span>🖼</span><span>Escolha a imagem da faixa: um <b>PNG com fundo transparente</b>.
+        Pode ser do tamanho do vídeo (1080×1920) com a faixa no meio: o app usa só a parte visível e põe na divisa
+        entre a câmera e o jogo.</span></div>
+        <div class="row"><button class="btn primary" id="bandPick">Escolher imagem PNG…</button></div>`;
+      $("#bandPick", pane).onclick = pick;
+      return;
+    }
+    const pct = Math.round(b.scale * 100);
+    pane.innerHTML = `
+      <div class="band-thumb"><img src="${esc(b.image_url)}" alt="Imagem da faixa da divisa"></div>
+      <label class="switch"><input type="checkbox" id="bandOn" ${b.enabled ? "checked" : ""}><span class="track"></span>
+        <span>Faixa na divisa <span class="t-small">(todos os clipes com câmera + jogo)</span></span></label>
+      <div class="field"><label for="bandOff">Altura <span class="t-small num" id="bandOffV"></span></label>
+        <input type="range" id="bandOff" min="-400" max="400" step="2" value="${b.offset}" ${b.enabled ? "" : "disabled"}></div>
+      <div class="field"><label for="bandSc">Tamanho <span class="t-small num" id="bandScV"></span></label>
+        <input type="range" id="bandSc" min="50" max="150" step="1" value="${pct}" ${b.enabled ? "" : "disabled"}></div>
+      <div class="row"><button class="btn small" id="bandReset" ${b.enabled ? "" : "disabled"}>Centralizar na divisa</button>
+        <button class="btn small plain" id="bandPick">Trocar imagem…</button></div>
+      <div class="t-small">Ajuste olhando a <b>prévia ao vivo</b> (o gancho desce para não ficar embaixo da faixa).
+        Salva sozinho. “Gerar de novo” aplica no MP4; exportar e a fila já usam o ajuste novo.</div>`;
+    const off = $("#bandOff", pane), sc = $("#bandSc", pane);
+    const label = () => {
+      $("#bandOffV", pane).textContent = +off.value === 0 ? "· no meio da divisa" : `· ${+off.value > 0 ? "+" : ""}${off.value} px ${+off.value > 0 ? "para baixo" : "para cima"}`;
+      $("#bandScV", pane).textContent = `· ${sc.value}%`;
+    };
+    label();
+    let timer = null;
+    const save = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => api("/api/divider-band", { method: "PUT", body: { offset: +off.value, scale: +sc.value / 100 } })
+        .catch((e) => toast(e.message, "bad")), 400);
+    };
+    const adjust = () => { label(); live?.setBand({ offset: +off.value, scale: +sc.value / 100 }); save(); };
+    off.oninput = adjust;
+    sc.oninput = adjust;
+    $("#bandReset", pane).onclick = () => { off.value = 0; sc.value = 100; adjust(); };
+    $("#bandPick", pane).onclick = pick;
+    $("#bandOn", pane).onchange = async (e) => {
+      try { await api("/api/divider-band", { method: "PUT", body: { enabled: e.target.checked } }); }
+      catch (err) { e.target.checked = !e.target.checked; toast(err.message, "bad"); return; }
+      off.disabled = sc.disabled = $("#bandReset", pane).disabled = !e.target.checked;
+      refreshLive(m.id);
     };
   }
 

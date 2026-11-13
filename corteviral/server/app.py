@@ -29,6 +29,7 @@ from corteviral.config import AnalysisSettings, CaptionStyle
 from corteviral import n8n_local
 from corteviral.export import _chosen as chosen_moments
 from corteviral.export import export_approved, export_check
+from corteviral.divider_band import BandError, BandStore
 from corteviral.feedback import FeedbackStore
 from corteviral.publish import (NETWORKS, PublishConfig, PublishError, PublishStore, apply_callback,
                                 publish_clips, setup_account, test_connection)
@@ -131,6 +132,16 @@ class PublishConfigBody(BaseModel):
     auto_send: bool = False
 
 
+class BandBody(BaseModel):
+    enabled: bool | None = None
+    scale: float | None = Field(default=None, ge=0.3, le=2.0)
+    offset: int | None = Field(default=None, ge=-700, le=700)
+
+
+class BandImageBody(BaseModel):
+    path: str = Field(min_length=1, max_length=1000)
+
+
 class YouTubeGoalBody(BaseModel):
     api_key: str = Field(default="", max_length=200)
     channel: str | None = Field(default=None, max_length=300)
@@ -192,6 +203,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     yt_status = data_dir / "session-status.json"
     publish_store = PublishStore(data_dir)
     schedule_store = ScheduleStore(data_dir)
+    band_store = BandStore(data_dir)
     goals_store = GoalsStore(data_dir)
     n8n_proc: dict = {"p": None}
     n8n_lock = threading.Lock()
@@ -763,12 +775,46 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
     def session_window_open():
         return {"open": yt_profile.exists() and profile_in_use(yt_profile)}
 
+    # --- faixa da divisa (imagem entre a câmera e o jogo) ------------------
+    def _band_public() -> dict:
+        b = band_store.load()
+        return {**b.model_dump(), "has_image": band_store.image.exists(),
+                "image_url": f"/api/divider-band/image?v={b.version}" if band_store.image.exists() else None}
+
+    @app.get("/api/divider-band")
+    def get_band():
+        return _band_public()
+
+    @app.put("/api/divider-band")
+    def put_band(body: BandBody):
+        try:
+            band_store.save(**body.model_dump(exclude_none=True))
+        except BandError as e:
+            raise HTTPException(422, str(e))
+        return _band_public()
+
+    @app.post("/api/divider-band/image")
+    def post_band_image(body: BandImageBody):
+        try:
+            band_store.set_image(Path(body.path))
+        except (BandError, FFmpegError) as e:
+            raise HTTPException(422, str(e))
+        return _band_public()
+
+    @app.get("/api/divider-band/image")
+    def get_band_image():
+        if not band_store.image.exists():
+            raise HTTPException(404, "sem imagem da faixa")
+        return FileResponse(band_store.image, media_type="image/png", headers={"Cache-Control": "no-cache"})
+
     @app.post("/api/pick-file")
-    def pick_file(kind: Literal["video", "cookies"] = "video"):
+    def pick_file(kind: Literal["video", "cookies", "image"] = "video"):
         """Abre o seletor de arquivos nativo do Windows (processo separado, não trava o servidor)."""
         types = ("[('Cookies','*.txt'),('Todos','*.*')]" if kind == "cookies"
+                 else "[('Imagem PNG','*.png'),('Todos','*.*')]" if kind == "image"
                  else "[('Vídeos','*.mp4 *.mkv *.mov *.webm *.flv *.ts'),('Todos','*.*')]")
-        title = "Escolha o cookies.txt" if kind == "cookies" else "Escolha o vídeo"
+        title = ("Escolha o cookies.txt" if kind == "cookies" else "Escolha a imagem da faixa (PNG)" if kind == "image"
+                 else "Escolha o vídeo")
         script = (
             "import tkinter as tk; from tkinter import filedialog as fd; r=tk.Tk(); r.withdraw(); "
             "r.attributes('-topmost', True); "

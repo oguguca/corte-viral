@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from corteviral import ffmpeg
+from corteviral.divider_band import BandStore, band_bottom, band_box
 from corteviral.caption_style import load_style
 from corteviral.config import Settings
 from corteviral.models import Transcript
@@ -66,11 +67,13 @@ def _caption_words(project: Project, moment: dict, start: float, end: float) -> 
     return clip_words(Transcript.load(tpath).words, start, end)
 
 
-def hook_top_for(layout: str, has_cam: bool, rs) -> int:
-    """Topo do gancho (em 1920): logo abaixo da câmera no split; topo da faixa 16:9 no fundo desfocado."""
+def hook_top_for(layout: str, has_cam: bool, rs, band=None) -> int:
+    """Topo do gancho (em 1920): logo abaixo da câmera no split (e da faixa da divisa, se tiver);
+    topo da faixa 16:9 no fundo desfocado."""
     if layout == "split" and has_cam:
         cam_h = max(2, int(round(1920 * rs.facecam_ratio / 2)) * 2)
-        return cam_h + (rs.divider_px or 0) + 40
+        top = cam_h + (rs.divider_px or 0) + 40
+        return max(top, band_bottom(band, rs) + 30) if band else top
     if layout == "face-follow":
         return 300
     band = 1080 * 9 / 16
@@ -105,10 +108,18 @@ def _overlay_parts(project: Project, moment: dict, settings: Settings, preset: L
     return style, words, hook, credit
 
 
+def _band_for(preset: LayoutPreset, settings: Settings):
+    """Faixa da divisa: só no layout câmera + jogo (é onde existe a divisa)."""
+    if preset.layout != "split" or not preset.facecam:
+        return None
+    return BandStore(Path(settings.paths.data_dir)).active()
+
+
 def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
     """Tudo o que a prévia ao vivo da interface precisa para desenhar o clipe como ele vai sair."""
     rs = settings.render
     preset = resolve_layout(project, settings)
+    band = _band_for(preset, settings)
     style, words, hook, credit = _overlay_parts(project, moment, settings, preset)
     layout = "fallback" if preset.layout == "split" and not preset.facecam else preset.layout
     return {"layout": layout, "facecam": preset.facecam, "gameplay": preset.gameplay,
@@ -117,7 +128,9 @@ def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
             "render": {"facecam_ratio": rs.facecam_ratio, "divider_px": rs.divider_px,
                        "divider_color": rs.divider_color},
             "style": style.model_dump(), "events": caption_events(words, style), "hook": hook,
-            "hook_top": hook_top_for(preset.layout, bool(preset.facecam), rs), "credit": credit}
+            "hook_top": hook_top_for(preset.layout, bool(preset.facecam), rs, band), "credit": credit,
+            "band": dict(zip(("x", "y", "w", "h"), band_box(band, rs, 0.5)), version=band.version, raw_w=band.w,
+                         raw_h=band.h, scale=band.scale, offset=band.offset) if band else None}
 
 
 def render_clip(project: Project, moment: dict, settings: Settings, preview: bool = False,
@@ -136,20 +149,30 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     meta_file = out.with_suffix(".json")
 
     style, words, hook, credit = _overlay_parts(project, moment, settings, preset, captions)
+    band = _band_for(preset, settings)
     ass_text = None
     if words or hook or credit:
         ass_text = build_ass(words, style, hook=hook or None, credit=credit or None,
                              duration=end - start, layout=preset.layout,
-                             hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs))
+                             hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs, band))
     key = params_hash({"v": 2, "start": start, "end": end, "preset": preset.model_dump(),
                        "render": rs.model_dump(mode="json"), "preview": preview,
-                       "captions": params_hash({"ass": ass_text}) if ass_text else None})
+                       "captions": params_hash({"ass": ass_text}) if ass_text else None,
+                       "band": band.model_dump() if band else None})
     if out.exists() and meta_file.exists():
         if json.loads(meta_file.read_text(encoding="utf-8")).get("hash") == key:
             return out
 
     track = _face_track(video, start, end, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
     graph = build_filter(preset, src, rs, track=track, preview=preview)
+    band_input: list[str] = []
+    if band:  # faixa da divisa por cima do vídeo (antes da legenda/gancho, que ficam por cima dela)
+        bx, by, bw, bh = band_box(band, rs, 0.5 if preview else 1.0)
+        head, _, _ = graph.rpartition("[v]")
+        graph = (f"{head}[base];[1:v]scale={bw}:{bh},format=rgba[band];"
+                 f"[base][band]overlay={bx}:{by}:format=auto,format=yuv420p[v]")
+        band_input = ["-loop", "1", "-t", f"{end - start:.3f}", "-i",
+                      str(BandStore(Path(settings.paths.data_dir)).image)]
     ass_file = out.with_suffix(".ass")
     if ass_text:
         ass_file.write_text(ass_text, encoding="utf-8")
@@ -158,7 +181,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     else:
         ass_file.unlink(missing_ok=True)
     tmp = out.with_name(out.stem + ".tmp.mp4")
-    base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video),
+    base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video), *band_input,
             "-filter_complex", graph, "-map", "[v]", "-map", "0:a?"]
     tail = ["-c:a", "aac", "-b:a", rs.audio_bitrate, "-ac", "2", "-movflags", "+faststart", str(tmp)]
 

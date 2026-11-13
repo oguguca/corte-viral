@@ -30,6 +30,15 @@ function creditY(band) {
   return cy;
 }
 
+// mesma conta de divider_band.band_box: faixa centrada na divisa câmera/jogo (k = 1 no vídeo, 0.5 na prévia)
+const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+export function bandBox(b, render, k) {
+  const Wk = even(1080 * k), Hk = even(1920 * k), camH = even(Hk * render.facecam_ratio);
+  const div = render.divider_px ? even(render.divider_px * k) : 0;
+  const w = even(b.raw_w * b.scale * (Wk / 1080)), h = even(b.raw_h * b.scale * (Wk / 1080));
+  return { x: Math.floor((Wk - w) / 2), y: Math.round(camH + div / 2 - h / 2 + b.offset * (Hk / 1920)), w, h };
+}
+
 let active = null;  // só uma prévia toca por vez
 
 /** Liga a prévia num <canvas> (540×960) com barra de controle. Devolve { update, setPosition, setHook, destroy }. */
@@ -43,6 +52,19 @@ export function mountLivePreview(canvas, bar, videoUrl, spec) {
   seek.max = S.duration;
 
   const rel = () => Math.max(0, v.currentTime - S.start);
+  let bandImg = null, bandVer = null;
+  function loadBand() {  // a imagem da faixa da divisa (troca quando o usuário escolhe outra)
+    if (!S.band || S.band.version === bandVer) return;
+    bandVer = S.band.version;
+    bandImg = new Image();
+    bandImg.onload = () => { if (v.paused) draw(); };
+    bandImg.src = `/api/divider-band/image?v=${S.band.version}`;
+  }
+  function drawBand() {
+    if (!S.band || !bandImg || !bandImg.complete || !bandImg.naturalWidth) return;
+    g.drawImage(bandImg, S.band.x, S.band.y, S.band.w, S.band.h);
+  }
+  loadBand();
   const font = (px) => { g.font = `900 ${px}px "${S.style.font}", "Arial Black", sans-serif`; };
 
   function drawVideo() {
@@ -142,7 +164,7 @@ export function mountLivePreview(canvas, bar, videoUrl, spec) {
     if (dead) return;
     if (!canvas.isConnected) { destroy(); return; }  // saiu da tela: para o som também
     const t = rel();
-    drawVideo(); drawCaption(t); drawHook(t); drawCredit();
+    drawVideo(); drawBand(); drawCaption(t); drawHook(t); drawCredit();
     seek.value = t; time.textContent = `${clock(t)} / ${clock(S.duration)}`;
   }
   function loop() {
@@ -177,8 +199,19 @@ export function mountLivePreview(canvas, bar, videoUrl, spec) {
   const api = {
     update(spec) {  // novos dados do servidor (corte, legenda, gancho…)
       const moved = spec.start !== S.start;
-      S = spec; seek.max = S.duration;
+      S = spec; seek.max = S.duration; loadBand();
       if (moved) v.currentTime = S.start; else if (v.paused) draw();
+    },
+    setBand(adj) {  // ajuste da faixa (altura/tamanho/ligada) na hora, sem esperar o servidor
+      if (!S.band && !adj.base) return;
+      if (adj.enabled === false) { S = { ...S, band: null, hook_top: S.hook_top_nob ?? S.hook_top }; if (v.paused) draw(); return; }
+      const b = { ...(S.band || adj.base), ...adj };
+      const at = bandBox(b, S.render, 0.5), full = bandBox(b, S.render, 1);
+      const base = even(1920 * S.render.facecam_ratio) + (S.render.divider_px || 0) + 40;
+      S = { ...S, band: { ...b, ...at }, hook_top_nob: S.hook_top_nob ?? (S.band ? null : S.hook_top),
+            hook_top: S.layout === "split" ? Math.max(base, full.y + full.h + 30) : S.hook_top };
+      loadBand();
+      if (v.paused) draw();
     },
     setPosition(p) { S = { ...S, style: { ...S.style, position: p } }; if (v.paused) draw(); },
     setHook(text) {  // o gancho só aparece nos 3 primeiros segundos: volta para lá para mostrar

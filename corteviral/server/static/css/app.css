@@ -548,3 +548,5 @@ video { width: 100%; display: block; background: #000; border-radius: var(--r); 
 .qp-note.warn { color: var(--warn); }
 .exp-auto { align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .exp-auto .track { flex: none; margin-top: 2px; }
+.band-thumb { padding: 10px; border-radius: 12px; background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 16px 16px; }
+.band-thumb img { display: block; width: 100%; height: auto; }
