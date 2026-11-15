@@ -1,6 +1,6 @@
 // Peças da análise de momentos usadas na tela Clipes (durações, selo da IA, barras de critério).
 
-export const DURATIONS = [["15-30", "15–30 s · curto"], ["15-60", "15–60 s · viral"], ["30-60", "30–60 s"],
+export const DURATIONS = [["20-35", "20–35 s · ideal (YouTube)"], ["15-30", "15–30 s · curto"], ["15-60", "15–60 s · viral"], ["30-60", "30–60 s"],
                    ["61-90", "61–90 s · monetização"], ["61-120", "61–120 s · monetização"], ["custom", "Personalizado…"]];
 const CRIT = [["gancho", "Gancho"], ["emocao", "Emoção"], ["visual", "Visual"], ["final", "Final"], ["contexto", "Contexto"]];
 

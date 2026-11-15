@@ -21,7 +21,7 @@ export async function renderClips(root, name, project, ctx = {}) {
       <div class="row" style="justify-content:center;align-items:flex-end;gap:14px;margin-top:14px">
         <div class="field" style="width:96px"><label for="gN">Quantos</label><input class="input num" id="gN" type="number" min="1" max="30" value="5"></div>
         <div class="field" style="width:220px"><label for="gDur">Duração do clipe</label>
-          <select class="select" id="gDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}" ${k === "15-60" ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+          <select class="select" id="gDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}" ${k === "20-35" ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <button class="btn primary large" id="genAuto">Gerar cortes</button></div></div></div>`;
     $("#genAuto", root).onclick = () => {
       const n = Math.max(1, Math.min(30, +$("#gN", root).value || 5)), [lo, hi] = $("#gDur", root).value.split("-").map(Number);

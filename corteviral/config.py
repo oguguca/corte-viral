@@ -102,6 +102,13 @@ class RenderSettings(_Strict):
     cq: int = 23
     audio_bitrate: str = "160k"
     presets_dir: Path = Path("presets/streamers")
+    # Ritmo de Shorts (retenção do YouTube): corta pausas e alterna o enquadramento
+    jump_cuts: bool = True
+    silence_rel_db: float = Field(default=-8.0, ge=-20, le=-3)  # dB abaixo do volume médio do clipe = pausa
+    silence_min: float = Field(default=0.35, ge=0.15, le=3.0)  # s: pausa mínima para cortar
+    cut_pad: float = Field(default=0.1, ge=0.0, le=0.5)        # s de respiro em cada lado do corte
+    punch_zoom: float = Field(default=1.12, ge=1.0, le=1.5)    # 1.0 desliga o zoom alternado
+    zoom_every: float = Field(default=3.0, ge=2.0, le=4.0)     # s entre trocas de enquadramento
 
 
 class CaptionStyle(_Strict):

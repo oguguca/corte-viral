@@ -100,3 +100,37 @@ def test_unrelated_ffmpeg_error_does_not_blacklist_encoder(rs_fast, sample_video
     with pytest.raises(FFmpegError):
         render_clip(p, {**MOMENT, "id": "m00009"}, rs_fast)
     assert "h264_nvenc_teste" not in mod._BROKEN_ENCODERS
+
+
+@pytest.fixture
+def video_with_pause(tmp_path):
+    """8 s de vídeo; áudio com tom em 0–2 s e 4–8 s e silêncio total em 2–4 s."""
+    out = tmp_path / "pausa.mp4"
+    ffmpeg.run(["-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=8",
+                "-f", "lavfi", "-i", "aevalsrc='if(between(t,2,4),0,0.5*sin(440*2*PI*t))':s=44100:d=8",
+                "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest", str(out)])
+    return out
+
+
+def test_render_cuts_pauses_and_keeps_audio(rs_fast, video_with_pause):
+    p = _project(rs_fast, video_with_pause)
+    out = render_clip(p, {**MOMENT, "start": 0.0, "end": 8.0}, rs_fast)
+    dur, kinds = _probe(out)
+    assert kinds == {"video", "audio"}
+    assert 5.8 < dur < 6.6, dur  # 8 s − ~1,8 s de pausa cortada
+    meta = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
+    assert len(meta["segments"]) == 2
+
+
+def test_render_without_jump_cuts_keeps_full_length(rs_fast, video_with_pause):
+    rs_fast.render.jump_cuts = False
+    p = _project(rs_fast, video_with_pause)
+    dur, _ = _probe(render_clip(p, {**MOMENT, "start": 0.0, "end": 8.0}, rs_fast))
+    assert abs(dur - 8.0) < 0.25
+
+
+def test_render_cuts_pauses_with_hook_overlay(rs_fast, video_with_pause):
+    p = _project(rs_fast, video_with_pause)
+    out = render_clip(p, {**MOMENT, "start": 0.0, "end": 8.0, "hook": "Ele falou isso?", "hook_on": True}, rs_fast)
+    dur, kinds = _probe(out)
+    assert kinds == {"video", "audio"} and 5.8 < dur < 6.6, dur

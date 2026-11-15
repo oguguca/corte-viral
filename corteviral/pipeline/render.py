@@ -14,7 +14,10 @@ from corteviral.config import Settings
 from corteviral.models import Transcript
 from corteviral.pipeline.captions import build_ass, caption_events, clip_words
 from corteviral.ffmpeg import FFmpegError
-from corteviral.pipeline.layout import build_filter
+from corteviral.pipeline.jumpcut import (keep_segments, out_duration, remap_points, remap_words, select_expr,
+                                         silences,
+                                         zoom_windows)
+from corteviral.pipeline.layout import _even, build_filter
 from corteviral.presets import LayoutPreset, resolve_layout
 from corteviral.project import Project
 from corteviral.utils import params_hash, write_json_atomic
@@ -154,12 +157,22 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
 
     style, words, hook, credit = _overlay_parts(project, moment, settings, preset, captions)
     band = _band_for(preset, settings)
+    segs = [(0.0, round(end - start, 3))]
+    if rs.jump_cuts:  # tira as pausas (detectadas no áudio) — gancho imediato e ritmo de Short
+        audio = project.path("audio.wav")
+        silent = silences(audio if audio.exists() else video, start, end, rs.silence_rel_db, rs.silence_min)
+        segs = keep_segments(start, end, silent, rs.cut_pad, rs.silence_min)
+    cut = segs != [(0.0, round(end - start, 3))]
+    out_len = out_duration(segs)
+    if cut:
+        words = remap_words(words, segs)
+    zooms = zoom_windows(segs, rs.zoom_every) if rs.punch_zoom > 1.0 else []
     ass_text = None
     if words or hook or credit:
         ass_text = build_ass(words, style, hook=hook or None, credit=credit or None,
-                             duration=end - start, layout=preset.layout,
+                             duration=out_len, layout=preset.layout,
                              hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs, band))
-    key = params_hash({"v": 2, "start": start, "end": end, "preset": preset.model_dump(),
+    key = params_hash({"v": 3, "start": start, "end": end, "segs": segs, "zooms": zooms, "preset": preset.model_dump(),
                        "render": rs.model_dump(mode="json"), "preview": preview,
                        "captions": params_hash({"ass": ass_text}) if ass_text else None,
                        "band": band.model_dump() if band else None})
@@ -168,14 +181,32 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
             return out
 
     track = _face_track(video, start, end, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
+    if cut and track:  # o rosto seguido acompanha os cortes de pausa
+        track = remap_points(track, segs)
     graph = build_filter(preset, src, rs, track=track, preview=preview)
+    audio_map = "0:a?"
+    if cut:  # junta só os pedaços falados (vídeo e áudio pelos mesmos tempos)
+        assert graph.count("[0:v]") == 1
+        expr = select_expr(segs)
+        # o áudio vem ANTES: faixa e legenda reescrevem só o que vem depois do último [v]
+        graph = (f"[0:a]aselect='{expr}',asetpts=N/SR/TB[aout];[0:v]select='{expr}',setpts=N/FRAME_RATE/TB[jc];"
+                 + graph.replace("[0:v]", "[jc]"))
+        audio_map = "[aout]"
+    if zooms:  # zoom leve alternado a cada 2–4 s (troca de enquadramento), antes da faixa e da legenda
+        k = 0.5 if preview else 1.0
+        W, H = _even(rs.width * k), _even(rs.height * k)
+        zw, zh = _even(W * rs.punch_zoom), _even(H * rs.punch_zoom)
+        on = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in zooms)
+        head, sep, rest = graph.rpartition("[v]")
+        graph = (f"{head}[pz];[pz]split=2[z0][z1];[z1]scale={zw}:{zh},crop={W}:{H}[zz];"
+                 f"[z0][zz]overlay=0:0:enable='{on}'[v]{rest}")
     band_input: list[str] = []
     if band:  # faixa da divisa por cima do vídeo (antes da legenda/gancho, que ficam por cima dela)
         bx, by, bw, bh = band_box(band, rs, 0.5 if preview else 1.0)
         head, _, _ = graph.rpartition("[v]")
         graph = (f"{head}[base];[1:v]scale={bw}:{bh},format=rgba[band];"
                  f"[base][band]overlay={bx}:{by}:format=auto,format=yuv420p[v]")
-        band_input = ["-loop", "1", "-t", f"{end - start:.3f}", "-i",
+        band_input = ["-loop", "1", "-t", f"{out_len:.3f}", "-i",
                       str(BandStore(Path(settings.paths.data_dir)).image)]
     ass_file = out.with_suffix(".ass")
     if ass_text:
@@ -186,7 +217,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
         ass_file.unlink(missing_ok=True)
     tmp = out.with_name(out.stem + ".tmp.mp4")
     base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video), *band_input,
-            "-filter_complex", graph, "-map", "[v]", "-map", "0:a?"]
+            "-filter_complex", graph, "-map", "[v]", "-map", audio_map, "-t", f"{out_len:.3f}"]
     tail = ["-c:a", "aac", "-b:a", rs.audio_bitrate, "-ac", "2", "-movflags", "+faststart", str(tmp)]
 
     if on_progress:
@@ -210,7 +241,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
         os.replace(tmp, out)
     write_json_atomic(meta_file, {"hash": key, "layout": preset.layout, "encoder": used, "start": start,
                                   "end": end, "preview": preview, "preset": preset.model_dump(),
-                                  "captions": bool(ass_text)})
+                                  "captions": bool(ass_text), "segments": segs, "zooms": zooms})
     if on_progress:
         on_progress(1.0, f"{moment['id']} pronto")
     return out

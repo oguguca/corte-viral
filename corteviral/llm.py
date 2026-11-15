@@ -28,16 +28,19 @@ _TRANSIENT = {500, 502, 503, 504}
 
 INSTRUCTIONS = """Você é editor de cortes virais de lives de games (principalmente GTA), em português do Brasil.
 Para cada trecho de transcrição, avalie o potencial de virar um clipe curto viral (TikTok, Shorts, Reels).
-Critérios: humor, tensão/ação, reação forte, frase de efeito, gancho nos primeiros 3 segundos, e se faz
-sentido para quem não viu a live. Os "sinais" (volume, reações faladas, chat) são pistas, não verdade.
+Critérios: humor, tensão/ação, reação forte, frase de efeito, gancho imediato (o ápice — fala polêmica,
+surpresa ou momento cômico — precisa estar nos 2 primeiros segundos), final no clímax da reação ou piada
+(sem despedida nem momento vazio, de preferência fechando com a frase de abertura para rever em loop),
+e se faz sentido para quem não viu a live. Os "sinais" (volume, reações faladas, chat) são pistas, não verdade.
 Perfil "{profile}": {profile_hint}
 Seja exigente: 80+ só para trechos realmente fortes; trechos parados ou sem contexto ficam abaixo de 40.
 Para cada item devolva: id (o mesmo recebido), score (inteiro 0-100), reason (até 140 caracteres,
-em português, dizendo por que funciona ou não), hook (até 8 palavras, texto de gancho para a tela),
+em português, dizendo por que funciona ou não), hook (até 8 palavras, título de gancho para a tela, direto e chamativo, de preferência em forma de pergunta,
+ex.: "Ele realmente falou isso sobre GTA 6?"),
 standalone (true se faz sentido sozinho). Avalie todos os itens."""
 
 PROFILE_HINTS = {
-    "viral": "clipe de 15 a 60 s; precisa prender rápido.",
+    "viral": "Short de 20 a 35 s (faixa ideal de retenção do YouTube); precisa prender nos 2 primeiros segundos.",
     "monetizacao": "clipe de 61 a 120 s; precisa de arco completo (preparação, clímax e reação).",
 }
 
@@ -79,14 +82,19 @@ Calibração (use a escala inteira e diferencie os trechos entre si):
 Numa live típica a maioria dos trechos fica entre 40 e 75. Não dê a mesma nota para tudo.
 
 Dê notas de 0 a 100:
-- gancho: os 3 primeiros segundos do corte sugerido prendem quem está rolando o feed?
+- gancho: os 2 primeiros segundos do corte sugerido já mostram o ápice e prendem quem está rolando o feed?
 - emocao: humor, tensão, susto, raiva, euforia; reação forte dos streamers (gritos, risadas).
 - visual: o que acontece na tela é forte (ação, explosão, perseguição, cena marcante)?
-- final: o corte tem desfecho (punchline, reação, conclusão) ou termina no meio?
+- final: o corte termina exatamente no clímax (punchline, reação) sem despedida nem tempo morto?
 - contexto: quem não viu a live entende sozinho?
 
-Sugira inicio e fim do corte em SEGUNDOS CONTADOS DESDE O INÍCIO DESTE VÍDEO: comece direto no gancho
-(sem enrolação) e termine logo depois da reação/desfecho.
+Sugira inicio e fim do corte em SEGUNDOS CONTADOS DESDE O INÍCIO DESTE VÍDEO, seguindo as regras de
+retenção do YouTube Shorts:
+- comece direto no ápice (fala polêmica, reação de surpresa ou momento cômico), sem introdução, silêncio
+  ou contexto desnecessário;
+- termine exatamente no clímax da reação ou piada, sem despedidas ou momentos vazios; se der, escolha um
+  fim que converse com a frase de abertura, para o vídeo funcionar em loop;
+- mire em 20 a 35 s de duração (respeitando a faixa do perfil).
 descricao: o que acontece (tela + áudio), 1–2 frases. motivo: por que funciona ou não, 1–2 frases.
 risco: o que pode atrapalhar (contexto, direitos autorais de música, parado) ou "nenhum".
 Escreva em português. Streamer: {streamer}.
@@ -154,8 +162,8 @@ POSTS_SCHEMA = {"type": "array", "items": {"type": "object", "properties": {
     "required": ["id", "hook", "tiktok", "shorts", "reels", "kwai"]}}
 POSTS_INSTRUCTIONS = """Você é social media de cortes de lives de games (GTA) no Brasil.
 Para cada clipe, escreva os textos de postagem em {lang}:
-- hook: frase de gancho que aparece escrita no vídeo nos 3 primeiros segundos (até 8 palavras, sem hashtag,
-  provoca curiosidade, sem entregar o final; ex.: "Ele não esperava por isso").
+- hook: título de gancho escrito na tela nos 2 primeiros segundos (até 8 palavras, sem hashtag, direto e
+  chamativo, provoca curiosidade sem entregar o final; prefira pergunta, ex.: "Ele realmente falou isso sobre GTA 6?").
 - Para cada rede (tiktok, shorts, reels, kwai): title, description e hashtags.
   - title: o melhor título possível para ganhar views (até 70 caracteres). Use o que funciona em cortes virais:
     curiosidade aberta ("…e ninguém esperava isso"), reação forte, número ou detalhe concreto do momento,

@@ -6,7 +6,7 @@ import { accountsSection, bindAccounts, loginChoice } from "./settings.js";
 import { DURATIONS } from "../views/moments.js";
 
 const AUTO_KEY = "cv.autoClips";  // última escolha de cortes automáticos (só conveniência deste navegador)
-const AUTO_DEFAULT = { n: 5, dur: "15-60" };
+const AUTO_DEFAULT = { n: 5, dur: "20-35" };
 const loadAuto = () => { try { return { ...AUTO_DEFAULT, ...JSON.parse(localStorage.getItem(AUTO_KEY) || "{}") }; } catch (e) { return { ...AUTO_DEFAULT }; } };
 const saveAuto = (a) => { try { localStorage.setItem(AUTO_KEY, JSON.stringify(a)); } catch (e) { /* sem armazenamento */ } };
 
@@ -68,7 +68,7 @@ export function openNewVideo(from) {
   let model = "medium", lang = "pt";
   const auto = loadAuto();
   $("#nvN", body).value = auto.n;
-  $("#nvDur", body).value = DURATIONS.some(([k]) => k === auto.dur) ? auto.dur : "15-60";
+  $("#nvDur", body).value = DURATIONS.some(([k]) => k === auto.dur) ? auto.dur : "20-35";
 
   body.querySelectorAll("[data-model]").forEach((b) => b.onclick = () => { model = b.dataset.model; body.querySelectorAll("[data-model]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
   body.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => { lang = b.dataset.lang; body.querySelectorAll("[data-lang]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
