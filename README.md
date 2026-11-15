@@ -29,7 +29,8 @@ Shorts, Instagram Reels e Kwai, com legenda e gancho dentro da zona segura comum
 ## Requisitos
 
 - Windows 10/11
-- GPU NVIDIA recomendada (testado em GTX 1050 Ti 4 GB; sem GPU funciona na CPU, mais lento)
+- GPU NVIDIA recomendada (testado em GTX 1050 Ti 4 GB). Sem GPU, use a transcrição grátis pelo Groq
+  (abaixo) ou a CPU, bem mais lenta
 - Python 3.11 e FFmpeg
 - Node.js (a partir da Fase 5)
 - Chave da API Anthropic (a partir da Fase 2)
@@ -55,6 +56,20 @@ CUDA Toolkit. Basta ter o driver NVIDIA atualizado.
 
 Na primeira transcrição, o modelo Whisper é baixado para `models/`
 (`medium` ≈ 1,5 GB).
+
+### Sem placa de vídeo: transcrição grátis pelo Groq
+
+Na CPU, uma live de 1 h leva dezenas de minutos. Com uma chave grátis do Groq, o mesmo áudio sai em
+1–2 minutos, com o modelo `whisper-large-v3-turbo` (melhor que o `small` da CPU):
+
+1. Entre em **console.groq.com** → **API Keys** → **Create API Key** (não pede cartão; não há cobrança).
+2. Cole no `.env`: `GROQ_API_KEY=...` e reabra o app.
+
+Com `whisper.engine: auto` (padrão), o app usa a GPU se ela funcionar; senão, o Groq; sem chave, a CPU.
+`engine: groq` força o Groq; `engine: local` nunca usa a nuvem. O áudio vai em pedaços de 10 min
+para o Groq. Se a cota grátis do dia acabar (algumas horas de áudio por dia; confira em
+console.groq.com → *Settings → Limits*), a chave for recusada ou a internet cair, o app termina o
+resto na CPU sem perder o que já foi transcrito.
 
 ## Uso
 
