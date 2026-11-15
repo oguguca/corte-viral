@@ -13,14 +13,12 @@ import { renderClips } from "./views/clips.js";
 import { renderExport } from "./views/export.js";
 import { renderHome } from "./views/home.js";
 import { renderQueue } from "./views/queue.js";
-import { renderMoments } from "./views/moments.js";
-import { renderVideo } from "./views/video.js";
 
-const VIEWS = { video: renderVideo, moments: renderMoments, clips: renderClips, export: renderExport };
+const VIEWS = { clips: renderClips, export: renderExport };
 let renderToken = 0;
 
 function stepsBar(name, step, project) {
-  const done = { video: project.has_transcript, moments: project.has_moments, clips: false, export: false };
+  const done = { clips: false, export: false };
   return `<nav class="steps" aria-label="Etapas do projeto">${STEPS.map(([k, label], i) => `
     ${i ? '<span class="step-sep" aria-hidden="true">›</span>' : ""}
     <button class="step ${done[k] && k !== step ? "done" : ""}" data-step="${k}" ${k === step ? 'aria-current="step"' : ""}>
@@ -111,19 +109,11 @@ function init() {
       toast(r.queued ? `${r.queued} clipe(s) na fila: o primeiro sai às ${hhmm(r.first_at)} e o último às ${hhmm(r.last_at)}.`
         : "Esses clipes já estavam na fila.", "good");
     }
-    if (job.auto && job.project) {  // cortes automáticos: abre direto nos clipes prontos
-      await renderProjects();
-      const step = job.stage === "render" ? "clips" : "moments";
+    if (job.project && (job.auto || job.stage === "transcribe" || job.stage === "ingest")) {
+      await renderProjects();  // link novo ou cortes automáticos: abre direto nos clipes
       const r = parse();
-      if (r.view === "project" && r.name === job.project && r.step === step) render();
-      else go(job.project, step);
-      return;
-    }
-    if (job.stage === "transcribe" || job.stage === "ingest") {
-      await renderProjects();
-      const r = parse();
-      if (r.view === "project" && r.name === job.project && r.step === "video") render();  // mesma rota: hashchange não dispara
-      else if (job.project) go(job.project, "video");
+      if (r.view === "project" && r.name === job.project && r.step === "clips") render();  // mesma rota: hashchange não dispara
+      else go(job.project, "clips");
       return;
     }
     if (job.project === state.current) render({ keepFocus: true });

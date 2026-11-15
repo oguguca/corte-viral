@@ -6,7 +6,7 @@ import { go } from "../router.js";
 import { openLayout } from "../sheets/layout.js";
 import { saveCapStyle, state } from "../state.js";
 import { confirmAction, scoreClass, toast } from "../ui.js";
-import { aiTag, critBars } from "./moments.js";
+import { DURATIONS, aiTag, critBars } from "./moments.js";
 
 const PLATS = [["tiktok", "TikTok"], ["shorts", "Shorts"], ["reels", "Reels"], ["kwai", "Kwai"]];
 const POS = [["0.35", "Em cima"], ["0.55", "Meio"], ["0.85", "Embaixo"]];
@@ -16,9 +16,17 @@ export async function renderClips(root, name, project, ctx = {}) {
   const P = projectApi(name);
   let d;
   try { d = await api(P("/moments")); } catch (e) {
-    root.innerHTML = `<div class="card"><div class="empty"><div class="big">✨</div>Primeiro encontre os momentos.
-      <button class="btn primary" id="toMoments">Ir para Momentos</button></div></div>`;
-    $("#toMoments", root).onclick = () => go(name, "moments");
+    root.innerHTML = `<div class="card pad"><div class="empty"><div class="big">✨</div>
+      A IA encontra os melhores momentos deste vídeo e já gera os clipes.
+      <div class="row" style="justify-content:center;align-items:flex-end;gap:14px;margin-top:14px">
+        <div class="field" style="width:96px"><label for="gN">Quantos</label><input class="input num" id="gN" type="number" min="1" max="30" value="5"></div>
+        <div class="field" style="width:220px"><label for="gDur">Duração do clipe</label>
+          <select class="select" id="gDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}" ${k === "15-60" ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <button class="btn primary large" id="genAuto">Gerar cortes</button></div></div></div>`;
+    $("#genAuto", root).onclick = () => {
+      const n = Math.max(1, Math.min(30, +$("#gN", root).value || 5)), [lo, hi] = $("#gDur", root).value.split("-").map(Number);
+      startJob({ kind: "analyze", project: name, auto: true, n, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" });
+    };
     return;
   }
   const ui = state.clipsUi;  // aba, filtro e rede sobrevivem aos redesenhos após tarefas

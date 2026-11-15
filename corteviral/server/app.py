@@ -267,6 +267,14 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         def progress(stage: str, frac: float, msg: str) -> None:
             job.update(stage=stage, progress=round(frac, 4), message=msg)
 
+        def render_best(project: Project) -> None:  # cortes automáticos: gera os n de maior nota
+            saved = load_moments(project) or {"moments": []}
+            best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"),
+                          key=lambda m: m.get("score", 0), reverse=True)[:req.n or s.analysis.n_clips]
+            if best:
+                job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
+                render_all(project, s, best, preview=False, on_progress=lambda f, m: progress("render", f, m))
+
         try:
             if req.kind == "posts":
                 project = Project.load(_project_dir(req.project))
@@ -339,6 +347,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 job.update(stage="analyze", project=project.dir.name)
                 analyzer(project, s, n=req.n, profile=req.profile,
                          on_progress=lambda f, m: progress("analyze", f, m))
+                if req.auto:
+                    render_best(project)
             else:
                 project = pipeline(req.source, s, progress)
                 if req.auto:  # do link aos clipes prontos numa tarefa só
@@ -346,13 +356,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                                message="procurando os melhores momentos")
                     analyzer(project, s, n=req.n, profile=req.profile or s.analysis.profile,
                              on_progress=lambda f, m: progress("analyze", f, m))
-                    saved = load_moments(project) or {"moments": []}
-                    best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"),
-                                  key=lambda m: m.get("score", 0), reverse=True)[:req.n or s.analysis.n_clips]
-                    if best:
-                        job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
-                        render_all(project, s, best, preview=False,
-                                   on_progress=lambda f, m: progress("render", f, m))
+                    render_best(project)
             job.update(status="done", project=project.dir.name, progress=1.0, message="concluído")
         except (IngestError, FFmpegError, FileNotFoundError, PublishError) as e:
             job.update(status="error", error=str(e))

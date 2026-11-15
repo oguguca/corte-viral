@@ -1,6 +1,6 @@
 // Rotas por hash: #/  ·  #/p/<projeto>/<etapa>. Voltar/avançar do navegador funcionam.
 export const STEPS = [
-  ["video", "Vídeo"], ["moments", "Momentos"], ["clips", "Clipes"], ["export", "Exportar"],
+  ["clips", "Clipes"], ["export", "Exportar"],
 ];
 
 export function parse() {
@@ -10,11 +10,11 @@ export function parse() {
   if (parts[0] === "contas") return { view: "accounts" };
   if (parts[0] === "fila") return { view: "queue" };
   if (parts[0] === "p" && parts[1]) {
-    const step = STEPS.some(([k]) => k === parts[2]) ? parts[2] : "video";
+    const step = STEPS.some(([k]) => k === parts[2]) ? parts[2] : "clips";
     return { view: "project", name: parts[1], step };
   }
   return { view: "home" };
 }
 
-export const go = (name, step = "video") => { location.hash = `#/p/${encodeURIComponent(name)}/${step}`; };
+export const go = (name, step = "clips") => { location.hash = `#/p/${encodeURIComponent(name)}/${step}`; };
 export const goHome = () => { location.hash = "#/"; };

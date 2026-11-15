@@ -46,9 +46,9 @@ export async function renderExport(root, name, project, ctx = {}) {
   try { queue = await api(`/api/schedule?project=${encodeURIComponent(name)}`); } catch (e) { /* sem fila */ }
   try { chk = await api(P("/export-check")); } catch (e) { if (d) toast("Não consegui checar a exportação: " + e.message, "bad"); }
   if (!d) {
-    root.innerHTML = `<div class="card"><div class="empty"><div class="big">📦</div>Encontre e aprove momentos antes de exportar.
-      <button class="btn primary" id="toMoments">Ir para Momentos</button></div></div>`;
-    $("#toMoments", root).onclick = () => go(name, "moments");
+    root.innerHTML = `<div class="card"><div class="empty"><div class="big">📦</div>Gere e aprove os clipes antes de exportar.
+      <button class="btn primary" id="toClips0">Ir para Clipes</button></div></div>`;
+    $("#toClips0", root).onclick = () => go(name, "clips");
     return;
   }
   const approved = d.moments.filter((m) => m.status === "approved").sort((a, b) => b.score - a.score);

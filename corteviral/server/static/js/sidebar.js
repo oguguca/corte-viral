@@ -17,7 +17,7 @@ export async function renderProjects() {
       <span class="meta"><span class="name">${esc(p.title || p.name)}</span>
         <span class="sub">${fmt(p.duration)} · ${status}</span></span></button></li>`;
   }).join("");
-  ul.querySelectorAll("[data-name]").forEach((b) => b.onclick = () => go(b.dataset.name, "video"));
+  ul.querySelectorAll("[data-name]").forEach((b) => b.onclick = () => go(b.dataset.name, "clips"));
 }
 
 export async function renderUsageMini() {

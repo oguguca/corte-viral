@@ -460,3 +460,24 @@ def test_ingest_without_auto_stops_after_transcription(client):
     job = _wait(client, client.post("/api/jobs", json={"source": "https://youtu.be/abc", "model": "small",
                                                        "cookies_from_browser": "firefox"}).json()["id"])
     assert job["stage"] == "transcribe" and job["auto"] is False
+
+
+def test_analyze_auto_renders_best_clips(settings_tmp, monkeypatch):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    rendered = {}
+
+    def fake_analyze(project, settings, n=None, profile=None, on_progress=None):
+        moments = [{"id": f"m{i}", "start": i * 60.0, "end": i * 60.0 + 30, "score": sc}
+                   for i, sc in enumerate([50, 90, 70])]
+        write_json_atomic(project.path(MOMENTS), {"profile": profile, "moments": moments})
+        return moments
+
+    monkeypatch.setattr("corteviral.server.app.render_all",
+                        lambda project, settings, chosen, **kw: rendered.update(ids=[m["id"] for m in chosen]))
+    p = _transcribed_project(settings_tmp)
+    c = TestClient(create_app(settings_tmp, analyzer=fake_analyze))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "n": 2, "auto": True,
+                                             "min_seconds": 15, "max_seconds": 60}).json()["id"])
+    assert job["status"] == "done" and job["stage"] == "render" and job["auto"] is True
+    assert rendered == {"ids": ["m1", "m2"]}
