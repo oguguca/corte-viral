@@ -13,6 +13,8 @@ whisper:
   beam_size: 5
   vad_filter: true         # pula silêncio (acelera bastante em lives)
   cpu_fallback_model: small  # usado se a GPU falhar (CUDA/VRAM)
+  engine: auto             # auto: GPU se houver; senão Groq (grátis, precisa GROQ_API_KEY no .env); senão CPU
+  groq_model: whisper-large-v3-turbo
 
 analysis:
   profile: viral           # viral (15–60 s) | monetizacao (61–120 s)

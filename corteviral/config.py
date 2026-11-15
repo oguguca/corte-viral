@@ -22,6 +22,10 @@ class WhisperSettings(_Strict):
     beam_size: int = 5
     vad_filter: bool = True
     cpu_fallback_model: str = "small"
+    # auto: GPU se houver; senão Groq (grátis, GROQ_API_KEY no .env); senão CPU
+    engine: Literal["auto", "local", "groq"] = "auto"
+    groq_model: str = "whisper-large-v3-turbo"
+    groq_chunk_seconds: int = Field(default=600, ge=60, le=1200)  # pedaços enviados ao Groq
 
 
 class PathsSettings(_Strict):

@@ -24,3 +24,17 @@ def test_unknown_key_rejected(tmp_path):
     p.write_text("whisper:\n  modelo: small\n", encoding="utf-8")
     with pytest.raises(ValidationError):
         load_settings(p)
+
+
+def test_whisper_engine_defaults(tmp_path):
+    s = load_settings(tmp_path / "nao_existe.yaml")
+    assert s.whisper.engine == "auto"
+    assert s.whisper.groq_model == "whisper-large-v3-turbo"
+    assert s.whisper.groq_chunk_seconds == 600
+
+
+def test_whisper_engine_rejects_unknown(tmp_path):
+    p = tmp_path / "c.yaml"
+    p.write_text("whisper:\n  engine: nuvem\n", encoding="utf-8")
+    with pytest.raises(ValidationError):
+        load_settings(p)
