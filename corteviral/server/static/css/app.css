@@ -341,6 +341,13 @@ a { color: var(--info); }
 /* ---------- player / transcrição ---------- */
 video { width: 100%; display: block; background: #000; border-radius: var(--r); }
 .vertical { aspect-ratio: 9 / 16; max-height: 72vh; width: auto; margin: 0 auto; }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.board-card { display: grid; gap: 8px; align-content: start; min-width: 0; overflow: hidden; }
+.board-card > .row { min-width: 0; }
+.board-card > .row > div:last-child { flex: 1; }
+.board-card .btn { padding-inline: 10px; }
+.board-card .vertical { width: 100%; height: auto; max-height: 420px; border-radius: 12px; background: #000; }
+.board-card.discarded { opacity: .45; }
 .words { line-height: 1.95; max-height: 62vh; overflow: auto; padding: 4px 2px; }
 .words .tline { margin-bottom: 8px; }
 .words .ts { font-size: 11px; color: var(--text-3); margin-right: 6px; cursor: pointer; font-variant-numeric: tabular-nums; }

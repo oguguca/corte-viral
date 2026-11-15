@@ -4,7 +4,7 @@ import { startJob } from "../jobs.js";
 import { go } from "../router.js";
 import { confirmAction, scoreClass, toast } from "../ui.js";
 
-const DURATIONS = [["15-30", "15–30 s · curto"], ["15-60", "15–60 s · viral"], ["30-60", "30–60 s"],
+export const DURATIONS = [["15-30", "15–30 s · curto"], ["15-60", "15–60 s · viral"], ["30-60", "30–60 s"],
                    ["61-90", "61–90 s · monetização"], ["61-120", "61–120 s · monetização"], ["custom", "Personalizado…"]];
 const CRIT = [["gancho", "Gancho"], ["emocao", "Emoção"], ["visual", "Visual"], ["final", "Final"], ["contexto", "Contexto"]];
 

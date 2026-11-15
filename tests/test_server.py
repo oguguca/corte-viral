@@ -427,3 +427,36 @@ def test_api_usage_includes_groq_audio(settings_tmp):
     assert u["groq"] == {"seconds": 250.0, "requests": 1, "limit_seconds": 1000, "percent": 25.0,
                          "rate_limited": False}
     assert u["percent"] == 0.0  # o % do Gemini não mistura com o áudio do Groq
+
+
+def test_ingest_auto_analyzes_and_renders_best_clips(settings_tmp, monkeypatch):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    seen, rendered = {}, {}
+
+    def fake_analyze(project, settings, n=None, profile=None, on_progress=None):
+        seen.update(n=n, profile=profile, provider=settings.llm.provider,
+                    range=(settings.analysis.min_seconds, settings.analysis.max_seconds))
+        moments = [{"id": f"m{i}", "start": i * 60.0, "end": i * 60.0 + 30, "score": sc}
+                   for i, sc in enumerate([50, 90, 70, 80])]
+        write_json_atomic(project.path(MOMENTS), {"profile": profile, "moments": moments})
+        return moments
+
+    def fake_render_all(project, settings, chosen, preview=False, captions=None, on_progress=None):
+        rendered.update(ids=[m["id"] for m in chosen], preview=preview)
+        on_progress(1.0, "pronto")
+
+    monkeypatch.setattr("corteviral.server.app.render_all", fake_render_all)
+    c = TestClient(create_app(settings_tmp, pipeline=_fake_pipeline(settings_tmp), analyzer=fake_analyze))
+    r = c.post("/api/jobs", json={"source": "https://youtu.be/abc", "model": "small", "cookies_from_browser": "firefox",
+                                  "auto": True, "n": 3, "min_seconds": 15, "max_seconds": 60, "provider": "none"})
+    job = _wait(c, r.json()["id"])
+    assert job["status"] == "done" and job["auto"] is True and job["stage"] == "render", job
+    assert seen == {"n": 3, "profile": "viral", "provider": "none", "range": (15, 60)}
+    assert rendered == {"ids": ["m1", "m3", "m2"], "preview": False}  # os 3 de maior nota
+
+
+def test_ingest_without_auto_stops_after_transcription(client):
+    job = _wait(client, client.post("/api/jobs", json={"source": "https://youtu.be/abc", "model": "small",
+                                                       "cookies_from_browser": "firefox"}).json()["id"])
+    assert job["stage"] == "transcribe" and job["auto"] is False

@@ -67,6 +67,7 @@ class JobRequest(BaseModel):
     ids: list[str] | None = None    # render
     preview: bool = False           # render
     force: bool = False             # analyze: ignora o cache e reavalia
+    auto: bool = False              # ingest: já encontra os momentos e gera os n melhores clipes
     post: bool = False              # export: também pôr na fila de postagem (só com confirmação do usuário)
     captions: bool | None = None    # render: força legendas ligadas/desligadas
     profile: Literal["viral", "monetizacao"] | None = None
@@ -340,6 +341,18 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                          on_progress=lambda f, m: progress("analyze", f, m))
             else:
                 project = pipeline(req.source, s, progress)
+                if req.auto:  # do link aos clipes prontos numa tarefa só
+                    job.update(stage="analyze", project=project.dir.name, progress=0.0,
+                               message="procurando os melhores momentos")
+                    analyzer(project, s, n=req.n, profile=req.profile or s.analysis.profile,
+                             on_progress=lambda f, m: progress("analyze", f, m))
+                    saved = load_moments(project) or {"moments": []}
+                    best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"),
+                                  key=lambda m: m.get("score", 0), reverse=True)[:req.n or s.analysis.n_clips]
+                    if best:
+                        job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
+                        render_all(project, s, best, preview=False,
+                                   on_progress=lambda f, m: progress("render", f, m))
             job.update(status="done", project=project.dir.name, progress=1.0, message="concluído")
         except (IngestError, FFmpegError, FileNotFoundError, PublishError) as e:
             job.update(status="error", error=str(e))
@@ -364,7 +377,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             job_id = uuid.uuid4().hex[:12]
             jobs.jobs[job_id] = {"id": job_id, "source": req.source, "status": "running",
                                  "stage": "ingest", "progress": 0.0, "message": "iniciando",
-                                 "error": None, "project": None, "started_at": time.time()}
+                                 "error": None, "project": None, "started_at": time.time(),
+                                 "auto": req.auto}
             jobs.running = job_id
         threading.Thread(target=_run_job, args=(job_id, req), daemon=True).start()
         return jobs.jobs[job_id]

@@ -3,6 +3,12 @@ import { $, api, esc } from "../api.js";
 import { startJob } from "../jobs.js";
 import { openSheet, toast } from "../ui.js";
 import { accountsSection, bindAccounts, loginChoice } from "./settings.js";
+import { DURATIONS } from "../views/moments.js";
+
+const AUTO_KEY = "cv.autoClips";  // última escolha de cortes automáticos (só conveniência deste navegador)
+const AUTO_DEFAULT = { on: true, n: 5, dur: "15-60" };
+const loadAuto = () => { try { return { ...AUTO_DEFAULT, ...JSON.parse(localStorage.getItem(AUTO_KEY) || "{}") }; } catch (e) { return { ...AUTO_DEFAULT }; } };
+const saveAuto = (a) => { try { localStorage.setItem(AUTO_KEY, JSON.stringify(a)); } catch (e) { /* sem armazenamento */ } };
 
 // "1:20:00", "80:00", "4800" ou "1h20m" → segundos (null se vazio, NaN se inválido)
 export function parseTime(text) {
@@ -33,6 +39,14 @@ export function openNewVideo(from) {
           <button data-lang="pt" aria-pressed="true">Português</button><button data-lang="en" aria-pressed="false">Inglês</button>
           <button data-lang="auto" aria-pressed="false">Detectar</button></div></div>
     </div>
+    <div class="row" style="align-items:flex-end;gap:14px">
+      <label class="switch"><input type="checkbox" id="nvAuto"><span class="track"></span><span>Já gerar os cortes</span></label>
+      <div class="field" style="width:96px"><label for="nvN">Quantos</label>
+        <input class="input num" id="nvN" type="number" min="1" max="30"></div>
+      <div class="field" style="width:220px"><label for="nvDur">Duração do clipe</label>
+        <select class="select" id="nvDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+    </div>
+    <div class="t-small" id="nvAutoHint">Ao terminar, abre direto nos clipes prontos para você ajustar e exportar.</div>
     <details id="nvPart"><summary style="cursor:pointer"><b>Só um trecho do vídeo</b>
         <span class="t-small">— já assistiu? Escolha onde estão os cortes e não transcreve o vídeo inteiro</span></summary>
       <div class="stack" style="margin-top:12px">
@@ -53,6 +67,16 @@ export function openNewVideo(from) {
   bindAccounts(body);
 
   let model = "medium", lang = "pt";
+  const auto = loadAuto();
+  $("#nvAuto", body).checked = auto.on;
+  $("#nvN", body).value = auto.n;
+  $("#nvDur", body).value = DURATIONS.some(([k]) => k === auto.dur) ? auto.dur : "15-60";
+  const syncAuto = () => {
+    const on = $("#nvAuto", body).checked;
+    $("#nvN", body).disabled = !on; $("#nvDur", body).disabled = !on; $("#nvAutoHint", body).hidden = !on;
+  };
+  $("#nvAuto", body).onchange = syncAuto;
+  syncAuto();
   body.querySelectorAll("[data-model]").forEach((b) => b.onclick = () => { model = b.dataset.model; body.querySelectorAll("[data-model]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
   body.querySelectorAll("[data-lang]").forEach((b) => b.onclick = () => { lang = b.dataset.lang; body.querySelectorAll("[data-lang]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
   $("#pick", body).onclick = async () => {
@@ -79,8 +103,12 @@ export function openNewVideo(from) {
     if (!source) { $("#nvSrc", body).focus(); toast("Cole um link ou escolha um arquivo.", "bad"); return; }
     const part = $("#nvPart", body).open ? readPart() : null;
     if (part && part.error) { $(part.field, body).focus(); toast(part.error, "bad"); return; }
+    const on = $("#nvAuto", body).checked, n = Math.max(1, Math.min(30, +$("#nvN", body).value || 5)), dur = $("#nvDur", body).value;
+    saveAuto({ on, n, dur });
+    const [lo, hi] = dur.split("-").map(Number);
     s.close();
     startJob({ kind: "ingest", source, model, language: lang, ...loginChoice(body),
+               ...(on ? { auto: true, n, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" } : {}),
                ...(part ? { section_start: part.start, section_end: part.end } : {}) });
   };
   $("#go", foot).onclick = submit;

@@ -45,6 +45,7 @@ export async function renderClips(root, name, project, ctx = {}) {
       </div>
       <div class="t-small" style="margin-top:8px">Mudanças de legenda e layout valem para os próximos clipes gerados — use “Gerar de novo” nos que já existem.</div>
     </section>
+    <section class="card pad stack" id="board" style="margin-bottom:18px" hidden></section>
     <div class="grid-clips">
       <section class="stack">
         <div class="seg" role="group" aria-label="Filtrar">
@@ -103,6 +104,45 @@ export async function renderClips(root, name, project, ctx = {}) {
       el.onclick = pick;
       el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
     });
+  }
+
+  // todos os clipes prontos lado a lado: assistir, aprovar/descartar, abrir o ajuste e exportar sem trocar de tela
+  function renderBoard() {
+    const board = $("#board", root);
+    const ready = byScore.filter((m) => (d.clips || {})[m.id]?.final);
+    board.hidden = !ready.length;
+    if (!ready.length) return;
+    const keep = ready.filter((m) => m.status !== "discarded");
+    board.innerHTML = `
+      <div class="row"><b class="t-title">Clipes prontos <span class="num muted">(${ready.length})</span></b>
+        <span class="t-small">Assista, aprove ou descarte; “Ajustar” abre o corte, a legenda e os textos logo abaixo.</span>
+        <span class="spacer"></span>
+        <button class="btn primary" id="expAll" ${keep.length ? "" : "disabled"}>⬇ Exportar ${keep.length} clipe(s)</button></div>
+      <div class="board">${ready.map((m) => `
+        <article class="board-card ${m.status === "discarded" ? "discarded" : ""}" data-id="${esc(m.id)}">
+          <video class="vertical" controls preload="metadata" src="${P("/clips/")}${enc(m.id)}"></video>
+          <div class="row" style="gap:8px;flex-wrap:nowrap">
+            <div class="${scoreClass(m.score)}" style="width:34px;height:34px;border-radius:10px;font-size:13px;flex:none"><span class="num">${m.score}</span></div>
+            <div style="min-width:0"><div class="m-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(title(m))}</div>
+              <div class="t-small num">${fmt(m.start)} · ${Math.round(m.end - m.start)} s</div></div></div>
+          <div class="row" style="gap:6px">
+            <button class="btn ${m.status === "approved" ? "on" : ""}" data-bs="approved" aria-pressed="${m.status === "approved"}">${m.status === "approved" ? "✓ Aprovado" : "Aprovar"}</button>
+            <button class="btn ${m.status === "discarded" ? "on" : ""}" data-bs="discarded" aria-pressed="${m.status === "discarded"}">${m.status === "discarded" ? "Descartado" : "Descartar"}</button>
+            <button class="btn plain" data-adjust>Ajustar ›</button></div>
+        </article>`).join("")}</div>`;
+    board.querySelectorAll(".board-card").forEach((card) => {
+      const m = d.moments.find((x) => x.id === card.dataset.id);
+      card.querySelectorAll("[data-bs]").forEach((b) => b.onclick = async () => {
+        const status = m.status === b.dataset.bs ? "pending" : b.dataset.bs;
+        try { await patch(m.id, { status }); renderBoard(); renderList(); if (state.selected === m.id) renderDetail(); }
+        catch (err) { toast(err.message, "bad"); }
+      });
+      $("[data-adjust]", card).onclick = () => {
+        state.selected = m.id; renderList(); renderDetail();
+        $("#detail", root).scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+    });
+    $("#expAll", board).onclick = () => startJob({ kind: "export", project: name, ids: keep.map((m) => m.id) });
   }
 
   function markStatus(box, m) {  // atualiza só os botões, sem recarregar os vídeos nem perder o que foi digitado
@@ -274,7 +314,7 @@ export async function renderClips(root, name, project, ctx = {}) {
     box.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => { ui.view = b.dataset.view; renderDetail(); });
     box.querySelectorAll("[data-status]").forEach((b) => b.onclick = async () => {
       const status = m.status === b.dataset.status ? "pending" : b.dataset.status;
-      try { await patch(m.id, { status }); renderList(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }
+      try { await patch(m.id, { status }); renderList(); renderBoard(); markStatus(box, m); } catch (err) { toast(err.message, "bad"); }
     });
     $("#gen", box).onclick = () => startJob({ kind: "render", project: name, ids: [m.id] });
     $("#expOne", box).onclick = async () => {  // exporta só este clipe, sem esperar os outros
@@ -420,6 +460,7 @@ Pôr este clipe na fila de postagem do ${nets.join(", ")}?
     };
   }
 
+  renderBoard();
   renderList();
   renderDetail();
 }

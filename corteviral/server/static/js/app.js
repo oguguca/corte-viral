@@ -111,6 +111,14 @@ function init() {
       toast(r.queued ? `${r.queued} clipe(s) na fila: o primeiro sai às ${hhmm(r.first_at)} e o último às ${hhmm(r.last_at)}.`
         : "Esses clipes já estavam na fila.", "good");
     }
+    if (job.auto && job.project) {  // cortes automáticos: abre direto nos clipes prontos
+      await renderProjects();
+      const step = job.stage === "render" ? "clips" : "moments";
+      const r = parse();
+      if (r.view === "project" && r.name === job.project && r.step === step) render();
+      else go(job.project, step);
+      return;
+    }
     if (job.stage === "transcribe" || job.stage === "ingest") {
       await renderProjects();
       const r = parse();
