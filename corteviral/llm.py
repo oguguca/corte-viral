@@ -165,10 +165,14 @@ Para cada clipe, escreva os textos de postagem em {lang}:
 - hook: título de gancho escrito na tela nos 2 primeiros segundos (até 8 palavras, sem hashtag, direto e
   chamativo, provoca curiosidade sem entregar o final; prefira pergunta, ex.: "Ele realmente falou isso sobre GTA 6?").
 - Para cada rede (tiktok, shorts, reels, kwai): title, description e hashtags.
-  - title: o melhor título possível para ganhar views (até 70 caracteres). Use o que funciona em cortes virais:
-    curiosidade aberta ("…e ninguém esperava isso"), reação forte, número ou detalhe concreto do momento,
-    palavra-chave do jogo no começo (GTA 6). Nada de clickbait mentiroso, nada de CAIXA ALTA no título todo,
-    no máximo 1 emoji.
+  - title: o melhor título possível para ganhar views (até 70 caracteres): uma frase direta que desperta
+    curiosidade, sem hashtag nenhuma no título (o app coloca só #shorts no YouTube; as hashtags vão no campo
+    hashtags). Use o que funciona em cortes virais: curiosidade aberta ("…e ninguém esperava isso"), reação
+    forte, número ou detalhe concreto do momento. Nada de clickbait mentiroso, nada de CAIXA ALTA no título
+    todo, no máximo 1 emoji.
+  - Varie os títulos de um clipe para o outro, sempre de acordo com o vídeo: não repita o mesmo molde nem o
+    mesmo começo. Alterne entre pergunta ("Ele realmente…?"), afirmação surpreendente, fala marcante entre
+    aspas, "Quando…"/"O dia em que…" e detalhe concreto do momento.
   - description: 1–2 frases + uma pergunta que faça a pessoa comentar.
   - hashtags: tiktok/kwai/shorts 6–8 (amplas como #gta6 #gaming + de nicho do momento + nome do streamer
     sem espaços); reels no máximo 5 (o Instagram limita a 5).
@@ -177,7 +181,8 @@ Para cada clipe, escreva os textos de postagem em {lang}:
 - Adapte o tom: tiktok/kwai mais informal e com gírias; shorts direto e com palavra-chave no início do título
   (bom para busca); reels mais visual e com emoji.
 - Em shorts, pense em busca + retenção do YouTube:
-  - title: palavra-chave mais buscada nas primeiras palavras ("GTA 6: …"), curiosidade no final, até 70 caracteres.
+  - title: inclua a palavra-chave mais buscada (GTA 6) de forma natural, curiosidade, até 70 caracteres; não
+    comece todos os títulos com "GTA 6:" — varie a posição da palavra-chave.
   - description: 2–3 frases naturais que repetem as palavras-chave do título (GTA 6, trailer, nome do
     streamer, assunto do momento), depois uma pergunta para comentar e um convite curto para se inscrever.
   - hashtags: as 3 primeiras são as mais fortes (o YouTube mostra essas acima do título), ex.: #gta6 #gta #shorts.
@@ -188,9 +193,13 @@ Clipes:
 """
 
 
-def _posts_prompt(items: list[dict], language: str) -> str:
+def _posts_prompt(items: list[dict], language: str, avoid: list[str] | tuple = ()) -> str:
     lang = "português do Brasil" if (language or "pt").startswith("pt") else f"no idioma '{language}'"
-    return POSTS_INSTRUCTIONS.format(lang=lang) + json.dumps(items, ensure_ascii=False)
+    head = POSTS_INSTRUCTIONS.format(lang=lang)
+    if avoid:
+        head = (head.replace("Clipes:\n", "") + "Títulos já usados em outros clipes deste vídeo (varie: não repita "
+                "o molde nem o começo destes):\n" + "\n".join(f"- {t}" for t in list(avoid)[-20:]) + "\nClipes:\n")
+    return head + json.dumps(items, ensure_ascii=False)
 
 
 class LLMError(Exception):
@@ -252,10 +261,10 @@ class GeminiClient:
             raise LLMError("revisão em vídeo veio incompleta")
         return data
 
-    def write_posts(self, items: list[dict], language: str) -> list[dict]:
+    def write_posts(self, items: list[dict], language: str, avoid: list[str] | tuple = ()) -> list[dict]:
         """Gancho + título/descrição/hashtags para TikTok, Shorts, Reels e Kwai (um item por clipe)."""
         body = {
-            "contents": [{"parts": [{"text": _posts_prompt(items, language)}]}],
+            "contents": [{"parts": [{"text": _posts_prompt(items, language, avoid)}]}],
             "generationConfig": {"responseMimeType": "application/json", "responseSchema": POSTS_SCHEMA,
                                  "temperature": 0.7},
         }

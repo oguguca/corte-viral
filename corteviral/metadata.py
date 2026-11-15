@@ -72,22 +72,16 @@ def normalize_keywords(tags) -> list[str]:
 YT_TITLE_CHARS = 100
 
 
-def youtube_title(title: str, hashtags: list[str], limit: int = YT_TITLE_CHARS) -> str:
-    """Título do Shorts com o máximo de hashtags que couber em `limit` caracteres (#shorts primeiro).
+def strip_hashtags(title: str) -> str:
+    """Título limpo: frase direta, sem hashtags (elas vão na descrição/campo próprio de cada rede)."""
+    return " ".join(w for w in str(title or "").split() if not w.startswith("#"))
 
-    Não repete hashtag que já está no título e nunca corta o título original.
-    """
-    title = " ".join(str(title or "").split())
-    have = {w.lower() for w in title.split() if w.startswith("#")}
-    tags = ["#shorts"] + [h for h in hashtags or [] if h.startswith("#") and len(h) > 1]
-    out = title[:limit]
-    for h in tags:
-        if h.lower() in have:
-            continue
-        if len(out) + 1 + len(h) <= limit:
-            out = f"{out} {h}"
-            have.add(h.lower())
-    return out
+
+def youtube_title(title: str, hashtags: list[str] | None = None, limit: int = YT_TITLE_CHARS) -> str:
+    """Título do Shorts: a frase limpa + só #shorts no fim (sem encher de hashtag). `hashtags` é ignorado
+    (mantido por compatibilidade: as outras hashtags vão na descrição). Nunca corta o título original."""
+    base = strip_hashtags(title)[:limit]
+    return f"{base} #shorts" if len(base) + len(" #shorts") <= limit else base
 
 
 def _credit_line(credit: str | None) -> str:
@@ -98,10 +92,9 @@ def _credit_line(credit: str | None) -> str:
 
 
 def normalize_post(post: dict, platform: str, credit: str | None) -> dict:
-    title = str(post.get("title") or "")
+    title = strip_hashtags(post.get("title") or "")
     if platform == "shorts":
-        base = re.sub(r"#shorts", "", title, flags=re.IGNORECASE).strip()
-        title = (fit(base, TITLE_MAX["shorts"] - len(" #shorts")) + " #shorts") if base else ""
+        title = (fit(title, TITLE_MAX["shorts"] - len(" #shorts")) + " #shorts") if title else ""
     else:
         title = fit(title, TITLE_MAX[platform])
     credit_line = _credit_line(credit)
@@ -160,6 +153,9 @@ def generate_posts(project: Project, ids: list[str], settings: Settings, client=
     can_write = llm is not None and hasattr(llm, "write_posts")
     results: dict[str, dict] = {}
     stats = {"ai": 0, "fallback": 0}
+    # títulos que já existem no projeto: a IA varia a estrutura em vez de repetir o mesmo molde
+    used = [strip_hashtags((m.get("meta") or {}).get("posts", {}).get("shorts", {}).get("title", ""))
+            for m in data.get("moments", []) if m["id"] not in set(ids) and m.get("meta")]
     language = project.data.get("language") or "pt"
     for i in range(0, len(moments), BATCH):
         batch = moments[i:i + BATCH]
@@ -169,7 +165,7 @@ def generate_posts(project: Project, ids: list[str], settings: Settings, client=
                       "hook_hint": m.get("hook", ""), "transcript": (m.get("text") or "")[:1200],
                       "streamer": streamer or ""} for m in batch]
             try:
-                got = {it["id"]: it for it in llm.write_posts(items, language)
+                got = {it["id"]: it for it in llm.write_posts(items, language, avoid=[u for u in used if u])
                        if isinstance(it, dict) and isinstance(it.get("id"), str)}
             except LLMError as e:
                 log.warning("IA não gerou textos (%s); usando textos simples.", e)
@@ -178,6 +174,7 @@ def generate_posts(project: Project, ids: list[str], settings: Settings, client=
             if m["id"] in got:
                 results[m["id"]] = _from_ai(got[m["id"]], credit, fb)
                 stats["ai"] += 1
+                used.append(strip_hashtags(results[m["id"]]["posts"]["shorts"]["title"]))
             else:
                 results[m["id"]] = fb
                 stats["fallback"] += 1

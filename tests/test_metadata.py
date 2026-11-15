@@ -69,8 +69,9 @@ class FakeWriter:
         self.calls = 0
         self.fail = fail
 
-    def write_posts(self, items, language):
+    def write_posts(self, items, language, avoid=()):
         self.calls += 1
+        self.avoid = list(avoid)
         if self.fail:
             raise LLMError("fora do ar")
         return [{"id": it["id"], "hook": "Gancho " + it["id"], **{p: _post(f"Título {it['id']} {p}") for p in PLATFORMS}}
@@ -127,13 +128,32 @@ def test_shorts_has_youtube_tags():
     assert "tags" not in normalize_post({"title": "t", "description": "x", "hashtags": []}, "tiktok", None)
 
 
-def test_youtube_title_fills_hashtags_up_to_100_chars():
+def test_youtube_title_keeps_only_shorts_tag():
     from corteviral.metadata import youtube_title
-    t = youtube_title("GTA 6: A cena da Lucy #shorts", ["#gta6", "#gta", "#shorts", "#gtavi", "#coringa",
-                                                    "#coringareage", "#lucygta6", "#trailergta6", "#gaming"])
-    assert len(t) <= 100 and t.startswith("GTA 6: A cena da Lucy #shorts #gta6 #gta #gtavi")
-    assert t.lower().count("#shorts") == 1  # não repete
-    assert len(t) > 100 - len(" #gaming") or "#gaming" in t  # enche até onde cabe
+    t = youtube_title("Ele falou isso do GTA 6? #gta6 #shorts", ["#gta6", "#gta", "#shorts", "#gaming"])
+    assert t == "Ele falou isso do GTA 6? #shorts"  # título limpo: só #shorts, sem encher de hashtag
+    assert youtube_title("Corte", []) == "Corte #shorts"
     long = "x" * 98
     assert youtube_title(long, ["#gta6"]) == long  # não corta o título para caber hashtag
-    assert youtube_title("Corte", []) == "Corte #shorts"
+
+
+def test_titles_never_carry_hashtags():
+    for plat in PLATFORMS:
+        p = normalize_post({"title": "Ninguém esperava isso #gta6 #fyp", "description": "x", "hashtags": ["#gta6"]},
+                           plat, None)
+        clean = p["title"].replace(" #shorts", "")
+        assert "#" not in clean and clean.startswith("Ninguém esperava isso"), (plat, p["title"])
+
+
+def test_generate_posts_sends_used_titles_to_vary(settings_tmp):
+    p = _project(settings_tmp)
+    w = FakeWriter()
+    generate_posts(p, ["m1"], settings_tmp, client=w)  # m1 ganha "Título m1 shorts"
+    generate_posts(p, ["m2"], settings_tmp, client=w)
+    assert "Título m1 shorts" in w.avoid  # a IA recebe os títulos já usados para não repetir o padrão
+
+
+def test_posts_prompt_asks_for_clean_and_varied_titles():
+    from corteviral.llm import _posts_prompt
+    txt = _posts_prompt([{"id": "m1"}], "pt", avoid=["GTA 6: ele surtou"])
+    assert "sem hashtag" in txt and "GTA 6: ele surtou" in txt and "varie" in txt.lower()
