@@ -453,7 +453,7 @@ def test_ingest_auto_analyzes_and_renders_best_clips(settings_tmp, monkeypatch):
     job = _wait(c, r.json()["id"])
     assert job["status"] == "done" and job["auto"] is True and job["stage"] == "render", job
     assert seen == {"n": 3, "profile": "viral", "provider": "none", "range": (15, 60)}
-    assert rendered == {"ids": ["m1", "m3", "m2"], "preview": False}  # os 3 de maior nota
+    assert rendered == {"ids": ["m1", "m3", "m2", "m0"], "preview": False}  # tudo que a análise escolheu, por nota
 
 
 def test_ingest_without_auto_stops_after_transcription(client):
@@ -480,4 +480,4 @@ def test_analyze_auto_renders_best_clips(settings_tmp, monkeypatch):
     job = _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "n": 2, "auto": True,
                                              "min_seconds": 15, "max_seconds": 60}).json()["id"])
     assert job["status"] == "done" and job["stage"] == "render" and job["auto"] is True
-    assert rendered == {"ids": ["m1", "m2"]}
+    assert rendered == {"ids": ["m1", "m2", "m0"]}

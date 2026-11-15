@@ -17,15 +17,14 @@ export async function renderClips(root, name, project, ctx = {}) {
   let d;
   try { d = await api(P("/moments")); } catch (e) {
     root.innerHTML = `<div class="card pad"><div class="empty"><div class="big">✨</div>
-      A IA encontra os melhores momentos deste vídeo e já gera os clipes.
+      A IA encontra os momentos fortes deste vídeo, decide quantos valem a pena e já gera os clipes.
       <div class="row" style="justify-content:center;align-items:flex-end;gap:14px;margin-top:14px">
-        <div class="field" style="width:96px"><label for="gN">Quantos</label><input class="input num" id="gN" type="number" min="1" max="30" value="5"></div>
         <div class="field" style="width:220px"><label for="gDur">Duração do clipe</label>
           <select class="select" id="gDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}" ${k === "20-35" ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <button class="btn primary large" id="genAuto">Gerar cortes</button></div></div></div>`;
     $("#genAuto", root).onclick = () => {
-      const n = Math.max(1, Math.min(30, +$("#gN", root).value || 5)), [lo, hi] = $("#gDur", root).value.split("-").map(Number);
-      startJob({ kind: "analyze", project: name, auto: true, n, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" });
+      const [lo, hi] = $("#gDur", root).value.split("-").map(Number);
+      startJob({ kind: "analyze", project: name, auto: true, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral" });
     };
     return;
   }

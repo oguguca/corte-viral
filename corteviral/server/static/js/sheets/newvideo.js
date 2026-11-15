@@ -6,7 +6,7 @@ import { accountsSection, bindAccounts, loginChoice } from "./settings.js";
 import { DURATIONS } from "../views/moments.js";
 
 const AUTO_KEY = "cv.autoClips";  // última escolha de cortes automáticos (só conveniência deste navegador)
-const AUTO_DEFAULT = { n: 5, dur: "20-35" };
+const AUTO_DEFAULT = { dur: "20-35" };
 const loadAuto = () => { try { return { ...AUTO_DEFAULT, ...JSON.parse(localStorage.getItem(AUTO_KEY) || "{}") }; } catch (e) { return { ...AUTO_DEFAULT }; } };
 const saveAuto = (a) => { try { localStorage.setItem(AUTO_KEY, JSON.stringify(a)); } catch (e) { /* sem armazenamento */ } };
 
@@ -40,12 +40,11 @@ export function openNewVideo(from) {
           <button data-lang="auto" aria-pressed="false">Detectar</button></div></div>
     </div>
     <div class="row" style="align-items:flex-end;gap:14px">
-      <div class="field" style="width:96px"><label for="nvN">Quantos</label>
-        <input class="input num" id="nvN" type="number" min="1" max="30"></div>
       <div class="field" style="width:220px"><label for="nvDur">Duração do clipe</label>
         <select class="select" id="nvDur">${DURATIONS.filter(([k]) => k !== "custom").map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
     </div>
-    <div class="t-small">Ao terminar, abre direto nos clipes prontos para você ajustar e exportar.</div>
+    <div class="t-small">A IA decide quantos cortes valem a pena (todo momento forte vira clipe). Ao terminar,
+      abre direto nos clipes prontos para você ajustar e exportar.</div>
     <details id="nvPart"><summary style="cursor:pointer"><b>Só um trecho do vídeo</b>
         <span class="t-small">— já assistiu? Escolha onde estão os cortes e não transcreve o vídeo inteiro</span></summary>
       <div class="stack" style="margin-top:12px">
@@ -67,7 +66,6 @@ export function openNewVideo(from) {
 
   let model = "medium", lang = "pt";
   const auto = loadAuto();
-  $("#nvN", body).value = auto.n;
   $("#nvDur", body).value = DURATIONS.some(([k]) => k === auto.dur) ? auto.dur : "20-35";
 
   body.querySelectorAll("[data-model]").forEach((b) => b.onclick = () => { model = b.dataset.model; body.querySelectorAll("[data-model]").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
@@ -96,12 +94,12 @@ export function openNewVideo(from) {
     if (!source) { $("#nvSrc", body).focus(); toast("Cole um link ou escolha um arquivo.", "bad"); return; }
     const part = $("#nvPart", body).open ? readPart() : null;
     if (part && part.error) { $(part.field, body).focus(); toast(part.error, "bad"); return; }
-    const n = Math.max(1, Math.min(30, +$("#nvN", body).value || 5)), dur = $("#nvDur", body).value;
-    saveAuto({ n, dur });
+    const dur = $("#nvDur", body).value;
+    saveAuto({ dur });
     const [lo, hi] = dur.split("-").map(Number);
     s.close();
     startJob({ kind: "ingest", source, model, language: lang, ...loginChoice(body),
-               auto: true, n, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral",
+               auto: true, min_seconds: lo, max_seconds: hi, profile: lo >= 61 ? "monetizacao" : "viral",
                ...(part ? { section_start: part.start, section_end: part.end } : {}) });
   };
   $("#go", foot).onclick = submit;

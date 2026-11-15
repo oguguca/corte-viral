@@ -270,7 +270,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         def render_best(project: Project) -> None:  # cortes automáticos: gera os n de maior nota
             saved = load_moments(project) or {"moments": []}
             best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"),
-                          key=lambda m: m.get("score", 0), reverse=True)[:req.n or s.analysis.n_clips]
+                          key=lambda m: m.get("score", 0), reverse=True)  # a análise já escolheu quantos
             if best:
                 job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
                 render_all(project, s, best, preview=False, on_progress=lambda f, m: progress("render", f, m))

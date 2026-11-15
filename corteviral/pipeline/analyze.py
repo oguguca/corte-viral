@@ -11,7 +11,7 @@ from corteviral.config import Settings
 from corteviral.feedback import FeedbackStore
 from corteviral.llm import DEFAULT_MODELS, make_client
 from corteviral.models import Transcript
-from corteviral.pipeline.boundaries import duration_range, select, snap_bounds
+from corteviral.pipeline.boundaries import duration_range, select, select_auto, snap_bounds
 from corteviral.pipeline.candidates import find_candidates
 from corteviral.pipeline.deep_review import deep_review
 from corteviral.pipeline.scoring import score_candidates
@@ -34,7 +34,12 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
     s = settings.model_copy(deep=True)
     if profile:
         s.analysis.profile = profile
-    n = n or s.analysis.n_clips
+    n = n or s.analysis.n_clips  # None: a IA decide quantos
+
+    def choose(moments: list[dict], priority=None) -> list[dict]:
+        if n:
+            return select(moments, n, priority=priority)
+        return select_auto(moments, s.analysis.min_score, s.analysis.max_auto_clips, priority=priority)
     prog = on_progress or (lambda f, m: None)
 
     provider = s.llm.provider
@@ -48,7 +53,8 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
     if project.is_stage_done("scoring", params) and saved and "all" in saved:
         # mudar só a quantidade não precisa da IA: refaz a seleção sobre tudo que já foi pontuado
         if saved.get("n") != n:
-            saved["moments"] = select(saved["all"], n)
+            watched = any(m.get("ai") == "video" for m in saved["all"])
+            saved["moments"] = choose(saved["all"], (lambda m: m.get("ai") == "video") if watched else None)
             saved["n"] = n
             write_json_atomic(project.path(MOMENTS), saved)
         prog(1.0, "momentos já calculados")
@@ -89,7 +95,7 @@ def analyze(project: Project, settings: Settings, n: int | None = None, profile:
                                       on_progress=lambda f, m: prog(0.62 + 0.33 * f, m))
     stats["deep"] = deep_stats
     watched = any(m.get("ai") == "video" for m in moments)
-    chosen = select(moments, n, priority=(lambda m: m.get("ai") == "video") if watched else None)
+    chosen = choose(moments, (lambda m: m.get("ai") == "video") if watched else None)
 
     # Só vira cache se a IA avaliou tudo que devia: senão a próxima execução tenta de novo
     complete = provider == "none" or (llm is not None and not stats["rate_limited"] and not stats["errors"]

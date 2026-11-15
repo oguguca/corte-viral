@@ -62,3 +62,30 @@ def test_select_with_priority_ranks_watched_first():
           {"id": "u", "start": 100, "end": 120, "score": 55, "ai": True}]
     out = select(ms, n=2, priority=lambda m: m.get("ai") == "video")
     assert [m["id"] for m in out] == ["w", "u"]
+
+
+def test_select_auto_takes_every_good_moment_without_overlap():
+    from corteviral.pipeline.boundaries import select_auto
+    ms = [{"id": "a", "start": 0, "end": 30, "score": 90}, {"id": "b", "start": 5, "end": 35, "score": 85},
+          {"id": "c", "start": 100, "end": 130, "score": 72}, {"id": "d", "start": 200, "end": 230, "score": 60}]
+    assert [m["id"] for m in select_auto(ms, min_score=70, max_n=30)] == ["a", "c"]
+
+
+def test_select_auto_keeps_best_when_none_is_good():
+    from corteviral.pipeline.boundaries import select_auto
+    ms = [{"id": "a", "start": 0, "end": 30, "score": 40}, {"id": "b", "start": 100, "end": 130, "score": 55}]
+    assert [m["id"] for m in select_auto(ms, min_score=70, max_n=30)] == ["b"]
+
+
+def test_select_auto_prefers_watched_pool():
+    from corteviral.pipeline.boundaries import select_auto
+    ms = [{"id": "w", "start": 0, "end": 30, "score": 75, "ai": "video"},
+          {"id": "t", "start": 100, "end": 130, "score": 95, "ai": True}]
+    watched = lambda m: m.get("ai") == "video"
+    assert [m["id"] for m in select_auto(ms, min_score=70, max_n=30, priority=watched)] == ["w"]
+
+
+def test_select_auto_respects_cap():
+    from corteviral.pipeline.boundaries import select_auto
+    ms = [{"id": str(i), "start": i * 100, "end": i * 100 + 30, "score": 80} for i in range(10)]
+    assert len(select_auto(ms, min_score=70, max_n=4)) == 4

@@ -128,3 +128,14 @@ def test_changing_n_does_not_call_llm(settings_tmp, monkeypatch):
     assert after_first >= 1 and len(calls) == after_first  # nenhum lote novo para a IA
     assert len(b) == 1 and b[0]["id"] == a[0]["id"]
     assert load_moments(p)["n"] == 1
+
+
+def test_analyze_without_n_lets_quality_decide(settings_tmp):
+    from corteviral.pipeline import analyze as an
+    p = make_project(settings_tmp)
+    settings_tmp.llm.provider = "none"
+    moments = analyze(p, settings_tmp)  # sem n: a nota decide
+    saved = load_moments(p)
+    assert saved["n"] is None and moments
+    good = [m for m in moments if m["score"] >= settings_tmp.analysis.min_score]
+    assert moments == good or len(moments) == 1

@@ -52,7 +52,9 @@ class DownloadSettings(_Strict):
 
 class AnalysisSettings(_Strict):
     profile: Literal["viral", "monetizacao"] = "viral"
-    n_clips: int = 10
+    n_clips: int | None = None   # None: a IA decide (todo momento com nota >= min_score)
+    min_score: int = Field(default=70, ge=0, le=100)   # "vale postar" na régua da IA
+    max_auto_clips: int = Field(default=30, ge=1, le=100)
     max_candidates: int = 60
     # termos extras de reação (regex -> peso), somados ao léxico padrão
     extra_reactions: dict[str, float] = Field(default_factory=dict)

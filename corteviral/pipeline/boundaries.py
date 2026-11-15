@@ -72,6 +72,18 @@ def _overlap(a: dict, b: dict) -> float:
     return inter / shorter
 
 
+def select_auto(moments: list[dict], min_score: int, max_n: int, max_overlap: float = 0.3,
+                priority=None) -> list[dict]:
+    """A IA decide a quantidade: todo momento com nota de "vale postar", sem sobreposição relevante.
+
+    Se a IA assistiu algum trecho, só os assistidos contam (a nota por texto é menos confiável).
+    Nenhum chega à nota mínima: fica só o melhor, para o vídeo nunca sair sem clipe.
+    """
+    pool = [m for m in moments if priority(m)] if priority and any(priority(m) for m in moments) else moments
+    picked = select(pool, max_n, max_overlap)
+    return [m for m in picked if m["score"] >= min_score] or picked[:1]
+
+
 def select(moments: list[dict], n: int, max_overlap: float = 0.3, priority=None) -> list[dict]:
     """Os N de maior nota, sem sobreposição relevante; `priority(m)` verdadeiro vem antes (ex.: assistidos)."""
     out: list[dict] = []
