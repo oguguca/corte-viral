@@ -129,6 +129,32 @@ def test_post_chunk_network_error_raises_groq_error(chunk, monkeypatch):
     def fake(req, timeout=None):
         raise urllib.error.URLError("sem internet")
 
+    slept = []
     monkeypatch.setattr(gt.urllib.request, "urlopen", fake)
     with pytest.raises(GroqError):
-        post_chunk(chunk, "k", "m", None)
+        post_chunk(chunk, "k", "m", None, sleep=slept.append)
+    assert slept == [2.0, 5.0]
+
+
+def test_post_chunk_transient_errors_retry_then_ok(chunk, monkeypatch):
+    errors = [_http_error(503), urllib.error.URLError("wifi caiu")]
+
+    def fake(req, timeout=None):
+        if errors:
+            raise errors.pop(0)
+        return _Resp(b'{"ok": 1}')
+
+    slept = []
+    monkeypatch.setattr(gt.urllib.request, "urlopen", fake)
+    assert post_chunk(chunk, "k", "m", None, sleep=slept.append) == {"ok": 1}
+    assert slept == [2.0, 5.0]
+
+
+def test_parse_response_drops_no_speech_segments():
+    data = {"language": "pt",
+            "segments": [{"start": 0.0, "end": 2.0, "text": " Obrigado.", "no_speech_prob": 0.9},
+                         {"start": 2.0, "end": 3.0, "text": " oi", "no_speech_prob": 0.1}],
+            "words": [{"word": "Obrigado.", "start": 0.5, "end": 1.0}, {"word": "oi", "start": 2.1, "end": 2.5}]}
+    segs, words, _ = parse_response(data, 0)
+    assert [s.text for s in segs] == ["oi"]
+    assert [w.w for w in words] == ["oi"]

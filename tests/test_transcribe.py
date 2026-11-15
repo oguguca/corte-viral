@@ -245,7 +245,31 @@ def test_groq_auth_error_falls_back_to_cpu(groq_setup):
                    groq_http=http, env_file=env)
     assert created == [("small", "cpu")]
     assert [w.w for w in t.words] == ["cpu"]
+    assert "Chave do Groq recusada, usando CPU" in msgs
+
+
+def test_groq_network_error_falls_back_with_generic_message(groq_setup):
+    from corteviral.pipeline.groq_transcribe import GroqError
+    p, s, env = groq_setup
+    msgs = []
+
+    def http(*a):
+        raise GroqError("sem internet")
+
+    transcribe(p, s, on_progress=lambda f, m: msgs.append(m), model_factory=_cpu_factory([]),
+               groq_http=http, env_file=env)
     assert "Groq indisponível, usando CPU" in msgs
+
+
+def test_groq_fallback_reuses_previous_cpu_transcript(groq_setup):
+    p, s, env = groq_setup
+
+    def http(*a):
+        raise GroqAuthError("401")
+
+    t1 = transcribe(p, s, model_factory=_cpu_factory([]), groq_http=http, env_file=env)
+    t2 = transcribe(p, s, model_factory=FakeModel.explode, groq_http=http, env_file=env)
+    assert t2 == t1
 
 
 def test_groq_resume_skips_done_chunks(groq_setup):

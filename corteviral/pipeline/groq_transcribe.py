@@ -19,6 +19,8 @@ from corteviral.models import Segment, Word
 URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 MAX_SHORT_WAIT = 60.0   # s: espera no 429 só se o Groq pedir até isso
 MAX_RETRIES = 2
+BACKOFF = (2.0, 5.0)    # s entre tentativas após erro passageiro (5xx, rede)
+NO_SPEECH = 0.6         # segmento com no_speech_prob acima disso é alucinação em silêncio/música
 _LANGS = {"portuguese": "pt", "english": "en", "spanish": "es"}
 
 HttpFn = Callable[[Path, str, str, "str | None"], dict]
@@ -94,11 +96,19 @@ def post_chunk(path: Path, api_key: str, model: str, language: str | None, timeo
                 raise GroqQuotaExceeded("cota grátis do Groq esgotada (HTTP 429)") from e
             if e.code in (401, 403):
                 raise GroqAuthError(f"chave do Groq recusada (HTTP {e.code})") from e
+            if e.code >= 500 and retries < MAX_RETRIES:
+                sleep(BACKOFF[retries])
+                retries += 1
+                continue
             raise GroqError(f"Groq HTTP {e.code}") from e
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            raise GroqError(f"sem conexão com o Groq: {e}") from e
         except json.JSONDecodeError as e:
             raise GroqError("resposta do Groq fora do formato esperado") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if retries < MAX_RETRIES:
+                sleep(BACKOFF[retries])
+                retries += 1
+                continue
+            raise GroqError(f"sem conexão com o Groq: {e}") from e
 
 
 def _lang_code(name) -> str | None:
@@ -111,11 +121,18 @@ def _lang_code(name) -> str | None:
 
 
 def parse_response(data: dict, offset: float) -> tuple[list[Segment], list[Word], str | None]:
-    """Segmentos e palavras com o deslocamento do pedaço somado; idioma em código de 2 letras."""
+    """Segmentos e palavras com o deslocamento do pedaço somado; idioma em código de 2 letras.
+
+    Segmentos que o Whisper marca como provável silêncio (no_speech_prob alto) saem, com as palavras
+    dentro deles: são as frases fantasmas ("Obrigado.") que ele inventa em silêncio ou música.
+    """
+    raw = data.get("segments") or []
+    noise = [(s["start"], s["end"]) for s in raw if (s.get("no_speech_prob") or 0) > NO_SPEECH]
     segs = [Segment(start=round(s["start"] + offset, 3), end=round(s["end"] + offset, 3),
                     text=str(s.get("text", "")).strip())
-            for s in data.get("segments") or []]
+            for s in raw if (s.get("no_speech_prob") or 0) <= NO_SPEECH]
     words = [Word(w=str(w["word"]).strip(), start=round(w["start"] + offset, 3),
                   end=round(w["end"] + offset, 3), p=1.0)
-             for w in data.get("words") or [] if str(w.get("word", "")).strip()]
+             for w in data.get("words") or [] if str(w.get("word", "")).strip()
+             and not any(a <= (w["start"] + w["end"]) / 2 <= b for a, b in noise)]
     return segs, words, _lang_code(data.get("language"))

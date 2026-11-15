@@ -25,7 +25,7 @@ from corteviral.config import Settings
 from corteviral.llm import _key
 from corteviral.models import Segment, Transcript, Word
 from corteviral.pipeline.groq_transcribe import (
-    GroqError, GroqQuotaExceeded, HttpFn, chunk_plan, encode_chunk, parse_response, post_chunk,
+    GroqAuthError, GroqError, GroqQuotaExceeded, HttpFn, chunk_plan, encode_chunk, parse_response, post_chunk,
 )
 from corteviral.project import Project
 from corteviral.utils import write_json_atomic
@@ -226,7 +226,14 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
             used = (ws.groq_model, "groq")
         except GroqError as e:
             ckpt.save()
+            if out.exists() and not ckpt.resume_at:
+                previous = Transcript.load(out)
+                if previous.model == ws.cpu_fallback_model and previous.device == "cpu":
+                    log.warning("Groq ainda indisponível (%s); reaproveitando a transcrição feita na CPU.", e)
+                    project.path(PARTIAL).unlink(missing_ok=True)
+                    return previous
             msg = ("Cota do Groq esgotada, usando CPU" if isinstance(e, GroqQuotaExceeded)
+                   else "Chave do Groq recusada, usando CPU" if isinstance(e, GroqAuthError)
                    else "Groq indisponível, usando CPU")
             log.warning("%s (%s). Continuando na CPU com o modelo '%s' a partir de %.0fs.",
                         msg, e, ws.cpu_fallback_model, ckpt.resume_at)
