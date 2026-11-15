@@ -64,3 +64,19 @@ def test_trackers_on_same_file_share_lock(tmp_path):
     a = UsageTracker(tmp_path / "usage.json")
     b = UsageTracker(tmp_path / "usage.json")
     assert a._lock is b._lock
+
+
+def test_record_audio_tracks_groq_separately(tmp_path):
+    clock = Clock(datetime(2026, 11, 14, 10, 0))
+    u = UsageTracker(tmp_path / "usage.json", now=clock)
+    u.record("gemini", "m", 100, 20, ok=True)
+    u.record_audio("groq", "whisper-large-v3-turbo", 600.0, ok=True)
+    u.record_audio("groq", "whisper-large-v3-turbo", 100.5, ok=True)
+    u.record_audio("groq", "whisper-large-v3-turbo", 0, ok=False, rate_limited=True)
+    t = u.today()
+    assert t["requests"] == 1 and t["total_tokens"] == 120  # Gemini não muda
+    assert t["audio"]["groq"] == {"requests": 3, "seconds": 700.5, "errors": 1, "rate_limited": True}
+
+
+def test_today_audio_empty_by_default(tmp_path):
+    assert UsageTracker(tmp_path / "usage.json", now=Clock(datetime(2026, 11, 14))).today()["audio"] == {}

@@ -417,3 +417,13 @@ def test_job_section_must_be_valid(settings_tmp):
     bad = {"kind": "ingest", "source": "x.mp4", "section_start": 100, "section_end": 90}
     assert c.post("/api/jobs", json=bad).status_code == 422
     assert c.post("/api/jobs", json={**bad, "section_end": None}).status_code == 422
+
+
+def test_api_usage_includes_groq_audio(settings_tmp):
+    from corteviral.usage import UsageTracker
+    settings_tmp.whisper.groq_daily_audio_seconds = 1000
+    UsageTracker(settings_tmp.paths.data_dir / "usage.json").record_audio("groq", "m", 250.0, ok=True)
+    u = TestClient(create_app(settings_tmp)).get("/api/usage").json()
+    assert u["groq"] == {"seconds": 250.0, "requests": 1, "limit_seconds": 1000, "percent": 25.0,
+                         "rate_limited": False}
+    assert u["percent"] == 0.0  # o % do Gemini não mistura com o áudio do Groq

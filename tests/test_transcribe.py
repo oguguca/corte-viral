@@ -351,3 +351,23 @@ def test_groq_duration_still_zero_uses_local(groq_setup, monkeypatch):
 
     t = transcribe(p, s, model_factory=FakeModel.ok, groq_http=http, env_file=env)
     assert t.device == "cpu"
+
+
+def test_groq_usage_is_recorded(groq_setup):
+    from corteviral.usage import UsageTracker
+    p, s, env = groq_setup
+    transcribe(p, s, model_factory=FakeModel.explode, groq_http=_groq_ok(), env_file=env)
+    g = UsageTracker(s.paths.data_dir / "usage.json").today()["audio"]["groq"]
+    assert g["requests"] == 3 and g["seconds"] == 130.0 and g["errors"] == 0
+
+
+def test_groq_quota_is_recorded_as_rate_limited(groq_setup):
+    from corteviral.usage import UsageTracker
+    p, s, env = groq_setup
+
+    def http(*a):
+        raise GroqQuotaExceeded("429")
+
+    transcribe(p, s, model_factory=_cpu_factory([]), groq_http=http, env_file=env)
+    g = UsageTracker(s.paths.data_dir / "usage.json").today()["audio"]["groq"]
+    assert g["rate_limited"] is True and g["errors"] == 1 and g["seconds"] == 0

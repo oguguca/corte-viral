@@ -20,7 +20,8 @@ try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.
       <div id="themeSlot" style="padding:4px 6px 6px"></div>
       <button class="usage-mini" id="usageMini" aria-label="Uso da IA hoje">
         <span class="ring" id="usageRing" aria-hidden="true"></span>
-        <span><span class="t-small" style="display:block">Uso da IA hoje</span><b class="num" id="usagePct">—</b></span>
+        <span><span class="t-small" style="display:block">Uso da IA hoje</span><b class="num" id="usagePct">—</b>
+          <span class="t-small num" id="usageGroq" style="display:block" hidden></span></span>
       </button>
       <a class="side-item" id="openQueue" href="#/fila"><span class="thumb" aria-hidden="true">⏱</span><span class="meta"><span class="name">Fila de postagem</span><span class="sub" id="queueSub"></span></span></a>
       <a class="side-item" id="openAccounts" href="#/contas"><span class="thumb" aria-hidden="true">🔗</span><span class="meta"><span class="name">Contas conectadas</span></span></a>

@@ -63,6 +63,26 @@ class UsageTracker:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             write_json_atomic(self.path, data)
 
+    def record_audio(self, provider: str, model: str, seconds: float, ok: bool, rate_limited: bool = False) -> None:
+        """Uso de transcrição na nuvem (segundos de áudio), separado dos tokens da IA de texto."""
+        now = self.now()
+        try:
+            with self._lock:
+                data = self._load()
+                day = data["days"].setdefault(now.strftime("%Y-%m-%d"), {
+                    "requests": 0, "errors": 0, "input_tokens": 0, "output_tokens": 0,
+                    "rate_limited": False, "minutes": {}, "models": {}})
+                a = day.setdefault("audio", {}).setdefault(provider, {
+                    "requests": 0, "seconds": 0.0, "errors": 0, "rate_limited": False})
+                a["requests"] += 1
+                a["seconds"] = round(a["seconds"] + (float(seconds or 0) if ok else 0.0), 3)
+                a["errors"] += 0 if ok else 1
+                a["rate_limited"] = a["rate_limited"] or rate_limited
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                write_json_atomic(self.path, data)
+        except OSError as e:  # contabilidade nunca pode derrubar a transcrição
+            log.warning("Não consegui salvar o uso do %s: %s", provider, e)
+
     def today(self) -> dict:
         now = self.now()
         with self._lock:
@@ -77,5 +97,5 @@ class UsageTracker:
             "requests": day.get("requests", 0), "errors": day.get("errors", 0),
             "input_tokens": inp, "output_tokens": out, "total_tokens": inp + out,
             "rate_limited": day.get("rate_limited", False), "models": day.get("models", {}),
-            "per_minute": per_minute,
+            "per_minute": per_minute, "audio": day.get("audio", {}),
         }

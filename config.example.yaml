@@ -15,6 +15,7 @@ whisper:
   cpu_fallback_model: small  # usado se a GPU falhar (CUDA/VRAM)
   engine: auto             # auto: GPU se houver; senão Groq (grátis, precisa GROQ_API_KEY no .env); senão CPU
   groq_model: whisper-large-v3-turbo
+  groq_daily_audio_seconds: 28800  # cota grátis aprox. (8 h de áudio/dia); confira em console.groq.com → Limits
 
 analysis:
   profile: viral           # viral (15–60 s) | monetizacao (61–120 s)

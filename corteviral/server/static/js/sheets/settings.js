@@ -155,7 +155,13 @@ function usageSection() {
     <svg class="chart" id="uChart" role="img" aria-label="Tokens por minuto na última hora"></svg>
     <details><summary class="t-small" style="cursor:pointer">Ver em tabela</summary><div class="t-small num" id="uTable" style="margin-top:8px"></div></details>
     <div class="t-small">O Google não informa a cota grátis pela API: confira em AI Studio → Rate limits e ajuste
-      <code>llm.daily_request_limit</code>/<code>llm.daily_token_limit</code> no config.yaml.</div></div>`;
+      <code>llm.daily_request_limit</code>/<code>llm.daily_token_limit</code> no config.yaml.</div>
+    <div class="t-label" style="margin-top:14px">Transcrição na nuvem (Groq)</div>
+    <div class="row" style="align-items:baseline"><b class="t-display num" id="gPct">—</b><span class="muted">da cota grátis de áudio</span></div>
+    <div class="meter" role="meter" aria-label="Uso da cota de áudio do Groq" aria-valuemin="0" aria-valuemax="100" id="gMeter"><i></i></div>
+    <div class="row" id="gStatus"></div><div class="t-small num" id="gNums"></div>
+    <div class="t-small">Só conta quando o vídeo é transcrito pelo Groq (sem placa de vídeo e com <code>GROQ_API_KEY</code> no .env).
+      Ajuste <code>whisper.groq_daily_audio_seconds</code> conforme console.groq.com → Limits.</div></div>`;
 }
 
 async function fillUsage(b) {
@@ -169,6 +175,15 @@ async function fillUsage(b) {
   $("#uMeter", b).setAttribute("aria-valuenow", u.percent);
   $("#uStatus", b).innerHTML = `<span class="badge ${st[3]}">${st[1]} ${st[2]}</span>`;
   $("#uNums", b).textContent = `${nf.format(u.total_tokens)} de ${nf.format(u.limits.tokens)} tokens · ${nf.format(u.requests)} de ${nf.format(u.limits.requests)} requisições · ${u.provider}`;
+  const g = u.groq || { seconds: 0, requests: 0, limit_seconds: 1, percent: 0, rate_limited: false };
+  const gst = g.rate_limited ? ["var(--bad)", "⛔", "cota do dia acabou — transcrevendo na CPU", "bad"]
+    : g.percent >= 90 ? ["var(--bad)", "⚠", "quase no limite", "bad"]
+    : g.percent >= 70 ? ["var(--warn)", "⚠", "uso alto", "warn"] : ["var(--good)", "✓", "dentro do limite", "good"];
+  $("#gPct", b).textContent = (g.percent < 10 ? g.percent.toFixed(1) : Math.round(g.percent)) + "%";
+  Object.assign($("#gMeter i", b).style, { width: Math.min(100, g.percent) + "%", background: gst[0] });
+  $("#gMeter", b).setAttribute("aria-valuenow", g.percent);
+  $("#gStatus", b).innerHTML = `<span class="badge ${gst[3]}">${gst[1]} ${gst[2]}</span>`;
+  $("#gNums", b).textContent = `${nf.format(Math.round(g.seconds / 60))} de ${nf.format(Math.round(g.limit_seconds / 60))} min de áudio · ${nf.format(g.requests)} pedaços enviados`;
   $("#uTable", b).innerHTML = u.per_minute.filter((x) => x.tokens).map((x) => `${esc(x.t)} — ${nf.format(x.tokens)} tokens`).join("<br>") || "Nenhum uso na última hora.";
   const svg = $("#uChart", b), W = svg.clientWidth || 560, H = 110, padL = 40, padB = 16, padT = 8, series = u.per_minute;
   const max = Math.max(1, ...series.map((x) => x.tokens)), step = Math.pow(10, Math.floor(Math.log10(max))), top = Math.ceil(max / step) * step;

@@ -27,6 +27,12 @@ export async function renderUsageMini() {
     const ring = $("#usageRing");
     ring.style.setProperty("--p", Math.min(100, pct));
     ring.style.setProperty("--ring-color", u.rate_limited || pct >= 90 ? "var(--bad)" : pct >= 70 ? "var(--warn)" : "var(--good)");
-    $("#usagePct").textContent = (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + "% do limite";
+    $("#usagePct").textContent = "Gemini " + (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + "%";
+    const g = u.groq, gl = $("#usageGroq");
+    if (g) {  // transcrição na nuvem: minutos de áudio do dia contra a cota grátis
+      gl.hidden = false;
+      gl.textContent = `Groq ${g.percent < 10 ? g.percent.toFixed(1) : Math.round(g.percent)}% · ${Math.round(g.seconds / 60)} min`;
+      gl.style.color = g.rate_limited || g.percent >= 90 ? "var(--bad)" : g.percent >= 70 ? "var(--warn)" : "";
+    }
   } catch (e) { /* sem uso */ }
 }

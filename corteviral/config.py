@@ -26,6 +26,8 @@ class WhisperSettings(_Strict):
     engine: Literal["auto", "local", "groq"] = "auto"
     groq_model: str = "whisper-large-v3-turbo"
     groq_chunk_seconds: int = Field(default=600, ge=60, le=1200)  # pedaços enviados ao Groq
+    # Cota grátis aproximada (s de áudio/dia); confira em console.groq.com → Settings → Limits
+    groq_daily_audio_seconds: int = Field(default=28800, ge=60)
 
 
 class PathsSettings(_Strict):

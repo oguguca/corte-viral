@@ -28,6 +28,7 @@ from corteviral.pipeline.groq_transcribe import (
     GroqAuthError, GroqError, GroqQuotaExceeded, HttpFn, chunk_plan, encode_chunk, parse_response, post_chunk,
 )
 from corteviral.project import Project
+from corteviral.usage import UsageTracker
 from corteviral.utils import write_json_atomic
 
 log = logging.getLogger(__name__)
@@ -165,10 +166,17 @@ def _run_groq(project: Project, settings: Settings, ckpt: _Checkpoint, duration:
     """Transcreve pelo Groq a partir de ckpt.resume_at, um pedaço por vez. Devolve o idioma."""
     ws = settings.whisper
     audio, dest = project.path("audio.wav"), project.path(GROQ_CHUNK)
+    usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
     for offset, length in chunk_plan(ckpt.resume_at, duration, ws.groq_chunk_seconds):
         encode_chunk(audio, offset, length, dest)
         language = ckpt.language or (None if ws.language == "auto" else ws.language)
-        segs, words, detected = parse_response(http(dest, api_key, ws.groq_model, language), offset)
+        try:
+            data = http(dest, api_key, ws.groq_model, language)
+        except GroqError as e:
+            usage.record_audio("groq", ws.groq_model, 0, ok=False, rate_limited=isinstance(e, GroqQuotaExceeded))
+            raise
+        usage.record_audio("groq", ws.groq_model, length, ok=True)
+        segs, words, detected = parse_response(data, offset)
         ckpt.segments.extend(segs)
         ckpt.words.extend(words)
         ckpt.language = ckpt.language or detected

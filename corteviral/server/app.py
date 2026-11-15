@@ -737,7 +737,12 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         lim = {"requests": settings.llm.daily_request_limit, "tokens": settings.llm.daily_token_limit}
         pct = max(u["requests"] / max(1, lim["requests"]), u["total_tokens"] / max(1, lim["tokens"])) * 100
         provider = settings.llm.provider
-        return {**u, "limits": lim, "percent": round(min(pct, 100.0), 1), "provider": provider}
+        g = u["audio"].get("groq", {})
+        g_lim = settings.whisper.groq_daily_audio_seconds
+        groq = {"seconds": g.get("seconds", 0.0), "requests": g.get("requests", 0), "limit_seconds": g_lim,
+                "percent": round(min(g.get("seconds", 0.0) / max(1, g_lim) * 100, 100.0), 1),
+                "rate_limited": g.get("rate_limited", False)}
+        return {**u, "limits": lim, "percent": round(min(pct, 100.0), 1), "provider": provider, "groq": groq}
 
     @app.get("/api/projects/{name}/video")
     def get_video(name: str):
