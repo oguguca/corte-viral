@@ -115,3 +115,10 @@ def _no_real_gpu_preflight(monkeypatch, request):
     """Os testes rápidos nunca carregam o modelo real para testar a GPU."""
     if "slow" not in request.keywords:
         monkeypatch.setattr("corteviral.pipeline.transcribe._gpu_preflight", lambda settings: True)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_groq_key(tmp_path, monkeypatch):
+    """Os testes nunca leem o .env real: com GROQ_API_KEY lá, chamariam o Groq de verdade."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr("corteviral.pipeline.transcribe.ENV_FILE", tmp_path / "sem-chave.env")

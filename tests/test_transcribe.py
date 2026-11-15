@@ -158,3 +158,172 @@ def test_transcribe_invalidates_downstream_stages(project_with_audio, settings_t
     transcribe(project_with_audio, settings_tmp, model_factory=FakeModel.ok)
     assert "signals" not in project_with_audio.data["stages"]
     assert "scoring" not in project_with_audio.data["stages"]
+
+
+# --- Groq (transcrição na nuvem) ---
+
+from corteviral.pipeline.groq_transcribe import GroqAuthError, GroqQuotaExceeded  # noqa: E402
+
+
+@pytest.fixture
+def groq_setup(project_with_audio, settings_tmp, tmp_path, monkeypatch):
+    env = tmp_path / "groq.env"
+    env.write_text("GROQ_API_KEY=k\n", encoding="utf-8")
+    settings_tmp.whisper.engine = "groq"
+    settings_tmp.whisper.groq_chunk_seconds = 60
+    project_with_audio.data["duration"] = 130.0
+    project_with_audio.save()
+    monkeypatch.setattr("corteviral.pipeline.transcribe.encode_chunk",
+                        lambda audio, off, length, dest: dest.write_bytes(b"OggS"))
+    monkeypatch.setattr("corteviral.ffmpeg.run", lambda args: None)
+    return project_with_audio, settings_tmp, env
+
+
+def _groq_ok(calls=None):
+    def http(path, key, model, language):
+        if calls is not None:
+            calls.append((path, key, model, language))
+        return {"language": "portuguese", "segments": [{"start": 1.0, "end": 1.5, "text": " oi"}],
+                "words": [{"word": " oi", "start": 1.0, "end": 1.5}]}
+    return http
+
+
+def _cpu_factory(created):
+    from types import SimpleNamespace
+
+    def factory(model, device="cuda", **kw):
+        created.append((model, device))
+
+        def tr(audio, **opts):
+            s = SimpleNamespace(start=0.5, end=1.5, text="cpu",
+                                words=[SimpleNamespace(word="cpu", start=0.5, end=1.5, probability=0.9)])
+            return iter([s]), SimpleNamespace(language="pt", duration=130.0)
+        return SimpleNamespace(transcribe=tr)
+    return factory
+
+
+def test_groq_engine_produces_words_with_offsets(groq_setup):
+    p, s, env = groq_setup
+    calls, msgs = [], []
+    t = transcribe(p, s, on_progress=lambda f, m: msgs.append(m), model_factory=FakeModel.explode,
+                   groq_http=_groq_ok(calls), env_file=env)
+    assert [w.start for w in t.words] == [1.0, 61.0, 121.0]
+    assert [seg.start for seg in t.segments] == [1.0, 61.0, 121.0]
+    assert (t.model, t.device, t.language) == ("whisper-large-v3-turbo", "groq", "pt")
+    assert len(calls) == 3 and calls[0][1] == "k"
+    assert "transcrevendo na nuvem (Groq)" in msgs
+    assert not p.path("groq_chunk.ogg").exists()
+    assert not p.path("transcript.partial.json").exists()
+
+
+def test_groq_quota_falls_back_to_cpu_from_checkpoint(groq_setup):
+    p, s, env = groq_setup
+    n, created, msgs = [], [], []
+
+    def http(path, key, model, language):
+        n.append(1)
+        if len(n) == 2:
+            raise GroqQuotaExceeded("429")
+        return _groq_ok()(path, key, model, language)
+
+    t = transcribe(p, s, on_progress=lambda f, m: msgs.append(m), model_factory=_cpu_factory(created),
+                   groq_http=http, env_file=env)
+    assert created == [("small", "cpu")]
+    assert [(w.w, w.start) for w in t.words] == [("oi", 1.0), ("cpu", 60.5)]
+    assert "Cota do Groq esgotada, usando CPU" in msgs
+    assert t.device == "cpu"
+
+
+def test_groq_auth_error_falls_back_to_cpu(groq_setup):
+    p, s, env = groq_setup
+    created, msgs = [], []
+
+    def http(*a):
+        raise GroqAuthError("401")
+
+    t = transcribe(p, s, on_progress=lambda f, m: msgs.append(m), model_factory=_cpu_factory(created),
+                   groq_http=http, env_file=env)
+    assert created == [("small", "cpu")]
+    assert [w.w for w in t.words] == ["cpu"]
+    assert "Groq indisponível, usando CPU" in msgs
+
+
+def test_groq_resume_skips_done_chunks(groq_setup):
+    p, s, env = groq_setup
+    n = []
+
+    def crashing(path, key, model, language):
+        n.append(1)
+        if len(n) == 2:
+            raise KeyboardInterrupt
+        return _groq_ok()(path, key, model, language)
+
+    with pytest.raises(KeyboardInterrupt):
+        transcribe(p, s, model_factory=FakeModel.explode, groq_http=crashing, env_file=env)
+    calls = []
+    t = transcribe(p, s, model_factory=FakeModel.explode, groq_http=_groq_ok(calls), env_file=env)
+    assert len(calls) == 2
+    assert [w.start for w in t.words] == [1.0, 61.0, 121.0]
+
+
+def test_auto_without_key_uses_local(project_with_audio, settings_tmp, tmp_path):
+    settings_tmp.whisper.engine = "auto"
+    settings_tmp.whisper.device = "cpu"
+
+    def http(*a):
+        raise AssertionError("não deveria chamar o Groq")
+
+    t = transcribe(project_with_audio, settings_tmp, model_factory=FakeModel.ok, groq_http=http,
+                   env_file=tmp_path / "vazio.env")
+    assert t.device == "cpu"
+
+
+def test_auto_with_key_and_cpu_device_uses_groq(groq_setup):
+    p, s, env = groq_setup
+    s.whisper.engine = "auto"
+    s.whisper.device = "cpu"
+    t = transcribe(p, s, model_factory=FakeModel.explode, groq_http=_groq_ok(), env_file=env)
+    assert t.device == "groq"
+
+
+def test_auto_with_key_and_failed_gpu_uses_groq(groq_setup, monkeypatch):
+    p, s, env = groq_setup
+    s.whisper.engine = "auto"
+    monkeypatch.setattr("corteviral.pipeline.transcribe.WhisperModel", FakeModel.explode)
+    monkeypatch.setattr("corteviral.pipeline.transcribe._gpu_preflight", lambda settings: False)
+    t = transcribe(p, s, groq_http=_groq_ok(), env_file=env)
+    assert t.device == "groq"
+
+
+def test_groq_result_is_cached(groq_setup):
+    p, s, env = groq_setup
+    t1 = transcribe(p, s, model_factory=FakeModel.explode, groq_http=_groq_ok(), env_file=env)
+
+    def http(*a):
+        raise AssertionError("não deveria chamar o Groq de novo")
+
+    t2 = transcribe(p, s, model_factory=FakeModel.explode, groq_http=http, env_file=env)
+    assert t2 == t1
+
+
+def test_groq_unknown_duration_probes_audio(groq_setup, monkeypatch):
+    p, s, env = groq_setup
+    p.data["duration"] = 0
+    p.save()
+    monkeypatch.setattr("corteviral.pipeline.transcribe.ffmpeg.probe_duration", lambda path: 130.0)
+    t = transcribe(p, s, model_factory=FakeModel.explode, groq_http=_groq_ok(), env_file=env)
+    assert t.device == "groq" and len(t.words) == 3
+
+
+def test_groq_duration_still_zero_uses_local(groq_setup, monkeypatch):
+    p, s, env = groq_setup
+    p.data["duration"] = 0
+    p.save()
+    s.whisper.device = "cpu"
+    monkeypatch.setattr("corteviral.pipeline.transcribe.ffmpeg.probe_duration", lambda path: 0.0)
+
+    def http(*a):
+        raise AssertionError("não deveria chamar o Groq")
+
+    t = transcribe(p, s, model_factory=FakeModel.ok, groq_http=http, env_file=env)
+    assert t.device == "cpu"

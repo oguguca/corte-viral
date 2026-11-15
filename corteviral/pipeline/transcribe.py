@@ -6,7 +6,9 @@ Robustez para VODs longos:
 - teste prévio da GPU em processo separado (DLL CUDA ausente derruba o processo nativamente,
   sem exceção Python);
 - falha de GPU → continua na CPU com o modelo de fallback, a partir do checkpoint;
-- resultado de fallback não é cacheado como se fosse da GPU: a próxima execução tenta a GPU de novo.
+- resultado de fallback não é cacheado como se fosse da GPU: a próxima execução tenta a GPU de novo;
+- sem GPU e com GROQ_API_KEY, transcreve pela API grátis do Groq em pedaços (whisper.engine = auto|groq);
+  cota esgotada, chave recusada ou sem internet → continua na CPU a partir do último pedaço pronto.
 """
 from __future__ import annotations
 
@@ -20,7 +22,11 @@ from typing import Callable
 
 from corteviral import ffmpeg
 from corteviral.config import Settings
+from corteviral.llm import _key
 from corteviral.models import Segment, Transcript, Word
+from corteviral.pipeline.groq_transcribe import (
+    GroqError, GroqQuotaExceeded, HttpFn, chunk_plan, encode_chunk, parse_response, post_chunk,
+)
 from corteviral.project import Project
 from corteviral.utils import write_json_atomic
 
@@ -30,6 +36,8 @@ _GPU_ERROR_MARKERS = ("cuda", "cudnn", "cublas", "out of memory")
 CHECKPOINT_EVERY = 25  # segmentos
 PARTIAL = "transcript.partial.json"
 RESUME_WAV = "audio.resume.wav"
+GROQ_CHUNK = "groq_chunk.ogg"
+ENV_FILE = Path(".env")
 # Windows sem modo desenvolvedor não cria symlinks; o cache funciona igual, só avisa.
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
@@ -152,8 +160,28 @@ def _run(model, project: Project, settings: Settings, ckpt: _Checkpoint, duratio
     return ckpt.language
 
 
+def _run_groq(project: Project, settings: Settings, ckpt: _Checkpoint, duration: float,
+              on_progress: ProgressFn | None, api_key: str, http: HttpFn) -> str | None:
+    """Transcreve pelo Groq a partir de ckpt.resume_at, um pedaço por vez. Devolve o idioma."""
+    ws = settings.whisper
+    audio, dest = project.path("audio.wav"), project.path(GROQ_CHUNK)
+    for offset, length in chunk_plan(ckpt.resume_at, duration, ws.groq_chunk_seconds):
+        encode_chunk(audio, offset, length, dest)
+        language = ckpt.language or (None if ws.language == "auto" else ws.language)
+        segs, words, detected = parse_response(http(dest, api_key, ws.groq_model, language), offset)
+        ckpt.segments.extend(segs)
+        ckpt.words.extend(words)
+        ckpt.language = ckpt.language or detected
+        ckpt.resume_at = round(offset + length, 3)
+        ckpt.save()
+        if on_progress:
+            on_progress(min(ckpt.resume_at / duration, 1.0), "transcrevendo na nuvem (Groq)")
+    return ckpt.language
+
+
 def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | None = None,
-               model_factory=None) -> Transcript:
+               model_factory=None, groq_http: HttpFn | None = None,
+               env_file: Path | None = None) -> Transcript:
     """Transcreve audio.wav do projeto e grava transcript.json (com cache por parâmetros)."""
     ws = settings.whisper
     params = ws.model_dump()
@@ -177,37 +205,76 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
         log.warning("Retomando transcrição a partir de %.0fs.", ckpt.resume_at)
 
     used = (ws.model, ws.device)
-    gpu_ok = ws.device == "cpu" or not real_factory or _gpu_preflight(settings)
-    try:
-        if not gpu_ok:
-            raise RuntimeError("CUDA indisponível (teste da GPU falhou)")
-        model = factory(ws.model, device=ws.device, compute_type=ws.compute_type, download_root=download_root)
-        language = _run(model, project, settings, ckpt, duration, on_progress)
-    except Exception as e:  # noqa: BLE001 — só tratamos falhas de GPU; o resto sobe
-        if ws.device == "cpu" or not _is_gpu_error(e):
-            ckpt.save()
-            raise
-        ckpt.save()
-        if out.exists() and not ckpt.resume_at:
-            previous = Transcript.load(out)
-            if previous.model == ws.cpu_fallback_model and previous.device == "cpu":
-                log.warning("GPU ainda indisponível (%s); reaproveitando a transcrição feita na CPU.", e)
-                project.path(PARTIAL).unlink(missing_ok=True)
-                return previous
-        log.warning("GPU falhou (%s). Continuando na CPU com o modelo '%s' a partir de %.0fs — vai demorar mais.",
-                    e, ws.cpu_fallback_model, ckpt.resume_at)
-        if on_progress:
-            on_progress(ckpt.resume_at / duration if duration else 0.0, "GPU indisponível, usando CPU")
-        used = (ws.cpu_fallback_model, "cpu")
-        model = factory(ws.cpu_fallback_model, device="cpu", compute_type="int8", download_root=download_root)
+    api_key = _key("GROQ_API_KEY", env_file or ENV_FILE) if ws.engine != "local" else ""
+    gpu_ok: bool | None = None
+    use_groq = False
+    if api_key:
+        if ws.engine == "groq" or ws.device == "cpu":
+            use_groq = True
+        else:  # auto com GPU configurada: Groq só se a GPU não responder
+            gpu_ok = not real_factory or _gpu_preflight(settings)
+            use_groq = not gpu_ok
+    if use_groq and not duration:
         try:
-            language = _run(model, project, settings, ckpt, duration, on_progress)
-        except BaseException:
+            duration = ffmpeg.probe_duration(audio)
+        except Exception:  # noqa: BLE001 — sem duração não dá para fatiar; segue local
+            duration = 0
+        use_groq = bool(duration)
+    if use_groq:
+        try:
+            language = _run_groq(project, settings, ckpt, duration, on_progress, api_key, groq_http or post_chunk)
+            used = (ws.groq_model, "groq")
+        except GroqError as e:
+            ckpt.save()
+            msg = ("Cota do Groq esgotada, usando CPU" if isinstance(e, GroqQuotaExceeded)
+                   else "Groq indisponível, usando CPU")
+            log.warning("%s (%s). Continuando na CPU com o modelo '%s' a partir de %.0fs.",
+                        msg, e, ws.cpu_fallback_model, ckpt.resume_at)
+            if on_progress:
+                on_progress(ckpt.resume_at / duration if duration else 0.0, msg)
+            used = (ws.cpu_fallback_model, "cpu")
+            try:
+                model = factory(ws.cpu_fallback_model, device="cpu", compute_type="int8", download_root=download_root)
+                language = _run(model, project, settings, ckpt, duration, on_progress)
+            except BaseException:
+                ckpt.save()
+                raise
+        except BaseException:  # Ctrl+C etc.: guarda o progresso para retomar
             ckpt.save()
             raise
-    except BaseException:  # Ctrl+C etc.: guarda o progresso para retomar
-        ckpt.save()
-        raise
+    else:
+        if gpu_ok is None:
+            gpu_ok = ws.device == "cpu" or not real_factory or _gpu_preflight(settings)
+        try:
+            if not gpu_ok:
+                raise RuntimeError("CUDA indisponível (teste da GPU falhou)")
+            model = factory(ws.model, device=ws.device, compute_type=ws.compute_type, download_root=download_root)
+            language = _run(model, project, settings, ckpt, duration, on_progress)
+        except Exception as e:  # noqa: BLE001 — só tratamos falhas de GPU; o resto sobe
+            if ws.device == "cpu" or not _is_gpu_error(e):
+                ckpt.save()
+                raise
+            ckpt.save()
+            if out.exists() and not ckpt.resume_at:
+                previous = Transcript.load(out)
+                if previous.model == ws.cpu_fallback_model and previous.device == "cpu":
+                    log.warning("GPU ainda indisponível (%s); reaproveitando a transcrição feita na CPU.", e)
+                    project.path(PARTIAL).unlink(missing_ok=True)
+                    return previous
+            log.warning("GPU falhou (%s). Continuando na CPU com o modelo '%s' a partir de %.0fs — vai demorar mais.",
+                        e, ws.cpu_fallback_model, ckpt.resume_at)
+            if on_progress:
+                on_progress(ckpt.resume_at / duration if duration else 0.0, "GPU indisponível, usando CPU")
+            used = (ws.cpu_fallback_model, "cpu")
+            model = factory(ws.cpu_fallback_model, device="cpu", compute_type="int8", download_root=download_root)
+            try:
+                language = _run(model, project, settings, ckpt, duration, on_progress)
+            except BaseException:
+                ckpt.save()
+                raise
+        except BaseException:  # Ctrl+C etc.: guarda o progresso para retomar
+            ckpt.save()
+            raise
 
     transcript = Transcript(
         language=language or "", duration=round(duration or ckpt.resume_at, 3),
@@ -216,9 +283,9 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
     )
     transcript.save(out)
     project.invalidate_from("chat")  # sinais e momentos antigos não valem para a nova transcrição
-    for leftover in (PARTIAL, RESUME_WAV):
+    for leftover in (PARTIAL, RESUME_WAV, GROQ_CHUNK):
         project.path(leftover).unlink(missing_ok=True)
-    if used[0] == ws.model:
+    if used[0] == ws.model or used[1] == "groq":
         project.mark_stage("transcribe", params)
     else:
         log.warning("Transcrição feita com o modelo de fallback; a próxima execução tentará a GPU de novo.")
