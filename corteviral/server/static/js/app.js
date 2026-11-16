@@ -32,6 +32,10 @@ async function render({ keepFocus = false } = {}) {
   state.current = route.view === "project" ? route.name : null;
   await renderProjects();
   if (token !== renderToken) return;
+  const proj = route.view === "project" ? state.projects.find((p) => p.name === route.name) : null;
+  const step = STEPS.find(([k]) => k === route.step)?.[1];
+  document.title = (proj ? `${proj.title || proj.name} · ${step}` : { accounts: "Contas conectadas", queue: "Fila de postagem",
+    home: "Painel" }[route.view] || "Corte Viral") + " — Corte Viral";
   if (route.view === "accounts") $("#openAccounts").setAttribute("aria-current", "page");
   else $("#openAccounts").removeAttribute("aria-current");
   if (route.view === "accounts") {
