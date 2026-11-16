@@ -18,10 +18,10 @@ try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.
     <ul class="side-list" id="projects" aria-label="Projetos"></ul>
     <div class="side-foot">
       <div id="themeSlot" style="padding:4px 6px 6px"></div>
-      <button class="usage-mini" id="usageMini" aria-label="Uso da IA hoje">
-        <span class="ring" id="usageRing" aria-hidden="true"></span>
-        <span><span class="t-small" style="display:block">Uso da IA hoje</span><b class="num" id="usagePct">—</b>
-          <span class="t-small num" id="usageGroq" style="display:block" hidden></span></span>
+      <button class="usage-mini" id="usageMini" aria-label="Uso da IA hoje — abrir detalhes">
+        <span class="t-small">Uso da IA hoje</span>
+        <span class="u-row"><span>Gemini</span><span class="u-bar"><i id="usageBarG"></i></span><b class="num" id="usagePct">—</b></span>
+        <span class="u-row"><span>Groq</span><span class="u-bar"><i id="usageBarQ"></i></span><b class="num" id="usageGroq">—</b></span>
       </button>
       <div class="side-section t-label">Ferramentas</div>
       <a class="side-item" id="openQueue" href="#/fila"><span class="thumb" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="meta"><span class="name">Fila de postagem</span><span class="sub" id="queueSub"></span></span></a>

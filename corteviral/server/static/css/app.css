@@ -184,8 +184,12 @@ a { color: var(--info); }
 .side-item .sub { display: block; font-size: 12px; color: var(--text-3); }
 .side-foot { border-top: 1px solid var(--line); padding-top: 4px; display: grid; gap: 2px; }
 .side-foot .side-section { padding-top: 8px; }
-.usage-mini { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; border: 0;
-              background: transparent; width: 100%; text-align: left; }
+.usage-mini { display: grid; gap: 5px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; border: 0;
+              background: transparent; width: 100%; text-align: left; color: var(--text); }
+.u-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+.u-row b { text-align: right; color: var(--text); font-size: 12px; }
+.u-bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.u-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--good); transition: width var(--dur) var(--ease); }
 .usage-mini:hover { background: var(--surface-3); }
 .ring { --p: 0; width: 22px; height: 22px; border-radius: 50%; flex: none;
         background: conic-gradient(var(--ring-color, var(--good)) calc(var(--p) * 1%), var(--surface-3) 0); position: relative; }

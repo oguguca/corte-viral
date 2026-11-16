@@ -23,16 +23,15 @@ export async function renderProjects() {
 export async function renderUsageMini() {
   try {
     const u = await api("/api/usage");
-    const pct = u.percent;
-    const ring = $("#usageRing");
-    ring.style.setProperty("--p", Math.min(100, pct));
-    ring.style.setProperty("--ring-color", u.rate_limited || pct >= 90 ? "var(--bad)" : pct >= 70 ? "var(--warn)" : "var(--good)");
-    $("#usagePct").textContent = "Gemini " + (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + "%";
-    const g = u.groq, gl = $("#usageGroq");
-    if (g) {  // transcrição na nuvem: minutos de áudio do dia contra a cota grátis
-      gl.hidden = false;
-      gl.textContent = `Groq ${g.percent < 10 ? g.percent.toFixed(1) : Math.round(g.percent)}% · ${Math.round(g.seconds / 60)} min`;
-      gl.style.color = g.rate_limited || g.percent >= 90 ? "var(--bad)" : g.percent >= 70 ? "var(--warn)" : "";
-    }
+    const pctTxt = (p) => (p < 10 ? p.toFixed(1) : Math.round(p)) + "%";
+    const color = (p, limited) => limited || p >= 90 ? "var(--bad)" : p >= 70 ? "var(--warn)" : "var(--good)";
+    const paint = (bar, label, p, limited, title) => {
+      Object.assign($(bar).style, { width: Math.min(100, p) + "%", background: color(p, limited) });
+      $(label).textContent = pctTxt(p);
+      $(label).title = title;
+    };
+    paint("#usageBarG", "#usagePct", u.percent, u.rate_limited, `${u.requests} requisições hoje`);
+    const g = u.groq || { percent: 0, seconds: 0, rate_limited: false };  // transcrição na nuvem: minutos de áudio
+    paint("#usageBarQ", "#usageGroq", g.percent, g.rate_limited, `${Math.round(g.seconds / 60)} min de áudio hoje`);
   } catch (e) { /* sem uso */ }
 }
