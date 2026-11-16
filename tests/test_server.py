@@ -501,3 +501,16 @@ def test_projects_list_counts_ready_clips(client, settings_tmp):
         (p.dir / "clips" / f).write_bytes(b"x")
     item = next(x for x in client.get("/api/projects").json() if x["name"] == p.dir.name)
     assert item["clips"] == 2  # só os MP4 finais, sem prévias
+
+
+def test_moments_endpoint_reports_final_clip_duration(client, settings_tmp):
+    import json as _json
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    p = _transcribed_project(settings_tmp)
+    write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "m1", "start": 0, "end": 30, "score": 80}]})
+    (p.dir / "clips").mkdir()
+    (p.dir / "clips" / "m1.mp4").write_bytes(b"x")
+    (p.dir / "clips" / "m1.json").write_text(_json.dumps({"segments": [[0, 10], [12, 30]]}), encoding="utf-8")
+    c = client.get(f"/api/projects/{p.dir.name}/moments").json()["clips"]["m1"]
+    assert c["final"] and c["seconds"] == 28.0  # 30 s − 2 s de pausa cortada

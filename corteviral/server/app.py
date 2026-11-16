@@ -437,6 +437,12 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             final, prev = d / "clips" / f"{m['id']}.mp4", d / "clips" / f"{m['id']}.preview.mp4"
             if final.exists() or prev.exists():
                 clips[m["id"]] = {"final": final.exists(), "preview": prev.exists()}
+                try:  # duração real do MP4 depois dos cortes de pausa
+                    segs = json.loads(final.with_suffix(".json").read_text(encoding="utf-8")).get("segments")
+                    if segs:
+                        clips[m["id"]]["seconds"] = round(sum(b - a for a, b in segs), 1)
+                except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                    pass
         data["clips"] = clips
         data["feedback"] = feedback.labels(name)
         for m in data["moments"]:
