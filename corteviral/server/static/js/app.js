@@ -92,6 +92,7 @@ function init() {
   $("#themeSlot").append(themeSwitcher());
   $("#newVideo").onclick = (e) => openNewVideo(e.currentTarget);
   $("#openSettings").onclick = (e) => openSettings(e.currentTarget);
+  $("#openExports").onclick = () => api("/api/exports/open-folder", { method: "POST" }).catch((e) => toast(e.message, "bad"));
   $("#usageMini").onclick = (e) => openSettings(e.currentTarget, "usage");
   addEventListener("hashchange", () => render());
   document.addEventListener("capstylechange", () => { if (parse().step === "clips") render({ keepFocus: true }); });

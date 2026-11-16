@@ -481,3 +481,13 @@ def test_analyze_auto_renders_best_clips(settings_tmp, monkeypatch):
                                              "min_seconds": 15, "max_seconds": 60}).json()["id"])
     assert job["status"] == "done" and job["stage"] == "render" and job["auto"] is True
     assert rendered == {"ids": ["m1", "m2", "m0"]}
+
+
+def test_open_all_exports_folder(settings_tmp, tmp_path, monkeypatch):
+    settings_tmp.paths.exports_dir = tmp_path / "exports"
+    opened = []
+    monkeypatch.setattr("corteviral.server.app.os.startfile", opened.append, raising=False)
+    monkeypatch.setattr("corteviral.server.app.os.name", "nt")
+    r = TestClient(create_app(settings_tmp)).post("/api/exports/open-folder").json()
+    assert r["ok"] and opened == [settings_tmp.paths.exports_dir]
+    assert settings_tmp.paths.exports_dir.is_dir()  # cria a pasta se ainda não existe

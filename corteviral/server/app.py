@@ -475,6 +475,14 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             os.startfile(d)  # noqa: S606 — abre a pasta de exportação no Explorer
         return {"ok": True, "folder": str(d)}
 
+    @app.post("/api/exports/open-folder")
+    def open_all_exports():
+        d = Path(settings.paths.exports_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            os.startfile(d)  # noqa: S606 — abre a pasta com todos os clipes exportados
+        return {"ok": True, "folder": str(d.resolve())}
+
     # --- contas conectadas (postagem pelo n8n) ---------------------------
     def _n8n_state() -> dict:
         cfg = publish_store.load()
