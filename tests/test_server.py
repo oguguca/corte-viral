@@ -491,3 +491,12 @@ def test_open_all_exports_folder(settings_tmp, tmp_path, monkeypatch):
     r = TestClient(create_app(settings_tmp)).post("/api/exports/open-folder").json()
     assert r["ok"] and opened == [settings_tmp.paths.exports_dir]
     assert settings_tmp.paths.exports_dir.is_dir()  # cria a pasta se ainda não existe
+
+
+def test_projects_list_counts_ready_clips(client, settings_tmp):
+    p = _transcribed_project(settings_tmp)
+    (p.dir / "clips").mkdir()
+    for f in ("m1.mp4", "m2.mp4", "m3.preview.mp4", "m1.json"):
+        (p.dir / "clips" / f).write_bytes(b"x")
+    item = next(x for x in client.get("/api/projects").json() if x["name"] == p.dir.name)
+    assert item["clips"] == 2  # só os MP4 finais, sem prévias
