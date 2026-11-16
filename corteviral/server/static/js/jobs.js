@@ -7,6 +7,7 @@ const STAGES = {
   render: "Gerando clipes", posts: "Escrevendo os textos", export: "Exportando", publish: "Enviando para postar",
   schedule: "Programando a postagem",
 };
+const AUTO_ORDER = ["ingest", "transcribe", "analyze", "render"];  // do link aos clipes prontos
 const listeners = new Set();
 let watching = null;
 
@@ -21,6 +22,8 @@ function showPill(job) {
   const pct = Math.round((job.progress || 0) * 100);
   $("#pillStage").textContent = job.status === "error" ? "⚠ Não deu certo"
     : job.status === "done" ? "✓ " + (STAGES[job.stage] || "Tarefa") + " — pronto" : STAGES[job.stage] || "Trabalhando";
+  const k = AUTO_ORDER.indexOf(job.stage);
+  if (job.auto && job.status === "running" && k >= 0) $("#pillStage").textContent += ` · etapa ${k + 1} de ${AUTO_ORDER.length}`;
   $("#pillPct").textContent = job.status === "running" ? pct + "% · " + fmt(Date.now() / 1000 - job.started_at) : "";
   $("#pillMsg").textContent = job.status === "error" ? job.error : job.message || "";
   $("#pillBar").style.width = (job.status === "done" ? 100 : pct) + "%";
