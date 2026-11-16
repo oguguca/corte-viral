@@ -131,7 +131,10 @@ export async function renderClips(root, name, project, ctx = {}) {
           <div class="row" style="gap:8px;flex-wrap:nowrap">
             <div class="${scoreClass(m.score)}" style="width:34px;height:34px;border-radius:10px;font-size:13px;flex:none"><span class="num">${m.score}</span></div>
             <div style="min-width:0"><div class="m-title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(title(m))}</div>
-              <div class="t-small num">${fmt(m.start)} · ${Math.round(m.end - m.start)} s</div></div></div>
+              <div class="t-small num">${fmt(m.start)} · ${Math.round(m.end - m.start)} s${(() => {
+                const s = (d.clips || {})[m.id]?.seconds;  // depois dos cortes de pausa
+                return s && Math.round(s) < Math.round(m.end - m.start) ? ` → <b title="duração final, sem as pausas">${Math.round(s)} s</b>` : "";
+              })()}</div></div></div>
           <div class="row" style="gap:6px">
             <button class="btn ${m.status === "approved" ? "on" : ""}" data-bs="approved" aria-pressed="${m.status === "approved"}">${m.status === "approved" ? "✓ Aprovado" : "Aprovar"}</button>
             <button class="btn ${m.status === "discarded" ? "on" : ""}" data-bs="discarded" aria-pressed="${m.status === "discarded"}">${m.status === "discarded" ? "Descartado" : "Descartar"}</button>
