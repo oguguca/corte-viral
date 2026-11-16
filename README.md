@@ -75,9 +75,22 @@ resto na CPU sem perder o que já foi transcrito.
 
 ### Interface (recomendado)
 
-Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Abre uma janela onde
-você cola o link ou escolhe o arquivo, acompanha o progresso e vê a transcrição
-sincronizada com o vídeo (clique numa palavra para pular até ela).
+Dê dois cliques em **`Corte Viral.bat`** (na pasta do projeto). Em **Novo vídeo** (atalho **N**), cole o link
+(ou **📋 Colar**) ou escolha o arquivo e a duração do clipe (padrão **20–35 s**, a faixa ideal de retenção do
+YouTube). Uma tarefa só faz tudo: baixa, transcreve, encontra os momentos e gera os clipes — e abre direto na
+grade **Clipes prontos**, com todos lado a lado para aprovar, ajustar e exportar.
+
+- **A IA decide quantos clipes:** todo momento com nota **70+** ("vale postar") vira clipe, sem sobreposição;
+  se nenhum chegar lá, sai o melhor. Ajuste em `analysis.min_score` / `analysis.max_auto_clips`
+  (ou fixe um número em `analysis.n_clips`).
+- **Ritmo de Shorts em todo clipe:** as pausas são cortadas (detectadas no áudio, relativas ao volume do
+  próprio clipe — risada e grito não são cortados) e o enquadramento alterna com um zoom leve a cada 2–4 s.
+  A IA busca o ápice nos 2 primeiros segundos, termina no clímax e tenta fechar em loop. Desligue em
+  `render.jump_cuts` / `render.punch_zoom: 1.0`.
+- **Títulos limpos e variados:** sem hashtag no título (no YouTube, só `#shorts` no fim); a IA recebe os
+  títulos já usados no vídeo para não repetir o molde.
+- A barra lateral mostra quantos clipes cada projeto tem, a fila de postagem, **📁 Clipes exportados** (abre a
+  pasta) e o uso do dia do Gemini e do Groq; **«** recolhe a barra para só ícones.
 
 **Só um trecho do vídeo:** já assistiu e sabe onde estão os momentos? Em **Novo vídeo › Só um trecho do vídeo**,
 informe onde começa e onde termina (`1:20:00` até `1:45:00`, ou `80:00`, ou `1h20m`). Só esse trecho é baixado
@@ -102,8 +115,8 @@ O app abre no **Painel** — e clicar em **Corte Viral** (no alto da barra later
 
 ### Encontrar os melhores momentos
 
-Abra um projeto transcrito, escolha o perfil (**Viral** 15–60 s ou **Monetização**
-61–120 s), quantos momentos e a IA, e clique em **Encontrar momentos**. Cada momento
+Isso já acontece sozinho no **Novo vídeo**. Num projeto transcrito sem clipes, a tela **Clipes** oferece
+**Gerar cortes** (escolha só a duração). Cada momento
 mostra nota de 0 a 100, justificativa e uma sugestão de gancho; clicar toca o trecho.
 
 - **Duas etapas:** a triagem lê a transcrição de todos os candidatos; depois a IA **assiste**
