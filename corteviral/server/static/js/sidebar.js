@@ -11,11 +11,13 @@ export async function renderProjects() {
     return;
   }
   ul.innerHTML = state.projects.map((p) => {
-    const status = p.has_moments ? "momentos prontos" : p.has_transcript ? "transcrito" : "processando";
-    return `<li><button class="side-item" data-name="${esc(p.name)}" ${p.name === state.current ? 'aria-current="page"' : ""}>
-      <span class="thumb" aria-hidden="true">${p.has_moments ? "★" : p.has_transcript ? "▶" : "…"}</span>
+    const [kind, status] = p.clips ? ["ok", `${p.clips} clipe${p.clips > 1 ? "s" : ""} pronto${p.clips > 1 ? "s" : ""}`]
+      : p.has_moments ? ["mid", "sem clipes ainda"] : p.has_transcript ? ["mid", "transcrito"] : ["wait", "processando"];
+    return `<li><button class="side-item" data-name="${esc(p.name)}" ${p.name === state.current ? 'aria-current="page"' : ""}
+        title="${esc(p.title || p.name)}">
+      <span class="thumb num" aria-hidden="true">${p.clips || (p.has_transcript ? "▶" : "…")}</span>
       <span class="meta"><span class="name">${esc(p.title || p.name)}</span>
-        <span class="sub">${fmt(p.duration)} · ${status}</span></span></button></li>`;
+        <span class="sub"><span class="dot ${kind}" aria-hidden="true"></span>${fmt(p.duration)} · ${status}</span></span></button></li>`;
   }).join("");
   ul.querySelectorAll("[data-name]").forEach((b) => b.onclick = () => go(b.dataset.name, "clips"));
 }
