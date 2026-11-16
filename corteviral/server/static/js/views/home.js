@@ -29,7 +29,7 @@ function weekChart(days, goal) {
     <line class="goal-line" x1="0" x2="${W}" y1="${gy}" y2="${gy}"></line>
     ${days.map((d, i) => {
       const x = i * bw + bw * 0.22, w = bw * 0.56, top = y(d.count), h = H - padB - top, today = i === days.length - 1;
-      return `<g class="col"><title>${dayName(d.date)}: ${d.count} clipe(s)</title>
+      return `<g class="col"><title>${dayName(d.date)}: ${clipes(d.count)}</title>
         <rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${H}"></rect>
         ${d.count ? `<path class="bar ${d.count >= goal ? "met" : ""}" d="M${x},${H - padB} V${top + 4} q0,-4 4,-4 h${w - 8} q4,0 4,4 V${H - padB} Z"></path>` : ""}
         ${today ? `<text class="val" x="${x + w / 2}" y="${top - 5}" text-anchor="middle">${d.count}</text>` : ""}
@@ -50,13 +50,15 @@ function dailyCard(d) {
       <b class="t-display num">${d.today}<span class="muted" style="font-size:.55em"> / ${d.goal}</span></b>
       <span class="muted">clipes soltos hoje${d.posted_today ? ` · ${d.posted_today} publicado(s)` : ""}</span></div>
     ${meter(pct, "Meta de clipes de hoje", done)}
-    <div class="${done ? "good-text" : "muted"}">${done ? "✓ Meta do dia batida. Constância é o que faz o algoritmo te mostrar." : `Faltam <b>${left}</b> clipe(s) para bater a meta.`}</div>
+    <div class="${done ? "good-text" : "muted"}">${done ? "✓ Meta do dia batida. Constância é o que faz o algoritmo te mostrar." : `${left === 1 ? "Falta" : "Faltam"} <b>${left}</b> ${left === 1 ? "clipe" : "clipes"} para bater a meta.`}</div>
     ${weekChart(d.last7, d.goal)}
     <label class="row" style="gap:8px"><span class="label">Meta por dia</span>
       <input class="input num" id="dailyGoal" type="number" min="1" max="50" value="${d.goal}" style="width:72px" aria-label="Meta de clipes por dia">
       <span class="label">clipes</span></label>
   </section>`;
 }
+
+const clipes = (n) => `${n} ${n === 1 ? "clipe" : "clipes"}`;
 
 function youtubeCard(yt) {
   if (!yt.connected) {
@@ -146,7 +148,7 @@ export async function renderHome(root, { rerender } = {}) {
     $("#homeNew", root).onclick = (e) => openNewVideo(e.currentTarget);
     $("#dailyGoal", root).onchange = (e) => {
       const v = Math.min(50, Math.max(1, Math.round(+e.target.value || 1)));
-      save({ daily_videos: v }, `Meta: ${v} clipe(s) por dia.`);
+      save({ daily_videos: v }, `Meta: ${clipes(v)} por dia.`);
     };
     $("#ytSave", root)?.addEventListener("click", (e) => {
       const key = $("#ytKey", root).value.trim(), channel = $("#ytChannel", root).value.trim();
