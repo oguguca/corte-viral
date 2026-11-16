@@ -130,7 +130,8 @@ export async function renderHome(root, { rerender } = {}) {
   const paint = () => {
     root.innerHTML = `
       <header class="page-head"><div><h1 class="t-display">Painel</h1>
-        <div class="sub">Rumo à monetização: metas de cada rede, atualizadas pelas views.</div></div>
+        <div class="sub"><span class="today">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</span>
+          · rumo à monetização: metas de cada rede, atualizadas pelas views.</div></div>
         <button class="btn primary large" id="homeNew">＋ Novo vídeo</button></header>
       <div class="grid-2">${dailyCard(g.daily)}${youtubeCard(g.youtube)}</div>
       <h2 class="t-head" style="margin:26px 0 12px">Metas de monetização</h2>
