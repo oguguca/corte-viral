@@ -91,6 +91,17 @@ function init() {
   applyTheme();
   $("#themeSlot").append(themeSwitcher());
   $("#newVideo").onclick = (e) => openNewVideo(e.currentTarget);
+  const syncSide = () => {
+    const mini = document.documentElement.classList.contains("side-mini");
+    $("#sideToggle").textContent = mini ? "»" : "«";
+    $("#sideToggle").setAttribute("aria-label", mini ? "Expandir a barra lateral" : "Recolher a barra lateral");
+  };
+  $("#sideToggle").onclick = () => {
+    const mini = document.documentElement.classList.toggle("side-mini");
+    try { localStorage.setItem("cv-side", mini ? "mini" : "full"); } catch (e) { /* sem armazenamento */ }
+    syncSide();
+  };
+  syncSide();
   $("#openSettings").onclick = (e) => openSettings(e.currentTarget);
   $("#openExports").onclick = () => api("/api/exports/open-folder", { method: "POST" }).catch((e) => toast(e.message, "bad"));
   $("#usageMini").onclick = (e) => openSettings(e.currentTarget, "usage");

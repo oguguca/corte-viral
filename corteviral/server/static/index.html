@@ -6,14 +6,18 @@
 <meta name="color-scheme" content="light dark">
 <title>Corte Viral</title>
 <script>/* aplica o tema antes de desenhar (sem "piscada" do tema errado) */
-try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.documentElement.dataset.theme = t;
+      if (localStorage.getItem("cv-side") === "mini") document.documentElement.classList.add("side-mini"); } catch (e) {}</script>
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
 <div class="app">
   <aside class="sidebar" aria-label="Navegação">
-    <a class="brand" id="brandHome" href="#/" title="Painel inicial"><span class="brand-mark" aria-hidden="true">CV</span><b>Corte Viral</b></a>
-    <button class="btn primary" id="newVideo" style="margin:0 6px 4px">＋ Novo vídeo</button>
+    <div class="brand-row">
+      <a class="brand" id="brandHome" href="#/" title="Painel inicial"><span class="brand-mark" aria-hidden="true">CV</span><b>Corte Viral</b></a>
+      <button class="side-toggle" id="sideToggle" aria-label="Recolher a barra lateral" title="Recolher/expandir a barra">«</button>
+    </div>
+    <button class="btn primary" id="newVideo" style="margin:0 6px 4px" title="Novo vídeo">＋<span class="lbl"> Novo vídeo</span></button>
     <div class="side-section t-label">Projetos <span class="num" id="projCount"></span></div>
     <input class="input side-search" id="projSearch" type="search" placeholder="Buscar projeto…" aria-label="Buscar projeto" hidden>
     <ul class="side-list" id="projects" aria-label="Projetos"></ul>

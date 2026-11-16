@@ -163,6 +163,16 @@ a { color: var(--info); }
   min-height: 0;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 12px; }
+.brand-row { display: flex; align-items: flex-start; justify-content: space-between; }
+.side-toggle { border: 0; background: transparent; color: var(--text-3); cursor: pointer; border-radius: 8px; padding: 6px 8px; font-size: 14px; }
+.side-toggle:hover { background: var(--surface-3); color: var(--text); }
+:root.side-mini { --sidebar: 72px; }
+:root.side-mini .sidebar { padding-inline: 8px; }
+:root.side-mini .brand b, :root.side-mini .side-section, :root.side-mini .side-search, :root.side-mini .side-item .meta,
+:root.side-mini #newVideo .lbl, :root.side-mini .usage-mini, :root.side-mini #themeSlot { display: none; }
+:root.side-mini .brand-row { flex-direction: column; align-items: center; }
+:root.side-mini .side-item { justify-content: center; padding-inline: 0; }
+:root.side-mini #newVideo { margin-inline: 0 !important; }
 .brand-mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
               background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 15px; box-shadow: var(--shadow-1); }
 .brand b { font: 650 16px/1 var(--font-display); letter-spacing: -0.01em; }
