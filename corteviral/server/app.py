@@ -274,6 +274,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             if best:
                 job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
                 render_all(project, s, best, preview=False, on_progress=lambda f, m: progress("render", f, m))
+            job["result"] = {"clips": len(best)}
 
         try:
             if req.kind == "posts":

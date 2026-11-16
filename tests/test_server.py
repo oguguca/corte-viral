@@ -481,6 +481,7 @@ def test_analyze_auto_renders_best_clips(settings_tmp, monkeypatch):
                                              "min_seconds": 15, "max_seconds": 60}).json()["id"])
     assert job["status"] == "done" and job["stage"] == "render" and job["auto"] is True
     assert rendered == {"ids": ["m1", "m2", "m0"]}
+    assert job["result"] == {"clips": 3}  # a tela avisa quantos clipes ficaram prontos
 
 
 def test_open_all_exports_folder(settings_tmp, tmp_path, monkeypatch):

@@ -135,6 +135,9 @@ function init() {
     }
     if (job.project && (job.auto || job.stage === "transcribe" || job.stage === "ingest")) {
       await renderProjects();  // link novo ou cortes automáticos: abre direto nos clipes
+      const n = job.result?.clips;
+      if (job.auto && n !== undefined) toast(n ? `${n} ${n === 1 ? "clipe pronto" : "clipes prontos"} — revise e exporte.`
+        : "A IA não achou momentos fortes neste vídeo.", n ? "good" : "bad");
       const r = parse();
       if (r.view === "project" && r.name === job.project && r.step === "clips") render();  // mesma rota: hashchange não dispara
       else go(job.project, "clips");
