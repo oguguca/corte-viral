@@ -64,10 +64,11 @@ function youtubeCard(yt) {
       <div class="row"><span class="thumb-lg net-youtube" aria-hidden="true">▶</span>
         <div><h2 class="t-head">Ligar o seu canal do YouTube</h2>
         <div class="t-small">As views e os inscritos entram nas metas sozinhos (grátis, só leitura).</div></div></div>
-      <ol class="steps-list t-small">
+      <details class="t-small"><summary style="cursor:pointer">Como conseguir a chave (3 passos, grátis)</summary>
+      <ol class="steps-list t-small" style="margin-top:8px">
         <li>Abra <b>console.cloud.google.com</b> e crie um projeto (pode usar o mesmo da chave do Gemini).</li>
         <li>Em <b>APIs e serviços › Biblioteca</b>, ative a <b>YouTube Data API v3</b>.</li>
-        <li>Em <b>Credenciais › Criar credenciais › Chave de API</b>, copie a chave e cole aqui.</li></ol>
+        <li>Em <b>Credenciais › Criar credenciais › Chave de API</b>, copie a chave e cole aqui.</li></ol></details>
       <div class="field"><label for="ytKey">Chave da API</label><input class="input" id="ytKey" type="password" autocomplete="off" placeholder="AIza…" value=""></div>
       <div class="field"><label for="ytChannel">Seu canal (@ ou link)</label><input class="input" id="ytChannel" placeholder="@seucanal" value="${esc(yt.channel || "")}"></div>
       <button class="btn primary" id="ytSave">Ligar canal</button></section>`;
