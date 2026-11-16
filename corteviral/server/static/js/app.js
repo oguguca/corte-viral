@@ -81,7 +81,9 @@ async function render({ keepFocus = false } = {}) {
 async function queueBadge() {  // "Fila de postagem · 14 na fila · próximo 19:28" na barra lateral
   try {
     const q = await api("/api/schedule");
-    const s = q.summary, el = $("#queueSub");
+    const s = q.summary, el = $("#queueSub"), n = $("#queueN");
+    n.hidden = !s.waiting;
+    n.textContent = s.waiting > 99 ? "99+" : s.waiting || "";
     el.textContent = s.waiting && s.paused ? `${s.waiting} na fila · pausada` : s.waiting ? `${s.waiting} na fila · próximo ${new Date(s.next_at * 1000)
       .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "nada programado";
   } catch (e) { /* app reiniciando */ }

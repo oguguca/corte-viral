@@ -191,6 +191,9 @@ a { color: var(--info); }
 .side-item .thumb { width: 28px; height: 28px; border-radius: 7px; background: var(--surface-3); display: grid; place-items: center;
                     flex: none; font-size: 13px; color: var(--text-2); }
 .side-item .meta { min-width: 0; flex: 1; }
+.thumb.has-badge { position: relative; }
+.badge-n { position: absolute; top: -5px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px;
+           background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .side-item .name { display: block; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .side-item .sub { display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-item .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--text-3); }
