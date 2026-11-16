@@ -102,6 +102,11 @@ export function openNewVideo(from) {
   const submit = () => {
     const source = $("#nvSrc", body).value.trim();
     if (!source) { $("#nvSrc", body).focus(); toast("Cole um link ou escolha um arquivo.", "bad"); return; }
+    if (!/^https?:\/\//i.test(source) && !/^([a-z]:[\/]|\\|\/)/i.test(source)) {  // nem link nem caminho de arquivo
+      $("#nvSrc", body).focus();
+      toast("Isso não parece um link (https://…) nem um arquivo do PC.", "bad");
+      return;
+    }
     const part = $("#nvPart", body).open ? readPart() : null;
     if (part && part.error) { $(part.field, body).focus(); toast(part.error, "bad"); return; }
     const dur = $("#nvDur", body).value;
