@@ -28,6 +28,7 @@ export function openNewVideo(from) {
   body.innerHTML = `
     <div class="field"><label for="nvSrc">Link da live/VOD (YouTube, Twitch, Kick) ou arquivo do PC</label>
       <div class="row" style="flex-wrap:nowrap"><input class="input lg" id="nvSrc" placeholder="https://www.twitch.tv/videos/…" autocomplete="off">
+        <button class="btn large" id="paste" title="Colar o link copiado">📋 Colar</button>
         <button class="btn large" id="pick" title="Escolher arquivo do computador">📁 Arquivo</button></div></div>
     <div class="row" style="gap:16px">
       <div class="field"><span class="label" id="mLbl">Qualidade da transcrição</span>
@@ -75,6 +76,15 @@ export function openNewVideo(from) {
     if (r && r.path) $("#nvSrc", body).value = r.path;
   };
   $("[data-cancel]", foot).onclick = s.close;
+  $("#paste", body).onclick = async () => {
+    try {
+      const t = (await navigator.clipboard.readText()).trim();
+      if (!t) { toast("A área de transferência está vazia.", "bad"); return; }
+      $("#nvSrc", body).value = t;
+    } catch (e) { toast("Não consegui ler o que foi copiado — cole com Ctrl+V.", "bad"); }
+    $("#nvSrc", body).focus();
+  };
+  setTimeout(() => $("#nvSrc", body).focus(), 50);  // já pronto para colar o link
   const readPart = () => {  // null = vídeo inteiro; {error} = algo errado; {start, end}
     const a = parseTime($("#nvFrom", body).value), b = parseTime($("#nvTo", body).value);
     if (a === null && b === null) return null;
