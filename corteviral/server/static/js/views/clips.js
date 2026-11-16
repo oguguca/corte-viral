@@ -124,6 +124,7 @@ export async function renderClips(root, name, project, ctx = {}) {
       <div class="row"><b class="t-title">Clipes prontos <span class="num muted">(${ready.length})</span></b>
         <span class="t-small">Assista, aprove ou descarte; “Ajustar” abre o corte, a legenda e os textos logo abaixo.</span>
         <span class="spacer"></span>
+        <button class="btn" id="openExp" title="Abre no Explorer a pasta dos clipes já exportados deste vídeo">📁 Abrir pasta</button>
         <button class="btn primary" id="expAll" ${keep.length ? "" : "disabled"}>⬇ Exportar ${keep.length} clipe(s)</button></div>
       <div class="board">${ready.map((m) => `
         <article class="board-card ${m.status === "discarded" ? "discarded" : ""}" data-id="${esc(m.id)}">
@@ -152,6 +153,7 @@ export async function renderClips(root, name, project, ctx = {}) {
         $("#detail", root).scrollIntoView({ behavior: "smooth", block: "start" });
       };
     });
+    $("#openExp", board).onclick = () => api(P("/open-exports"), { method: "POST" }).catch((e) => toast(e.message, "bad"));
     $("#expAll", board).onclick = () => startJob({ kind: "export", project: name, ids: keep.map((m) => m.id) });
   }
 
