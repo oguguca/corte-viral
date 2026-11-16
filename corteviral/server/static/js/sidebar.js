@@ -5,7 +5,13 @@ import { state } from "./state.js";
 
 export async function renderProjects() {
   try { state.projects = await api("/api/projects"); } catch (e) { state.projects = []; }
-  const ul = $("#projects");
+  const ul = $("#projects"), search = $("#projSearch");
+  $("#projCount").textContent = state.projects.length ? `· ${state.projects.length}` : "";
+  search.hidden = state.projects.length <= 5;  // busca só aparece quando a lista cresce
+  search.oninput = () => {
+    const q = search.value.trim().toLowerCase();
+    ul.querySelectorAll("li").forEach((li) => { li.hidden = !!q && !li.textContent.toLowerCase().includes(q); });
+  };
   if (!state.projects.length) {
     ul.innerHTML = '<li class="t-small" style="padding:8px 10px">Nenhum projeto ainda. Use “Novo vídeo”.</li>';
     return;
@@ -20,6 +26,7 @@ export async function renderProjects() {
         <span class="sub"><span class="dot ${kind}" aria-hidden="true"></span>${fmt(p.duration)} · ${status}</span></span></button></li>`;
   }).join("");
   ul.querySelectorAll("[data-name]").forEach((b) => b.onclick = () => go(b.dataset.name, "clips"));
+  if (search.value) search.oninput();  // mantém o filtro depois de redesenhar
 }
 
 export async function renderUsageMini() {

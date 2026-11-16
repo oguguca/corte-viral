@@ -14,7 +14,8 @@ try { var t = localStorage.getItem("cv-theme"); if (t && t !== "auto") document.
   <aside class="sidebar" aria-label="Navegação">
     <a class="brand" id="brandHome" href="#/" title="Painel inicial"><span class="brand-mark" aria-hidden="true">CV</span><b>Corte Viral</b></a>
     <button class="btn primary" id="newVideo" style="margin:0 6px 4px">＋ Novo vídeo</button>
-    <div class="side-section t-label">Projetos</div>
+    <div class="side-section t-label">Projetos <span class="num" id="projCount"></span></div>
+    <input class="input side-search" id="projSearch" type="search" placeholder="Buscar projeto…" aria-label="Buscar projeto" hidden>
     <ul class="side-list" id="projects" aria-label="Projetos"></ul>
     <div class="side-foot">
       <div id="themeSlot" style="padding:4px 6px 6px"></div>
