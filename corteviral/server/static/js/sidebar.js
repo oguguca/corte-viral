@@ -42,5 +42,7 @@ export async function renderUsageMini() {
     paint("#usageBarG", "#usagePct", u.percent, u.rate_limited, `${u.requests} requisições hoje`);
     const g = u.groq || { percent: 0, seconds: 0, rate_limited: false };  // transcrição na nuvem: minutos de áudio
     paint("#usageBarQ", "#usageGroq", g.percent, g.rate_limited, `${Math.round(g.seconds / 60)} min de áudio hoje`);
+    $("#usageMini").setAttribute("aria-label",  // o rótulo fixo escondia os números de quem usa leitor de tela
+      `Uso da IA hoje: Gemini ${pctTxt(u.percent)}, Groq ${pctTxt(g.percent)}. Abrir detalhes`);
   } catch (e) { /* sem uso */ }
 }
