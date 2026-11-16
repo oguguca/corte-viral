@@ -112,6 +112,12 @@ function init() {
   $("#openExports").onclick = () => api("/api/exports/open-folder", { method: "POST" }).catch((e) => toast(e.message, "bad"));
   $("#usageMini").onclick = (e) => openSettings(e.currentTarget, "usage");
   addEventListener("hashchange", () => render());
+  addEventListener("keydown", (e) => {  // N = Novo vídeo (fora de campos de texto e sem painel aberto)
+    const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+    if (e.key.toLowerCase() !== "n" || typing || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".sheet")) return;
+    e.preventDefault();
+    openNewVideo($("#newVideo"));
+  });
   document.addEventListener("capstylechange", () => { if (parse().step === "clips") render({ keepFocus: true }); });
   onJobDone(async (job) => {
     renderUsageMini();
