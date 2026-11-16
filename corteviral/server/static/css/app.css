@@ -213,7 +213,8 @@ a { color: var(--info); }
 .page { max-width: 1240px; width: 100%; margin: 0 auto; padding: 28px 32px 120px; }
 .page-head { display: flex; align-items: flex-end; gap: 16px; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; }
 .page-head .sub { color: var(--text-3); margin-top: 6px; }
-.page-head .today { color: var(--text-2); font-weight: 600; text-transform: capitalize; }
+.page-head .today { display: inline-block; color: var(--text-2); font-weight: 600; }
+.page-head .today::first-letter { text-transform: uppercase; }  /* "Domingo, 15 de novembro" (não "De Novembro") */
 
 /* etapas (wayfinding: onde estou / para onde posso ir) */
 .steps {
