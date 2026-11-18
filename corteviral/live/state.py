@@ -34,6 +34,7 @@ class Window(BaseModel):
     state: Literal["pending", "pending_ai", "done", "failed"] = "pending"
     clips: list[str] = Field(default_factory=list)
     tries: int = 0
+    next_try: float = 0.0       # pending_ai: relógio de parede da próxima tentativa
 
 
 class LiveState(BaseModel):
@@ -58,9 +59,10 @@ class LiveState(BaseModel):
     def recorded_until(self) -> float:
         return self.parts[-1].end if self.parts else 0.0
 
-    def next_window(self, window: int, overlap: int) -> Window | None:
+    def next_window(self, window: int, overlap: int, final: bool = False) -> Window | None:
         """Próxima janela a processar, ou None se ainda não há conteúdo novo suficiente.
 
+        `final=True` (live encerrada): a última parte também conta como encerrada.
         Nunca atravessa duas partes. Dentro da mesma parte, começa `overlap` s antes do fim da anterior
         (momento na divisa não se perde). Parte já encerrada fecha com o que sobrou (se ≥ 20 s).
         """
@@ -76,13 +78,13 @@ class LiveState(BaseModel):
             cursor = start = self.parts[0].offset
         while True:
             part = self.parts[p]
-            finished = p < len(self.parts) - 1
+            finished = p < len(self.parts) - 1 or final
             avail = part.end - cursor
             if avail >= window:
                 return Window(n=n, part=p, start=round(start, 3), end=round(cursor + window, 3))
             if finished and avail >= MIN_TAIL:
                 return Window(n=n, part=p, start=round(start, 3), end=round(part.end, 3))
-            if not finished:
+            if not finished or p == len(self.parts) - 1:
                 return None
             p += 1
             cursor = start = self.parts[p].offset

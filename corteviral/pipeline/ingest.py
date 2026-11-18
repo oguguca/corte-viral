@@ -82,6 +82,15 @@ def _probe_url(url: str, settings: Settings) -> dict:
         raise IngestError(f"não foi possível acessar o link: {_friendly_error(str(e))}") from e
 
 
+def probe_is_live(url: str, settings: Settings) -> bool:
+    """A transmissão ainda está no ar? (erro de acesso conta como não)."""
+    try:
+        info = _probe_url(url, settings)
+    except IngestError:
+        return False
+    return bool(info.get("is_live")) or info.get("live_status") == "is_live"
+
+
 def _hms(t: float) -> str:
     t = int(t)
     return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}" if t >= 3600 else f"{t // 60}:{t % 60:02d}"
