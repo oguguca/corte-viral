@@ -198,6 +198,24 @@ plataformas (não fica atrás dos botões do TikTok/Shorts/Reels).
 
 Linha de comando: `.venv\Scripts\python -m corteviral export projects\<pasta-do-projeto>`
 
+### Live ao vivo
+
+Cole no **Novo vídeo** o link de uma live **que está no ar** (YouTube, Twitch ou Kick; no YouTube, o link do
+canal com `/live` no fim também serve). O app começa a gravar **a partir de agora** e, a cada 5 minutos,
+transcreve o trecho novo, encontra os momentos fortes e **já gera os clipes** — eles aparecem sozinhos na grade
+**Clipes prontos**, e você ajusta e exporta como qualquer clipe.
+
+- No topo da tela: **🔴 Ao vivo · gravando 1:23:10 · 4 clipes**, com **■ Parar**. Exportar e postar continuam
+  funcionando enquanto a live roda.
+- Cada janela de 5 min tem 1 min de sobra da anterior (momento na divisa não se perde); no máximo 3 clipes por
+  janela e nenhum clipe sai sem a avaliação da IA (se a cota acabar, o trecho espera e é tentado de novo).
+- Internet caiu? A gravação retoma sozinha; o buraco vira tela preta no vídeo final, para os tempos seguirem certos.
+  Fechou o app no meio? Abra o projeto e clique em **Retomar**.
+- Quando a live acaba (ou em **Parar**), as partes viram um vídeo só no projeto. **Analisar a live inteira**
+  procura o que escapou, sem mexer nos clipes que você já tem.
+- Limites: uma live por vez; o PC precisa ficar ligado e online; uma live de 5 h usa ~5 h da cota grátis de áudio
+  do Groq (~8 h/dia). Ajustes em `live:` no `config.yaml` (`window_seconds`, `max_clips_per_window`…).
+
 ### Login de download (vídeos com restrição de idade, privados ou de inscritos)
 
 Em **Ajustes › Login de download**, clique em **"Conectar contas"**. Abre uma janela do Edge com abas do YouTube,
