@@ -143,3 +143,39 @@ def test_recorder_command_records_from_now_as_mpegts(settings_tmp, tmp_path):
     cmd = seen["cmd"]
     assert out == tmp_path / "part-002.ts" and str(out) in cmd and "--hls-use-mpegts" in cmd
     assert "--live-from-start" not in cmd and cmd[-1] == "https://youtu.be/x" and r.running()
+
+
+def test_recorder_finds_file_when_ytdlp_appends_extension(tmp_path):
+    (tmp_path / "part-000.ts.mp4").write_bytes(b"x")  # live com vídeo+áudio separados: yt-dlp põe .mp4 no fim
+    assert Recorder.resolve(tmp_path / "part-000.ts") == tmp_path / "part-000.ts.mp4"
+    assert Recorder.resolve(tmp_path / "part-001.ts") == tmp_path / "part-001.ts"
+
+
+def test_recorder_format_merges_video_and_audio(settings_tmp, tmp_path):
+    cmd = Recorder("https://x", tmp_path, settings_tmp).command(tmp_path / "p.ts")
+    fmt = cmd[cmd.index("-f") + 1]
+    assert fmt.startswith("bv*[height<=") and "+ba" in fmt
+
+
+def test_recorder_stop_kills_whole_process_tree_on_windows(settings_tmp, tmp_path, monkeypatch):
+    import corteviral.live.recorder as recmod
+    ran = []
+
+    class P:
+        pid = 4321
+
+        def __init__(self, cmd, **kw):
+            pass
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(recmod.os, "name", "nt")
+    monkeypatch.setattr(recmod.subprocess, "run", lambda cmd, **kw: ran.append(cmd))
+    r = Recorder("https://x", tmp_path, settings_tmp, popen=P)
+    r.start(0)
+    r.stop()
+    assert ran and ran[0][:2] == ["taskkill", "/PID"] and "4321" in ran[0] and "/T" in ran[0]  # leva o ffmpeg junto

@@ -64,6 +64,9 @@ class LiveMonitor:
         st, lv = self.state, self.settings.live
         if st.parts:
             part = st.parts[-1]
+            real = Recorder.resolve(Path(part.file))
+            if real.exists():
+                part.file = str(real)  # nome real (o yt-dlp pode acrescentar a extensão)
             part.duration = max(part.duration, self.recorder.recorded(Path(part.file)))
         if not self.recorder.running():
             gained = st.parts and st.parts[-1].duration > 1.0

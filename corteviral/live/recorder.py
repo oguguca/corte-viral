@@ -1,6 +1,7 @@
 """Gravador da live: yt-dlp em subprocesso gravando do agora em partes MPEG-TS (legíveis enquanto crescem)."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ class Recorder:
     def command(self, out: Path) -> list[str]:
         d = self.settings.download
         cmd = [sys.executable, "-m", "yt_dlp", "--quiet", "--no-warnings", "--no-part", "--hls-use-mpegts",
-               "-f", f"b[height<={d.max_height}]/b", "--js-runtimes", "node",
+               "-f", f"bv*[height<={d.max_height}]+ba/b[height<={d.max_height}]/b", "--js-runtimes", "node",
                "--ffmpeg-location", str(Path(ffmpeg.binary("ffmpeg")).parent), "-o", str(out)]
         if d.cookies_from_browser:
             cmd += ["--cookies-from-browser", d.cookies_from_browser]
@@ -40,17 +41,31 @@ class Recorder:
         return self.proc is not None and self.proc.poll() is None
 
     def stop(self) -> None:
-        if self.running():
+        if not self.running():
+            return
+        if os.name == "nt":  # o yt-dlp abre um ffmpeg filho: sem /T ele fica órfão gravando para sempre
+            subprocess.run(["taskkill", "/PID", str(self.proc.pid), "/T", "/F"], capture_output=True)
+        else:
             self.proc.terminate()
-            try:
-                self.proc.wait(timeout=15)
-            except Exception:  # noqa: BLE001
-                self.proc.kill()
+        try:
+            self.proc.wait(timeout=15)
+        except Exception:  # noqa: BLE001
+            self.proc.kill()
+
+    @staticmethod
+    def resolve(path: Path) -> Path:
+        """Arquivo real da parte: com vídeo e áudio separados o yt-dlp acrescenta a extensão (.ts.mp4);
+        o conteúdo continua MPEG-TS."""
+        path = Path(path)
+        if path.exists():
+            return path
+        found = sorted(path.parent.glob(path.name + ".*"))
+        return found[0] if found else path
 
     @staticmethod
     def recorded(path: Path) -> float:
         """Quanto da parte já foi gravado (s); 0 se ainda não dá para ler."""
-        path = Path(path)
+        path = Recorder.resolve(path)
         if not path.exists() or path.stat().st_size < 50_000:
             return 0.0
         try:
