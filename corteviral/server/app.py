@@ -451,7 +451,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                     "has_transcript": (pj.parent / "transcript.json").exists(),
                     "has_moments": (pj.parent / "moments.json").exists(),
                     **(lambda st: {"live": bool(st and st.active), "live_ended": bool(st and st.ended),
-                                   "live_finalized": bool(st and st.finalized)})(
+                                   "live_finalized": bool(st and st.finalized),
+                                   "live_started": st.started_at if st else None})(
                         LiveState.load(pj.parent / LIVE_FILE)),
                     "clips": sum(1 for f in (pj.parent / "clips").glob("*.mp4") if ".preview" not in f.name
                                  and ".tmp" not in f.name),

@@ -17,13 +17,16 @@ export async function renderProjects() {
     return;
   }
   ul.innerHTML = state.projects.map((p) => {
-    const [kind, status] = p.live ? ["live", `ao vivo · ${p.clips || 0} clipes`] : p.clips ? ["ok", `${p.clips} clipe${p.clips > 1 ? "s" : ""} pronto${p.clips > 1 ? "s" : ""}`]
+    const when = p.live_started ? new Date(p.live_started * 1000).toLocaleString("pt-BR",
+      { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", "") : "";
+    const [kind, status] = p.live ? ["live", `ao vivo · ${p.clips || 0} clipes`]
+      : p.live_ended ? ["ok", `🎥 live de ${when} · ${p.clips || 0} ${p.clips === 1 ? "clipe" : "clipes"}`] : p.clips ? ["ok", `${p.clips} clipe${p.clips > 1 ? "s" : ""} pronto${p.clips > 1 ? "s" : ""}`]
       : p.has_moments ? ["mid", "sem clipes ainda"] : p.has_transcript ? ["mid", "transcrito"] : ["wait", "processando"];
     return `<li><button class="side-item" data-name="${esc(p.name)}" ${p.name === state.current ? 'aria-current="page"' : ""}
         title="${esc(p.title || p.name)}">
       <span class="thumb num" aria-hidden="true">${p.live ? "🔴" : p.clips || (p.has_transcript ? "▶" : "…")}</span>
       <span class="meta"><span class="name">${esc(p.title || p.name)}</span>
-        <span class="sub"><span class="dot ${kind}" aria-hidden="true"></span>${fmt(p.duration)} · ${status}</span></span></button></li>`;
+        <span class="sub"><span class="dot ${kind}" aria-hidden="true"></span>${p.live_ended ? "" : fmt(p.duration) + " · "}${status}</span></span></button></li>`;
   }).join("");
   ul.querySelectorAll("[data-name]").forEach((b) => b.onclick = () => go(b.dataset.name, "clips"));
   if (search.value) search.oninput();  // mantém o filtro depois de redesenhar

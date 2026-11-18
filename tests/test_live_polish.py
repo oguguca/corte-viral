@@ -145,3 +145,22 @@ def test_successful_finalize_frees_disk(settings_tmp, tmp_path):
     finalize(p, st)
     assert st.finalized and not part.exists() and not (live / "win-000" / "video.mp4").exists()
     assert not p.path("video.mp4").exists()  # só os melhores momentos ficam salvos
+
+
+def test_projects_list_keeps_past_live_with_its_date(settings_tmp):
+    p = Project.create(settings_tmp.paths.projects_dir, "kick:1#live", "Live de ontem")
+    LiveState(url="u", active=False, ended=True, finalized=True, started_at=1795000000.0).save(p.dir / "live.json")
+    item = next(x for x in TestClient(create_app(settings_tmp)).get("/api/projects").json() if x["name"] == p.dir.name)
+    assert item["live"] is False and item["live_ended"] and item["live_started"] == 1795000000.0
+
+
+def test_new_live_while_previous_is_finishing_explains_what_to_do(settings_tmp):
+    from corteviral.live.monitor import LiveError
+    p = Project.create(settings_tmp.paths.projects_dir, "u", "Live")
+    rec = FakeRecorder()
+    m = start_monitor(p, settings_tmp, "u", {}, recorder=rec, process=lambda *a, **k: [], is_live=lambda u: True,
+                      clock=Clock(), sleep=lambda s: None, finalize_fn=lambda *a: None, thread=False, killer=lambda p: None)
+    m.stop()
+    q = Project.create(settings_tmp.paths.projects_dir, "u2", "Outra")
+    with pytest.raises(LiveError, match="terminando"):
+        start_monitor(q, settings_tmp, "u2", {}, recorder=FakeRecorder(), thread=False, killer=lambda p: None)

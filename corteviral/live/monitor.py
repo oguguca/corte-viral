@@ -193,6 +193,9 @@ def start_monitor(project: Project, settings: Settings, url: str, opts: dict, re
     """Começa (ou retoma, se já há live.json) o acompanhamento. Uma live por vez."""
     with _LOCK:
         if ACTIVE:
+            if any(m.stopping for m in ACTIVE.values()):
+                raise LiveError("a live anterior está terminando (processando os últimos trechos). "
+                                "Aguarde um ou dois minutos e cole o link de novo — ela continua salva na barra lateral.")
             raise LiveError("já existe uma live sendo acompanhada — pare ela antes de começar outra")
         path = project.dir / LIVE_FILE
         state = LiveState.load(path)
