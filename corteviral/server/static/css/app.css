@@ -199,6 +199,11 @@ a { color: var(--info); }
 .side-item .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--text-3); }
 .side-item .dot.ok { background: var(--good); }
 .side-item .dot.mid { background: var(--warn); }
+.side-item .dot.live { background: var(--bad); }
+.live-bar { margin-bottom: 18px; border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); animation: livepulse 1.4s ease-in-out infinite; }
+@keyframes livepulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 .side-foot { border-top: 1px solid var(--line); padding-top: 4px; display: grid; gap: 2px; }
 .side-foot .side-section { padding-top: 8px; }
 .usage-mini { display: grid; gap: 5px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer; border: 0;

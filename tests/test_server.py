@@ -585,7 +585,7 @@ def test_projects_list_marks_live(live_client):
     c, made = live_client
     job = _wait(c, c.post("/api/jobs", json={"source": "https://youtu.be/abc"}).json()["id"])
     item = next(p for p in c.get("/api/projects").json() if p["name"] == job["project"])
-    assert item["live"] is True
+    assert item["live"] is True and item["live_ended"] is False
 
 
 def test_live_resume_when_app_restarted(live_client, settings_tmp):

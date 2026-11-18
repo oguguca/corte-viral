@@ -10,6 +10,7 @@ import { applyTheme, themeSwitcher } from "./theme.js";
 import { toast } from "./ui.js";
 import { renderAccounts } from "./views/accounts.js";
 import { renderClips } from "./views/clips.js";
+import { mountLiveBar } from "./views/livebar.js";
 import { renderExport } from "./views/export.js";
 import { renderHome } from "./views/home.js";
 import { renderQueue } from "./views/queue.js";
@@ -75,6 +76,7 @@ async function render({ keepFocus = false } = {}) {
     <div id="stepBody"></div>`;
   if (!keepFocus) main.scrollTop = 0;
   await VIEWS[route.step]($("#stepBody"), route.name, project, { rerender: () => render({ keepFocus: true }) });
+  if (route.step === "clips") await mountLiveBar($("#stepBody"), route.name, project, () => render({ keepFocus: true }));
   if (!keepFocus) {  // orientação: o foco vai para o título da tela nova (o botão clicado deixou de existir)
     const h1 = $("#page h1");
     h1?.setAttribute("tabindex", "-1");
@@ -135,6 +137,7 @@ function init() {
     }
     if (job.project && (job.auto || job.stage === "transcribe" || job.stage === "ingest")) {
       await renderProjects();  // link novo ou cortes automáticos: abre direto nos clipes
+      if (job.live) toast("Live ao vivo: os clipes vão aparecendo enquanto ela acontece.", "good");
       const n = job.result?.clips;
       if (job.auto && n !== undefined) toast(n ? `${n} ${n === 1 ? "clipe pronto" : "clipes prontos"} — revise e exporte.`
         : "A IA não achou momentos fortes neste vídeo.", n ? "good" : "bad");

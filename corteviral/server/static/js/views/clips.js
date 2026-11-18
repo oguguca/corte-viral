@@ -16,6 +16,11 @@ export async function renderClips(root, name, project, ctx = {}) {
   const P = projectApi(name);
   let d;
   try { d = await api(P("/moments")); } catch (e) {
+    if (project.live) {  // live ao vivo: a primeira janela ainda não fechou
+      root.innerHTML = `<div class="card pad"><div class="empty"><div class="big">🔴</div>Gravando a live…
+        <br>Os primeiros clipes aparecem aqui em alguns minutos, conforme os momentos fortes acontecem.</div></div>`;
+      return;
+    }
     root.innerHTML = `<div class="card pad"><div class="empty"><div class="big">✨</div>
       A IA encontra os momentos fortes deste vídeo, decide quantos valem a pena e já gera os clipes.
       <div class="row" style="justify-content:center;align-items:flex-end;gap:14px;margin-top:14px">
