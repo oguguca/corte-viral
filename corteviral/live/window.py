@@ -22,15 +22,40 @@ log = logging.getLogger(__name__)
 MAX_OVERLAP = 0.3
 
 
+def keyframe_before(part_path: Path, t: float) -> float | None:
+    """Último quadro-chave do vídeo em até 10 s antes de `t` (tempo da parte), ou None."""
+    import subprocess
+    lo = max(0.0, t - 10.0)
+    out = subprocess.run([ffmpeg.binary("ffprobe"), "-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey",
+                          "-show_entries", "frame=pts_time", "-read_intervals", f"{lo:.3f}%{t + 0.05:.3f}",
+                          "-of", "csv=p=0", str(part_path)], capture_output=True, text=True).stdout
+    times = []
+    for line in out.split():
+        try:
+            times.append(float(line.strip().strip(",")))
+        except ValueError:
+            continue
+    times = [x for x in times if x <= t + 0.001]
+    return max(times) if times else None
+
+
 def cut_window(part_path: Path, part_offset: float, win: Window, dest: Path) -> Path:
-    """Recorte preciso (re-encode rápido) da janela: video.mp4 + audio.wav do mesmo jeito que o ingest."""
+    """Recorte da janela sem recodificar (rápido no notebook): começa no quadro-chave antes do início pedido e
+    `win.start` passa a ser esse ponto, então os tempos continuam exatos. Sem quadro-chave → recodifica."""
     dest.mkdir(parents=True, exist_ok=True)
     video, tmp = dest / "video.mp4", dest / "video.tmp.mp4"
-    ss, dur = win.start - part_offset, win.end - win.start
-    try:  # -ss antes do -i: não decodifica a live desde o começo (re-encode mantém o corte exato)
-        ffmpeg.run(["-y", "-ss", f"{ss:.3f}", "-i", str(part_path), "-t", f"{dur:.3f}",
-                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-c:a", "aac", "-b:a", "160k",
-                    "-movflags", "+faststart", str(tmp)])
+    want = win.start - part_offset
+    kf = keyframe_before(part_path, want)
+    try:  # -ss antes do -i: não decodifica a live desde o começo
+        if kf is not None:
+            ffmpeg.run(["-y", "-ss", f"{kf:.3f}", "-i", str(part_path), "-t", f"{win.end - part_offset - kf:.3f}",
+                        "-c", "copy", "-avoid_negative_ts", "make_zero", "-bsf:a", "aac_adtstoasc",
+                        "-movflags", "+faststart", str(tmp)])
+            win.start = round(part_offset + kf, 3)
+        else:
+            ffmpeg.run(["-y", "-ss", f"{want:.3f}", "-i", str(part_path), "-t", f"{win.end - win.start:.3f}",
+                        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-c:a", "aac", "-b:a", "160k",
+                        "-movflags", "+faststart", str(tmp)])
     except Exception:
         tmp.unlink(missing_ok=True)  # nunca deixa um vídeo pela metade para ser reaproveitado
         raise
