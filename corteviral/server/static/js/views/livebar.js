@@ -40,6 +40,14 @@ export async function mountLiveBar(root, name, project, rerender) {
         try { await api(`/api/live/resume?project=${encodeURIComponent(name)}`, { method: "POST" }); toast("Live retomada.", "good"); paint(); }
         catch (e) { toast(e.message, "bad"); }
       };
+    } else if (project.live_ended && !project.live_finalized) {
+      clearInterval(timer);
+      bar.innerHTML = `<div class="row"><b>Live encerrada</b><span class="t-small">não consegui juntar a gravação num vídeo só.</span>
+        <span class="spacer"></span><button class="btn primary" id="liveJoin">Juntar de novo</button></div>`;
+      $("#liveJoin", bar).onclick = async () => {
+        try { await api(`/api/live/finalize?project=${encodeURIComponent(name)}`, { method: "POST" }); toast("Vídeo da live pronto.", "good"); rerender(); }
+        catch (e) { toast(e.message, "bad"); }
+      };
     } else {
       clearInterval(timer);
       bar.innerHTML = `<div class="row"><b>Live encerrada</b><span class="t-small">o vídeo completo foi gravado.</span>

@@ -81,5 +81,14 @@ def finalize(project: Project, state: LiveState) -> Path:
             for m in data.get("moments", []) + data.get("all", []):
                 m.pop("source", None)
             write_json_atomic(project.path(MOMENTS), data)
-    state.active, state.ended = False, True
+    state.active, state.ended, state.finalized = False, True, True
+    _free_disk(project, state)
     return dest
+
+
+def _free_disk(project: Project, state: LiveState) -> None:
+    """O video.mp4 já tem tudo: as partes gravadas e os vídeos das janelas viram espaço livre."""
+    for part in state.parts:
+        Path(part.file).unlink(missing_ok=True)
+    for win_video in (project.dir / "live").glob("win-*/video.mp4"):
+        win_video.unlink(missing_ok=True)

@@ -46,6 +46,7 @@ class LiveState(BaseModel):
     windows: list[Window] = Field(default_factory=list)
     started_at: float = 0.0     # relógio de parede do início da primeira parte
     ended: bool = False
+    finalized: bool = False     # partes já viraram o video.mp4 do projeto
 
     @classmethod
     def load(cls, path: Path) -> "LiveState | None":

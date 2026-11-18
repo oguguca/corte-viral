@@ -39,6 +39,7 @@ from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
 from corteviral.live import monitor as live_mon
 from corteviral.live.monitor import LIVE_FILE, LiveError, start_monitor
+from corteviral.live.finalize import finalize as _finalize_live
 from corteviral.live.state import LiveState
 from corteviral.utils import write_json_atomic
 from corteviral.pipeline.boundaries import _overlap
@@ -179,7 +180,8 @@ class _Jobs:
         self.running: str | None = None
 
 
-def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=None, live_factory=None) -> FastAPI:
+def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=None, live_factory=None,
+               live_finalize=None) -> FastAPI:
     pipeline = pipeline or default_pipeline
     analyzer = analyzer or analyze
     live_factory = live_factory or (lambda project, s, url, opts: start_monitor(project, s, url, opts))
@@ -448,7 +450,8 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                     "duration": data.get("duration", 0), "stages": list(data.get("stages", {})),
                     "has_transcript": (pj.parent / "transcript.json").exists(),
                     "has_moments": (pj.parent / "moments.json").exists(),
-                    **(lambda st: {"live": bool(st and st.active), "live_ended": bool(st and st.ended)})(
+                    **(lambda st: {"live": bool(st and st.active), "live_ended": bool(st and st.ended),
+                                   "live_finalized": bool(st and st.finalized)})(
                         LiveState.load(pj.parent / LIVE_FILE)),
                     "clips": sum(1 for f in (pj.parent / "clips").glob("*.mp4") if ".preview" not in f.name
                                  and ".tmp" not in f.name),
@@ -849,10 +852,32 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         st = LiveState.load(p.dir / LIVE_FILE)
         if not st:
             raise HTTPException(404, "esse projeto não é de live")
+        s = settings.model_copy(deep=True)
+        if yt_profile.exists():  # live de membros / com idade: mesma sessão de login do Novo vídeo
+            try:
+                _yt_sync()
+            except BrowserSessionError:
+                pass
+        if yt_cookies.exists() and not s.download.cookies_file:
+            s.download.cookies_file = yt_cookies
         try:
-            live_factory(p, settings.model_copy(deep=True), st.url, st.opts)
+            live_factory(p, s, st.url, st.opts)
         except LiveError as e:
             raise HTTPException(409, str(e)) from e
+        return {"ok": True}
+
+    @app.post("/api/live/finalize")
+    def live_finalize_again(project: str):
+        p = Project.load(_project_dir(project))
+        st = LiveState.load(p.dir / LIVE_FILE)
+        if not st or st.active:
+            raise HTTPException(409, "a live ainda está sendo acompanhada")
+        try:
+            (live_finalize or _finalize_live)(p, st)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(500, f"não consegui juntar as partes: {e}") from e
+        st.finalized = True
+        st.save(p.dir / LIVE_FILE)
         return {"ok": True}
 
     @app.get("/api/projects/{name}/video")

@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
@@ -26,6 +28,20 @@ from corteviral.vision.frames import grab, video_size
 log = logging.getLogger(__name__)
 ProgressFn = Callable[[float, str], None]
 CLIPS = "clips"
+_CLIP_LOCKS: dict[str, threading.Lock] = {}
+_CLIP_LOCKS_GUARD = threading.Lock()
+
+
+@contextmanager
+def clip_lock(out: Path):
+    """Um clipe por vez no mesmo arquivo (monitor da live x "Gerar de novo" na tela)."""
+    key = str(Path(out).resolve()).lower()
+    with _CLIP_LOCKS_GUARD:
+        lock = _CLIP_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        yield
+
+
 _BROKEN_ENCODERS: set[str] = set()  # codificadores que já falharam nesta execução (ex.: NVENC x driver)
 
 
@@ -145,6 +161,12 @@ def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
 def render_clip(project: Project, moment: dict, settings: Settings, preview: bool = False,
                 preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None,
                 captions: bool | None = None) -> Path:
+    out = Path(project.dir) / CLIPS / f"{moment['id']}{'.preview' if preview else ''}.mp4"
+    with clip_lock(out):
+        return _render_clip(project, moment, settings, preview, preset, on_progress, captions)
+
+
+def _render_clip(project, moment, settings, preview, preset, on_progress, captions) -> Path:
     rs = settings.render
     source = moment.get("source")  # clipe de live ao vivo: lê o vídeo da janela, não o do projeto
     video = Path(source["video"]) if source else Path(project.data["video_path"])
@@ -182,7 +204,8 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
                              duration=out_len, layout=preset.layout,
                              hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs, band))
     key = params_hash({"v": 3, "start": start, "end": end, "segs": segs, "zooms": zooms, "preset": preset.model_dump(),
-                       "render": rs.model_dump(mode="json"), "preview": preview, "source": source,
+                       "render": rs.model_dump(mode="json"), "preview": preview,
+                       **({"source": source} if source else {}),  # clipes normais: mesmo hash de antes
                        "captions": params_hash({"ass": ass_text}) if ass_text else None,
                        "band": band.model_dump() if band else None})
     if out.exists() and meta_file.exists():

@@ -86,6 +86,7 @@ def _window_settings(settings: Settings, state: LiveState) -> Settings:
 def process_window(main: Project, state: LiveState, win: Window, settings: Settings, *,
                    transcribe_fn=transcribe, analyze_fn=analyze, render_fn=render_clip) -> list[dict]:
     """Processa uma janela; devolve os momentos novos (já com clipe gerado). Atualiza `win`."""
+    main = Project.load(main.dir)  # mudanças feitas pela tela durante a live (preset, layout) valem já
     wdir = main.dir / "live" / f"win-{win.n:03d}"
     video = wdir / "video.mp4"
     if not video.exists():

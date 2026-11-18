@@ -144,7 +144,9 @@ class LiveMonitor:
         st.save(self.path)
         try:
             self.finalize_fn(self.project, st)
-        except Exception as e:  # noqa: BLE001
+            st.finalized = True
+        except Exception as e:  # noqa: BLE001 — a tela oferece "Juntar de novo"
+            st.finalized = False
             log.warning("Não consegui juntar as partes da live: %s", e)
         st.save(self.path)
         self.finished = True
@@ -196,13 +198,17 @@ def start_monitor(project: Project, settings: Settings, url: str, opts: dict, re
         state = LiveState.load(path)
         if state is None:
             state = LiveState(url=url, opts=opts, started_at=clock())
+        rec = recorder or Recorder(url, project.dir / "live", settings)
         for part in state.parts:  # retomando: gravador que sobrou de antes não pode seguir gravando
             if part.pid:
                 killer(part.pid)
                 part.pid = None
+            real = Recorder.resolve(Path(part.file))
+            if real.exists():
+                part.file = str(real)
+            part.duration = max(part.duration, rec.recorded(Path(part.file)))  # cauda gravada após o último save
         state.active, state.ended = True, False
         state.save(path)
-        rec = recorder or Recorder(url, project.dir / "live", settings)
         m = LiveMonitor(project, settings, rec, process=process, is_live=is_live, clock=clock, sleep=sleep,
                         finalize_fn=finalize_fn)
         m._new_part()
