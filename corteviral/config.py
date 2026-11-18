@@ -93,6 +93,16 @@ class DeepSettings(_Strict):
     workers: int = 3              # trechos assistidos em paralelo
 
 
+class LiveSettings(_Strict):
+    """Cortes de live ao vivo: grava em partes e processa janelas com sobreposição."""
+    window_seconds: int = Field(default=300, ge=60, le=1800)
+    overlap_seconds: int = Field(default=60, ge=0, le=300)
+    max_retries: int = Field(default=20, ge=1, le=200)       # quedas seguidas sem gravar nada
+    retry_wait: int = Field(default=10, ge=1, le=60)         # s; dobra até 60
+    max_clips_per_window: int = Field(default=3, ge=1, le=20)
+    review_per_window: int = Field(default=3, ge=0, le=20)   # trechos que a IA assiste por janela
+
+
 class RenderSettings(_Strict):
     width: int = 1080
     height: int = 1920
@@ -140,6 +150,7 @@ class Settings(_Strict):
     deep: DeepSettings = Field(default_factory=DeepSettings)
     captions: CaptionStyle = Field(default_factory=CaptionStyle)
     whisper: WhisperSettings = Field(default_factory=WhisperSettings)
+    live: LiveSettings = Field(default_factory=LiveSettings)
 
 
 def load_settings(path: Path | None = None) -> Settings:
