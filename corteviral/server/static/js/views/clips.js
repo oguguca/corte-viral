@@ -320,7 +320,7 @@ export async function renderClips(root, name, project, ctx = {}) {
       const cv = $("#livePv", box), bar = $("#lpBar", box);
       api(P("/moments/") + enc(m.id) + "/preview").then((spec) => {
         if (!cv.isConnected) return;  // trocou de clipe antes de chegar
-        live = mountLivePreview(cv, bar, P("/video"), spec);
+        live = mountLivePreview(cv, bar, P("/video") + (spec.video_moment ? `?moment=${enc(spec.video_moment)}` : ""), spec);
       }).catch((err) => { $(".lp-time", bar).textContent = "Prévia indisponível: " + err.message; });
     }
     box.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => { ui.view = b.dataset.view; renderDetail(); });

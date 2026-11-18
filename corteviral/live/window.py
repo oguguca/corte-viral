@@ -87,6 +87,9 @@ def process_window(main: Project, state: LiveState, win: Window, settings: Setti
         part = state.parts[win.part]
         cut_window(Path(part.file), part.offset, win, wdir)
     wp = Project.load(wdir) if (wdir / "project.json").exists() else window_project(main, win, video)
+    if not main.data.get("video_path"):  # provisório até o fim da live: detecção de layout e prévia
+        main.data.update(video_path=str(video), duration=round(win.end - win.start, 3))
+        main.save()
 
     tpath = wp.path("transcript.json")
     t = Transcript.load(tpath) if tpath.exists() else transcribe_fn(wp, settings)

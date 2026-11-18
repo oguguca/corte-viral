@@ -128,8 +128,10 @@ def preview_spec(project: Project, moment: dict, settings: Settings) -> dict:
     band = _band_for(preset, settings)
     style, words, hook, credit = _overlay_parts(project, moment, settings, preset)
     layout = "fallback" if preset.layout == "split" and not preset.facecam else preset.layout
+    shift = float(moment["source"]["offset"]) if moment.get("source") else 0.0
     return {"layout": layout, "facecam": preset.facecam, "gameplay": preset.gameplay,
-            "start": float(moment["start"]), "end": float(moment["end"]),
+            "start": float(moment["start"]) - shift, "end": float(moment["end"]) - shift,  # no arquivo de vídeo
+            "video_moment": moment["id"] if moment.get("source") else None,
             "duration": round(float(moment["end"]) - float(moment["start"]), 3),
             "render": {"facecam_ratio": rs.facecam_ratio, "divider_px": rs.divider_px,
                        "divider_color": rs.divider_color},
@@ -144,11 +146,14 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
                 preset: LayoutPreset | None = None, on_progress: ProgressFn | None = None,
                 captions: bool | None = None) -> Path:
     rs = settings.render
-    video = Path(project.data["video_path"])
+    source = moment.get("source")  # clipe de live ao vivo: lê o vídeo da janela, não o do projeto
+    video = Path(source["video"]) if source else Path(project.data["video_path"])
+    shift = float(source["offset"]) if source else 0.0
     preset = preset or resolve_layout(project, settings)
     det = project.data.get("layout_detect") or {}
     src = tuple(det.get("source") or video_size(video))
-    start, end = float(moment["start"]), float(moment["end"])
+    start, end = float(moment["start"]), float(moment["end"])  # linha do tempo do projeto (legenda)
+    rstart, rend = start - shift, end - shift                 # onde ler no arquivo de vídeo
 
     out_dir = project.path(CLIPS)
     out_dir.mkdir(exist_ok=True)
@@ -160,8 +165,12 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     segs = [(0.0, round(end - start, 3))]
     if rs.jump_cuts:  # tira as pausas (detectadas no áudio) — gancho imediato e ritmo de Short
         audio = project.path("audio.wav")
-        silent = silences(audio if audio.exists() else video, start, end, rs.silence_rel_db, rs.silence_min)
-        segs = keep_segments(start, end, silent, rs.cut_pad, rs.silence_min)
+        if audio.exists() and not source:
+            silent = silences(audio, start, end, rs.silence_rel_db, rs.silence_min)
+            segs = keep_segments(start, end, silent, rs.cut_pad, rs.silence_min)
+        else:
+            silent = silences(video, rstart, rend, rs.silence_rel_db, rs.silence_min)
+            segs = keep_segments(rstart, rend, silent, rs.cut_pad, rs.silence_min)
     cut = segs != [(0.0, round(end - start, 3))]
     out_len = out_duration(segs)
     if cut:
@@ -173,14 +182,14 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
                              duration=out_len, layout=preset.layout,
                              hook_top=hook_top_for(preset.layout, bool(preset.facecam), rs, band))
     key = params_hash({"v": 3, "start": start, "end": end, "segs": segs, "zooms": zooms, "preset": preset.model_dump(),
-                       "render": rs.model_dump(mode="json"), "preview": preview,
+                       "render": rs.model_dump(mode="json"), "preview": preview, "source": source,
                        "captions": params_hash({"ass": ass_text}) if ass_text else None,
                        "band": band.model_dump() if band else None})
     if out.exists() and meta_file.exists():
         if json.loads(meta_file.read_text(encoding="utf-8")).get("hash") == key:
             return out
 
-    track = _face_track(video, start, end, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
+    track = _face_track(video, rstart, rend, Path(settings.paths.models_dir)) if preset.layout == "face-follow" else None
     if cut and track:  # o rosto seguido acompanha os cortes de pausa
         track = remap_points(track, segs)
     graph = build_filter(preset, src, rs, track=track, preview=preview)
@@ -216,7 +225,7 @@ def render_clip(project: Project, moment: dict, settings: Settings, preview: boo
     else:
         ass_file.unlink(missing_ok=True)
     tmp = out.with_name(out.stem + ".tmp.mp4")
-    base = ["-y", "-ss", f"{start:.3f}", "-t", f"{end - start:.3f}", "-i", str(video), *band_input,
+    base = ["-y", "-ss", f"{rstart:.3f}", "-t", f"{rend - rstart:.3f}", "-i", str(video), *band_input,
             "-filter_complex", graph, "-map", "[v]", "-map", audio_map, "-t", f"{out_len:.3f}"]
     tail = ["-c:a", "aac", "-b:a", rs.audio_bitrate, "-ac", "2", "-movflags", "+faststart", str(tmp)]
 

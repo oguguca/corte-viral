@@ -780,9 +780,13 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         return {**u, "limits": lim, "percent": round(min(pct, 100.0), 1), "provider": provider, "groq": groq}
 
     @app.get("/api/projects/{name}/video")
-    def get_video(name: str):
+    def get_video(name: str, moment: str | None = None):
         project = Project.load(_project_dir(name))
         vp = project.data.get("video_path")
+        if moment:  # clipe de live ao vivo: o vídeo é o da janela dele
+            m = next((x for x in (load_moments(project) or {}).get("moments", []) if x["id"] == moment), None)
+            if m and m.get("source"):
+                vp = m["source"]["video"]
         if not vp or not Path(vp).exists():
             raise HTTPException(404, "vídeo não encontrado")
         return FileResponse(vp)

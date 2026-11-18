@@ -134,3 +134,13 @@ def test_render_cuts_pauses_with_hook_overlay(rs_fast, video_with_pause):
     out = render_clip(p, {**MOMENT, "start": 0.0, "end": 8.0, "hook": "Ele falou isso?", "hook_on": True}, rs_fast)
     dur, kinds = _probe(out)
     assert kinds == {"video", "audio"} and 5.8 < dur < 6.6, dur
+
+
+def test_render_uses_moment_source_video(rs_fast, video_with_pause):
+    p = Project.create(rs_fast.paths.projects_dir, "https://live", "live")
+    p.data.update(video_path=str(video_with_pause), duration=8.0)  # provisório: vídeo da 1ª janela (layout)
+    p.save()
+    m = {**MOMENT, "start": 104.5, "end": 107.5, "source": {"video": str(video_with_pause), "offset": 100.0}}
+    out = render_clip(p, m, rs_fast)
+    dur, kinds = _probe(out)
+    assert kinds == {"video", "audio"} and abs(dur - 3.0) < 0.3, dur  # 4,5–7,5 s do vídeo da janela (só tom)

@@ -76,6 +76,7 @@ def test_process_window_appends_transcript_and_moments(settings_tmp, part_video)
     assert [(w.w, w.start) for w in words] == [("oi", 111.0), ("gente", 115.0)]
     assert ("analyze", 3, 3, None) in calls and ("render", "L001-m1") in calls
     assert win.state == "done" and win.clips == ["L001-m1"]
+    assert Project.load(main.dir).data["video_path"].endswith("video.mp4")  # provisório p/ layout e /video
 
 
 def test_overlap_moment_not_duplicated(settings_tmp, part_video):

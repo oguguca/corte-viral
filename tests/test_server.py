@@ -514,3 +514,15 @@ def test_moments_endpoint_reports_final_clip_duration(client, settings_tmp):
     (p.dir / "clips" / "m1.json").write_text(_json.dumps({"segments": [[0, 10], [12, 30]]}), encoding="utf-8")
     c = client.get(f"/api/projects/{p.dir.name}/moments").json()["clips"]["m1"]
     assert c["final"] and c["seconds"] == 28.0  # 30 s − 2 s de pausa cortada
+
+
+def test_video_of_live_moment_serves_window_video(client, settings_tmp, tmp_path):
+    from corteviral.pipeline.analyze import MOMENTS
+    from corteviral.utils import write_json_atomic
+    p = _transcribed_project(settings_tmp)
+    win = tmp_path / "win.mp4"
+    win.write_bytes(b"janela")
+    write_json_atomic(p.path(MOMENTS), {"moments": [{"id": "L001-m1", "start": 110, "end": 130, "score": 80,
+                                                     "source": {"video": str(win), "offset": 100.0}}]})
+    r = client.get(f"/api/projects/{p.dir.name}/video?moment=L001-m1")
+    assert r.status_code == 200 and r.content == b"janela"
