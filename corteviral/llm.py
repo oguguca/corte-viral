@@ -170,6 +170,8 @@ Para cada clipe, escreva os textos de postagem em {lang}:
     hashtags). Use o que funciona em cortes virais: curiosidade aberta ("…e ninguém esperava isso"), reação
     forte, número ou detalhe concreto do momento. Nada de clickbait mentiroso, nada de CAIXA ALTA no título
     todo, no máximo 1 emoji.
+  - Nunca comece o título com "GTA 6:", "GTA 6 -" ou qualquer prefixo fixo seguido de dois-pontos: o YouTube
+    trata títulos com o mesmo começo como spam. Use o estilo pedido em "estilo_titulo" de cada clipe.
   - Varie os títulos de um clipe para o outro, sempre de acordo com o vídeo: não repita o mesmo molde nem o
     mesmo começo. Alterne entre pergunta ("Ele realmente…?"), afirmação surpreendente, fala marcante entre
     aspas, "Quando…"/"O dia em que…" e detalhe concreto do momento.

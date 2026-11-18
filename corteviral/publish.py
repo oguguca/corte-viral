@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from corteviral.config import Settings
 from corteviral.export import _approved, _meta
-from corteviral.metadata import youtube_title
+from corteviral.metadata import clean_title, youtube_title
 from corteviral.pipeline.render import render_clip
 from corteviral.presets import load_preset
 from corteviral.project import Project
@@ -130,7 +130,7 @@ def _tags(hashtags: list[str]) -> list[str]:
 
 
 def _caption(post: dict, limit: int = 2200) -> str:
-    parts = [post.get("title", ""), post.get("description", ""), " ".join(post.get("hashtags", []))]
+    parts = [clean_title(post.get("title", "")), post.get("description", ""), " ".join(post.get("hashtags", []))]
     return "\n\n".join(p for p in parts if p).strip()[:limit]
 
 
@@ -151,7 +151,7 @@ def build_payload(project: str, moment: dict, meta: dict, networks: list[str], c
                         "tags": (post.get("tags") or _tags(post.get("hashtags", [])))[:15],
                         "privacy": cfg.youtube_privacy}
         else:
-            out[net] = {"caption": _caption(post), "title": post.get("title", "")}
+            out[net] = {"caption": _caption(post), "title": clean_title(post.get("title", ""))}
     return out
 
 

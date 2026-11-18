@@ -157,3 +157,35 @@ def test_posts_prompt_asks_for_clean_and_varied_titles():
     from corteviral.llm import _posts_prompt
     txt = _posts_prompt([{"id": "m1"}], "pt", avoid=["GTA 6: ele surtou"])
     assert "sem hashtag" in txt and "GTA 6: ele surtou" in txt and "varie" in txt.lower()
+
+
+def test_clean_title_drops_fixed_game_prefix():
+    from corteviral.metadata import clean_title
+    assert clean_title("GTA 6: Para que serve o PS5 Pro de verdade?") == "Para que serve o PS5 Pro de verdade?"
+    assert clean_title("GTA 6 missões insanas: DavyJones se desespera #gta6") == "DavyJones se desespera"
+    assert clean_title("gta vi - a cena da Lucy") == "A cena da Lucy"
+    assert clean_title("O PS5 Pro serve só pra isso no GTA 6?") == "O PS5 Pro serve só pra isso no GTA 6?"
+    assert clean_title("GTA 6:") == "GTA 6"  # nunca fica vazio
+
+
+def test_youtube_title_cleans_old_saved_titles_on_export():
+    from corteviral.metadata import youtube_title
+    assert youtube_title("GTA 6: O choque de rodar a 30 FPS #shorts", []) == "O choque de rodar a 30 FPS #shorts"
+
+
+def test_generate_posts_rotates_title_style(settings_tmp):
+    p = _project(settings_tmp)
+    seen = []
+
+    class W(FakeWriter):
+        def write_posts(self, items, language, avoid=()):
+            seen.extend(it["estilo_titulo"] for it in items)
+            return super().write_posts(items, language, avoid)
+    generate_posts(p, ["m1", "m2"], settings_tmp, client=W())
+    assert len(seen) == 2 and seen[0] != seen[1]
+
+
+def test_posts_prompt_forbids_fixed_prefix():
+    from corteviral.llm import _posts_prompt
+    txt = _posts_prompt([{"id": "m1"}], "pt")
+    assert "Nunca comece" in txt and "estilo_titulo" in txt

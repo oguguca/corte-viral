@@ -77,10 +77,32 @@ def strip_hashtags(title: str) -> str:
     return " ".join(w for w in str(title or "").split() if not w.startswith("#"))
 
 
+# "GTA 6: ...", "GTA VI - ...", "GTA 6 missões insanas: ..." — prefixo fixo que o YouTube lê como spam
+_PREFIX = re.compile(r"^\s*gta\s*(?:6|vi|v)?\b[^:\-–|]{0,25}[:\-–|]\s*", re.IGNORECASE)
+TITLE_STYLES = (
+    "pergunta (ex.: \"Ele realmente falou isso?\")",
+    "afirmação surpreendente (ex.: \"Ninguém esperava esse final\")",
+    "fala marcante do streamer entre aspas",
+    "começa com \"Quando…\" ou \"O dia em que…\"",
+    "detalhe concreto do momento (número, objeto, lugar)",
+)
+
+
+def clean_title(title: str) -> str:
+    """Título limpo: sem hashtags e sem prefixo fixo do jogo antes de dois-pontos/traço."""
+    base = strip_hashtags(title)
+    rest = _PREFIX.sub("", base, count=1).strip()
+    if not rest:
+        return base.rstrip(":-–| ").strip()
+    if rest == base:
+        return base
+    return rest[0].upper() + rest[1:]  # tirou o prefixo: a frase começa com maiúscula
+
+
 def youtube_title(title: str, hashtags: list[str] | None = None, limit: int = YT_TITLE_CHARS) -> str:
     """Título do Shorts: a frase limpa + só #shorts no fim (sem encher de hashtag). `hashtags` é ignorado
     (mantido por compatibilidade: as outras hashtags vão na descrição). Nunca corta o título original."""
-    base = strip_hashtags(title)[:limit]
+    base = clean_title(title)[:limit]
     return f"{base} #shorts" if len(base) + len(" #shorts") <= limit else base
 
 
@@ -92,7 +114,7 @@ def _credit_line(credit: str | None) -> str:
 
 
 def normalize_post(post: dict, platform: str, credit: str | None) -> dict:
-    title = strip_hashtags(post.get("title") or "")
+    title = clean_title(post.get("title") or "")
     if platform == "shorts":
         title = (fit(title, TITLE_MAX["shorts"] - len(" #shorts")) + " #shorts") if title else ""
     else:
@@ -161,9 +183,10 @@ def generate_posts(project: Project, ids: list[str], settings: Settings, client=
         batch = moments[i:i + BATCH]
         got: dict[str, dict] = {}
         if can_write:
-            items = [{"id": m["id"], "description": m.get("description") or m.get("reason", ""),
+            items = [{"id": m["id"], "estilo_titulo": TITLE_STYLES[(len(used) + i + j) % len(TITLE_STYLES)],
+                      "description": m.get("description") or m.get("reason", ""),
                       "hook_hint": m.get("hook", ""), "transcript": (m.get("text") or "")[:1200],
-                      "streamer": streamer or ""} for m in batch]
+                      "streamer": streamer or ""} for j, m in enumerate(batch)]
             try:
                 got = {it["id"]: it for it in llm.write_posts(items, language, avoid=[u for u in used if u])
                        if isinstance(it, dict) and isinstance(it.get("id"), str)}

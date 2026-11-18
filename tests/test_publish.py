@@ -292,3 +292,9 @@ def test_callback_keeps_youtube_check_note(tmp_path):
     assert e["note"].startswith("Uso de IA: Não")
     store.record("p", "m1", "youtube", status="sent", send_id="s2")  # novo envio limpa o aviso antigo
     assert "note" not in store.status("p")["m1"]["youtube"]
+
+
+def test_caption_and_title_drop_fixed_prefix_from_old_saved_posts():
+    from corteviral.publish import _caption
+    post = {"title": "GTA 6: Davy Jones pistola com o chat", "description": "d", "hashtags": ["#gta6"]}
+    assert _caption(post).startswith("Davy Jones pistola com o chat")

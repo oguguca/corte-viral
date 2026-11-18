@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from corteviral.config import Settings
-from corteviral.metadata import fallback_posts, youtube_title
+from corteviral.metadata import clean_title, fallback_posts, youtube_title
 from corteviral.pipeline.render import render_clip
 from corteviral.presets import load_preset
 from corteviral.project import Project
@@ -80,7 +80,7 @@ def platform_texts(moment: dict, streamer: str | None = None, credit: str | None
     out = {}
     for plat, (fname, label) in FILES.items():
         post = meta["posts"].get(plat) or {}
-        title, desc = post.get("title", ""), post.get("description", "")
+        title, desc = clean_title(post.get("title", "")), post.get("description", "")  # textos antigos também
         tags = " ".join(post.get("hashtags", []))
         if plat == "shorts":  # YouTube: título, descrição e tags são campos separados
             title = youtube_title(title, post.get("hashtags", []))  # o máximo de # que cabe em 100 caracteres
