@@ -209,10 +209,10 @@ transcreve o trecho novo, encontra os momentos fortes e **já gera os clipes** �
   funcionando enquanto a live roda.
 - Cada janela de 5 min tem 1 min de sobra da anterior (momento na divisa não se perde); no máximo 3 clipes por
   janela e nenhum clipe sai sem a avaliação da IA (se a cota acabar, o trecho espera e é tentado de novo).
-- Internet caiu? A gravação retoma sozinha; o buraco vira tela preta no vídeo final, para os tempos seguirem certos.
-  Fechou o app no meio? Abra o projeto e clique em **Retomar**.
-- Quando a live acaba (ou em **Parar**), as partes viram um vídeo só no projeto. **Analisar a live inteira**
-  procura o que escapou, sem mexer nos clipes que você já tem.
+- **Só os melhores momentos ficam salvos:** de cada clipe fica o trecho com 30 s de folga (para ajustar o corte,
+  `live.keep_margin`); cada janela de 5 min é apagada depois de processada e, no fim (ou em **Parar**), a gravação
+  inteira também. Durante a live a gravação ocupa disco; ao terminar, só sobram os clipes.
+- Internet caiu? A gravação retoma sozinha. Fechou o app no meio? Abra o projeto e clique em **Retomar**.
 - Limites: uma live por vez; o PC precisa ficar ligado e online; uma live de 5 h usa ~5 h da cota grátis de áudio
   do Groq (~8 h/dia). Ajustes em `live:` no `config.yaml` (`window_seconds`, `max_clips_per_window`…).
 

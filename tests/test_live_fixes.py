@@ -155,24 +155,3 @@ def test_cut_window_seeks_on_input_and_is_atomic(tmp_path, monkeypatch):
     a = cmds[0]
     assert a.index("-ss") < a.index("-i")
     assert not (tmp_path / "w" / "video.mp4").exists()
-
-
-# 7. parte lixo (sem áudio/vídeo) não quebra o fim da live; parte que passou do tempo é aparada
-def _part(path, seconds, color="red"):
-    ffmpeg.run(["-y", "-f", "lavfi", "-i", f"color=c={color}:size=320x240:rate=30:duration={seconds}",
-                "-f", "lavfi", "-i", f"sine=f=440:d={seconds}", "-c:v", "libx264", "-preset", "ultrafast",
-                "-c:a", "aac", "-shortest", "-f", "mpegts", str(path)])
-    return path
-
-
-def test_finalize_skips_junk_part_and_trims_overrun(settings_tmp, tmp_path):
-    from corteviral.live.finalize import finalize
-    p = Project.create(settings_tmp.paths.projects_dir, "https://live", "Live")
-    a = _part(tmp_path / "part-000.ts", 5)
-    junk = tmp_path / "part-001.ts"
-    junk.write_bytes(b"\x47" * 500)
-    c = _part(tmp_path / "part-002.ts", 4, "blue")
-    st = LiveState(url="u", parts=[Part(file=str(a), offset=0, duration=5), Part(file=str(junk), offset=3, duration=0),
-                                   Part(file=str(c), offset=4, duration=4)])
-    out = finalize(p, st)  # parte 0 tem 5 s mas a 2 começa em 4: apara para 4
-    assert abs(ffmpeg.probe_duration(out) - 8.0) < 0.3

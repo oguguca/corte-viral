@@ -1,6 +1,5 @@
 // Faixa da live ao vivo na tela Clipes: status, Parar/Retomar e os clipes novos aparecendo sozinhos.
 import { $, api, esc } from "../api.js";
-import { startJob } from "../jobs.js";
 import { confirmAction, toast } from "../ui.js";
 
 const hms = (s) => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -42,17 +41,16 @@ export async function mountLiveBar(root, name, project, rerender) {
       };
     } else if (project.live_ended && !project.live_finalized) {
       clearInterval(timer);
-      bar.innerHTML = `<div class="row"><b>Live encerrada</b><span class="t-small">não consegui juntar a gravação num vídeo só.</span>
-        <span class="spacer"></span><button class="btn primary" id="liveJoin">Juntar de novo</button></div>`;
+      bar.innerHTML = `<div class="row"><b>Live encerrada</b><span class="t-small">não consegui apagar a gravação da live.</span>
+        <span class="spacer"></span><button class="btn primary" id="liveJoin">Tentar de novo</button></div>`;
       $("#liveJoin", bar).onclick = async () => {
-        try { await api(`/api/live/finalize?project=${encodeURIComponent(name)}`, { method: "POST" }); toast("Vídeo da live pronto.", "good"); rerender(); }
+        try { await api(`/api/live/finalize?project=${encodeURIComponent(name)}`, { method: "POST" }); toast("Espaço liberado.", "good"); rerender(); }
         catch (e) { toast(e.message, "bad"); }
       };
     } else {
       clearInterval(timer);
-      bar.innerHTML = `<div class="row"><b>Live encerrada</b><span class="t-small">o vídeo completo foi gravado.</span>
-        <span class="spacer"></span><button class="btn" id="liveFull" title="Análise normal sobre o vídeo inteiro; mantém os clipes que você já tem">Analisar a live inteira</button></div>`;
-      $("#liveFull", bar).onclick = () => startJob({ kind: "analyze", project: name, merge: true, auto: true });
+      bar.innerHTML = `<div class="row"><b>Live encerrada</b>
+        <span class="t-small">ficaram salvos só os melhores momentos (os clipes e uma folga em volta de cada um); a gravação inteira foi apagada.</span></div>`;
     }
   };
   await paint();

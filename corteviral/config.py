@@ -101,6 +101,7 @@ class LiveSettings(_Strict):
     retry_wait: int = Field(default=10, ge=1, le=60)         # s; dobra até 60
     max_clips_per_window: int = Field(default=3, ge=1, le=20)
     review_per_window: int = Field(default=3, ge=0, le=20)   # trechos que a IA assiste por janela
+    keep_margin: int = Field(default=30, ge=5, le=120)       # s de folga guardados em volta de cada clipe
 
 
 class RenderSettings(_Strict):

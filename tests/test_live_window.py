@@ -29,7 +29,7 @@ def test_cut_window_is_exact(part_video, tmp_path):
     video = cut_window(part_video, 100.0, win, tmp_path / "win-001")
     # sem recodificar: começa no quadro-chave antes de 110 s e a janela passa a começar nele
     assert 100.0 <= win.start <= 110.0
-    assert abs(_probe(video) - (win.end - win.start)) < 0.2
+    assert abs(_probe(video) - (win.end - win.start)) < 0.5  # o fim pode passar um pouco (corte sem recodificar)
     assert (tmp_path / "win-001" / "audio.wav").exists()
 
 

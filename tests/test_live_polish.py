@@ -144,4 +144,4 @@ def test_successful_finalize_frees_disk(settings_tmp, tmp_path):
     st = LiveState(url="u", parts=[Part(file=str(part), offset=0, duration=3)])
     finalize(p, st)
     assert st.finalized and not part.exists() and not (live / "win-000" / "video.mp4").exists()
-    assert p.path("video.mp4").exists()
+    assert not p.path("video.mp4").exists()  # só os melhores momentos ficam salvos

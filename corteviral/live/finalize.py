@@ -68,27 +68,11 @@ def _join(state: LiveState, dest: Path) -> None:
                 "-movflags", "+faststart", str(dest)])
 
 
-def finalize(project: Project, state: LiveState) -> Path:
-    dest = project.path("video.mp4")
-    _join(state, dest)
-    ffmpeg.run(["-y", "-i", str(dest), "-vn", "-ac", "1", "-ar", str(AUDIO_RATE), "-c:a", "pcm_s16le",
-                str(project.path("audio.wav"))])
-    project.data.update(video_path=str(dest), duration=round(ffmpeg.probe_duration(dest), 3))
-    project.save()
-    with MOMENTS_LOCK:  # os clipes passam a ler o vídeo completo (mesma linha do tempo)
-        data = load_moments(project)
-        if data:
-            for m in data.get("moments", []) + data.get("all", []):
-                m.pop("source", None)
-            write_json_atomic(project.path(MOMENTS), data)
-    state.active, state.ended, state.finalized = False, True, True
-    _free_disk(project, state)
-    return dest
-
-
-def _free_disk(project: Project, state: LiveState) -> None:
-    """O video.mp4 já tem tudo: as partes gravadas e os vídeos das janelas viram espaço livre."""
+def finalize(project: Project, state: LiveState) -> None:
+    """Fim da live: fica salvo só o que virou clipe (trechos em live/src). A gravação inteira é apagada."""
     for part in state.parts:
         Path(part.file).unlink(missing_ok=True)
-    for win_video in (project.dir / "live").glob("win-*/video.mp4"):
-        win_video.unlink(missing_ok=True)
+    for win_dir in (project.dir / "live").glob("win-*"):
+        (win_dir / "video.mp4").unlink(missing_ok=True)
+        (win_dir / "audio.wav").unlink(missing_ok=True)
+    state.active, state.ended, state.finalized = False, True, True
