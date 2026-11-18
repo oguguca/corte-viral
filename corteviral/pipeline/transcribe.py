@@ -29,7 +29,7 @@ from corteviral.pipeline.groq_transcribe import (
 )
 from corteviral.project import Project
 from corteviral.usage import UsageTracker
-from corteviral.utils import write_json_atomic
+from corteviral.utils import has_nvidia, write_json_atomic
 
 log = logging.getLogger(__name__)
 ProgressFn = Callable[[float, str], None]
@@ -220,7 +220,7 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
         if ws.engine == "groq" or ws.device == "cpu":
             use_groq = True
         else:  # auto com GPU configurada: Groq só se a GPU não responder
-            gpu_ok = not real_factory or _gpu_preflight(settings)
+            gpu_ok = not real_factory or (has_nvidia() and _gpu_preflight(settings))
             use_groq = not gpu_ok
     if use_groq and not duration:
         try:
@@ -259,7 +259,7 @@ def transcribe(project: Project, settings: Settings, on_progress: ProgressFn | N
             raise
     else:
         if gpu_ok is None:
-            gpu_ok = ws.device == "cpu" or not real_factory or _gpu_preflight(settings)
+            gpu_ok = ws.device == "cpu" or not real_factory or (has_nvidia() and _gpu_preflight(settings))
         try:
             if not gpu_ok:
                 raise RuntimeError("CUDA indisponível (teste da GPU falhou)")

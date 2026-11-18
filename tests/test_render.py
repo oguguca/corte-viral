@@ -144,3 +144,14 @@ def test_render_uses_moment_source_video(rs_fast, video_with_pause):
     out = render_clip(p, m, rs_fast)
     dur, kinds = _probe(out)
     assert kinds == {"video", "audio"} and abs(dur - 3.0) < 0.3, dur  # 4,5–7,5 s do vídeo da janela (só tom)
+
+
+def test_no_nvidia_goes_straight_to_x264(rs_fast, sample_video, monkeypatch):
+    calls = []
+    real = ffmpeg.run
+    monkeypatch.setattr("corteviral.pipeline.render.has_nvidia", lambda: False)
+    monkeypatch.setattr("corteviral.ffmpeg.run", lambda args: (calls.append(args), real(args))[1])
+    rs_fast.render.encoder = "h264_nvenc"
+    render_clip(_project(rs_fast, sample_video), {**MOMENT, "id": "m9"}, rs_fast)
+    encodes = [a for a in calls if "-c:v" in a]
+    assert encodes and encodes[0][encodes[0].index("-c:v") + 1] == "libx264"  # sem tentativa NVENC antes

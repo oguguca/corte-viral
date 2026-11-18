@@ -36,3 +36,9 @@ def write_json_atomic(path: Path, data) -> None:
         if os.path.exists(tmp):
             os.remove(tmp)
         raise
+
+
+def has_nvidia() -> bool:
+    """Tem placa NVIDIA com driver? (sem ela, nem tenta CUDA/NVENC: no notebook isso só custa tempo)."""
+    import shutil
+    return shutil.which("nvidia-smi") is not None

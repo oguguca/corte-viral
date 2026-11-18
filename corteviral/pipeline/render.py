@@ -22,7 +22,7 @@ from corteviral.pipeline.jumpcut import (keep_segments, out_duration, remap_poin
 from corteviral.pipeline.layout import _even, build_filter
 from corteviral.presets import LayoutPreset, resolve_layout
 from corteviral.project import Project
-from corteviral.utils import params_hash, write_json_atomic
+from corteviral.utils import has_nvidia, params_hash, write_json_atomic
 from corteviral.vision.frames import grab, video_size
 
 log = logging.getLogger(__name__)
@@ -254,7 +254,8 @@ def _render_clip(project, moment, settings, preview, preset, on_progress, captio
 
     if on_progress:
         on_progress(0.0, f"renderizando {moment['id']}")
-    used = "libx264" if rs.encoder in _BROKEN_ENCODERS else rs.encoder
+    used = ("libx264" if rs.encoder in _BROKEN_ENCODERS or ("nvenc" in rs.encoder and not has_nvidia())
+            else rs.encoder)  # sem NVIDIA: direto na CPU, sem a tentativa que sempre falha
     try:
         ffmpeg.run(base + _encoder_args(used, rs.cq, preview) + tail)
     except FFmpegError as e:

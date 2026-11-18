@@ -122,3 +122,10 @@ def _no_real_groq_key(tmp_path, monkeypatch):
     """Os testes nunca leem o .env real: com GROQ_API_KEY lá, chamariam o Groq de verdade."""
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.setattr("corteviral.pipeline.transcribe.ENV_FILE", tmp_path / "sem-chave.env")
+
+
+@pytest.fixture(autouse=True)
+def _assume_nvidia(monkeypatch):
+    """Testes não dependem da máquina ter NVIDIA; os que testam o notebook sem GPU dizem has_nvidia=False."""
+    monkeypatch.setattr("corteviral.pipeline.transcribe.has_nvidia", lambda: True)
+    monkeypatch.setattr("corteviral.pipeline.render.has_nvidia", lambda: True)

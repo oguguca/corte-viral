@@ -371,3 +371,14 @@ def test_groq_quota_is_recorded_as_rate_limited(groq_setup):
     transcribe(p, s, model_factory=_cpu_factory([]), groq_http=http, env_file=env)
     g = UsageTracker(s.paths.data_dir / "usage.json").today()["audio"]["groq"]
     assert g["rate_limited"] is True and g["errors"] == 1 and g["seconds"] == 0
+
+
+def test_no_nvidia_skips_gpu_preflight_and_uses_groq(groq_setup, monkeypatch):
+    p, s, env = groq_setup
+    s.whisper.engine = "auto"  # device continua "cuda" como no config, mas a máquina não tem NVIDIA
+    monkeypatch.setattr("corteviral.pipeline.transcribe.has_nvidia", lambda: False)
+    monkeypatch.setattr("corteviral.pipeline.transcribe._gpu_preflight",
+                        lambda settings: (_ for _ in ()).throw(AssertionError("não deveria testar a GPU")))
+    monkeypatch.setattr("corteviral.pipeline.transcribe.WhisperModel", FakeModel.explode)
+    t = transcribe(p, s, groq_http=_groq_ok(), env_file=env)
+    assert t.device == "groq"
