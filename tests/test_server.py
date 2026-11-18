@@ -526,3 +526,93 @@ def test_video_of_live_moment_serves_window_video(client, settings_tmp, tmp_path
                                                      "source": {"video": str(win), "offset": 100.0}}]})
     r = client.get(f"/api/projects/{p.dir.name}/video?moment=L001-m1")
     assert r.status_code == 200 and r.content == b"janela"
+
+
+class _FakeMonitor:
+    def __init__(self, project, settings, url, opts):
+        self.project, self.url, self.opts, self.stopped = project, url, opts, False
+        from corteviral.live.state import LiveState
+        self.state = LiveState(url=url, opts=opts)
+        self.state.save(project.dir / "live.json")
+
+    def status(self):
+        return {"active": not self.stopped, "project": self.project.dir.name, "recorded": 42.0, "clips": 2,
+                "windows": 1, "stopping": self.stopped, "pending_ai": 0}
+
+    def stop(self):
+        self.stopped = True
+
+
+@pytest.fixture
+def live_client(settings_tmp):
+    from corteviral.live import monitor as mon
+    from corteviral.pipeline.ingest import LiveInProgress
+    made = []
+
+    def pipeline(source, settings, on_progress):
+        raise LiveInProgress({"title": "Live do Flow", "extractor_key": "Youtube", "id": "abc"})
+
+    def factory(project, settings, url, opts):
+        m = _FakeMonitor(project, settings, url, opts)
+        mon.ACTIVE[project.dir.name] = m
+        made.append(m)
+        return m
+
+    c = TestClient(create_app(settings_tmp, pipeline=pipeline, live_factory=factory))
+    yield c, made
+    mon.ACTIVE.clear()
+
+
+def test_ingest_live_starts_monitor_and_frees_job_slot(live_client):
+    c, made = live_client
+    job = _wait(c, c.post("/api/jobs", json={"source": "https://youtu.be/abc", "auto": True,
+                                             "min_seconds": 20, "max_seconds": 35}).json()["id"])
+    assert job["status"] == "done" and job["live"] is True and job["project"]
+    assert made[0].opts == {"min_seconds": 20, "max_seconds": 35, "profile": None}
+    r = c.post("/api/jobs", json={"kind": "analyze", "project": job["project"]})
+    assert r.status_code == 200  # a vaga de tarefa ficou livre
+
+
+def test_live_status_and_stop(live_client):
+    c, made = live_client
+    _wait(c, c.post("/api/jobs", json={"source": "https://youtu.be/abc"}).json()["id"])
+    s = c.get("/api/live").json()
+    assert s["active"] and s["clips"] == 2 and s["recorded"] == 42.0
+    assert c.post("/api/live/stop").status_code == 200 and made[0].stopped
+
+
+def test_projects_list_marks_live(live_client):
+    c, made = live_client
+    job = _wait(c, c.post("/api/jobs", json={"source": "https://youtu.be/abc"}).json()["id"])
+    item = next(p for p in c.get("/api/projects").json() if p["name"] == job["project"])
+    assert item["live"] is True
+
+
+def test_live_resume_when_app_restarted(live_client, settings_tmp):
+    from corteviral.live import monitor as mon
+    c, made = live_client
+    job = _wait(c, c.post("/api/jobs", json={"source": "https://youtu.be/abc"}).json()["id"])
+    mon.ACTIVE.clear()                     # app fechou: o live.json ficou ativo no disco
+    s = c.get("/api/live").json()
+    assert s == {"active": False, "can_resume": True, "project": job["project"]}
+    assert c.post(f"/api/live/resume?project={job['project']}").status_code == 200 and len(made) == 2
+
+
+def test_analyze_merge_keeps_existing_moments(settings_tmp):
+    from corteviral.pipeline.analyze import MOMENTS, load_moments
+    from corteviral.utils import write_json_atomic
+    p = _transcribed_project(settings_tmp)
+    keep = {"id": "L000-m1", "start": 10.0, "end": 40.0, "score": 80, "status": "approved"}
+    write_json_atomic(p.path(MOMENTS), {"moments": [keep], "all": [keep]})
+
+    def fake_analyze(project, settings, n=None, profile=None, on_progress=None):
+        ms = [{"id": "m5", "start": 12.0, "end": 38.0, "score": 90}, {"id": "m9", "start": 100.0, "end": 130.0, "score": 75}]
+        write_json_atomic(project.path(MOMENTS), {"moments": ms, "all": ms})
+        return ms
+
+    c = TestClient(create_app(settings_tmp, analyzer=fake_analyze))
+    job = _wait(c, c.post("/api/jobs", json={"kind": "analyze", "project": p.dir.name, "merge": True}).json()["id"])
+    assert job["status"] == "done"
+    ids = [m["id"] for m in load_moments(p)["moments"]]
+    assert ids == ["L000-m1", "m9"]  # o aprovado fica; o novo que se sobrepõe a ele não entra
+    assert load_moments(p)["moments"][0]["status"] == "approved"

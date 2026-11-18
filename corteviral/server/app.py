@@ -37,7 +37,12 @@ from corteviral.goals import GoalsError, GoalsStore, daily_counts, parse_channel
 from corteviral.metadata import generate_posts
 from corteviral.review import ReviewError, apply_patch
 from corteviral.pipeline.analyze import analyze, load_moments
-from corteviral.pipeline.ingest import IngestError, ingest, is_url
+from corteviral.live import monitor as live_mon
+from corteviral.live.monitor import LIVE_FILE, LiveError, start_monitor
+from corteviral.live.state import LiveState
+from corteviral.utils import write_json_atomic
+from corteviral.pipeline.boundaries import _overlap
+from corteviral.pipeline.ingest import IngestError, LiveInProgress, ingest, is_url
 from corteviral.pipeline.transcribe import transcribe
 from corteviral.pipeline.render import render_all, render_clip
 from corteviral.schedule import MAX_INTERVAL, MIN_INTERVAL, Scheduler, ScheduleStore
@@ -67,6 +72,7 @@ class JobRequest(BaseModel):
     ids: list[str] | None = None    # render
     preview: bool = False           # render
     force: bool = False             # analyze: ignora o cache e reavalia
+    merge: bool = False             # analyze: mantém os momentos que já existem e só acrescenta novos
     auto: bool = False              # ingest: já encontra os momentos e gera os n melhores clipes
     post: bool = False              # export: também pôr na fila de postagem (só com confirmação do usuário)
     captions: bool | None = None    # render: força legendas ligadas/desligadas
@@ -173,9 +179,10 @@ class _Jobs:
         self.running: str | None = None
 
 
-def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=None) -> FastAPI:
+def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=None, live_factory=None) -> FastAPI:
     pipeline = pipeline or default_pipeline
     analyzer = analyzer or analyze
+    live_factory = live_factory or (lambda project, s, url, opts: start_monitor(project, s, url, opts))
     usage = UsageTracker(Path(settings.paths.data_dir) / "usage.json")
     feedback = FeedbackStore(Path(settings.paths.data_dir) / "feedback.json")
     @asynccontextmanager
@@ -267,9 +274,10 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         def progress(stage: str, frac: float, msg: str) -> None:
             job.update(stage=stage, progress=round(frac, 4), message=msg)
 
-        def render_best(project: Project) -> None:  # cortes automáticos: gera os n de maior nota
+        def render_best(project: Project, only: set[str] | None = None) -> None:  # cortes automáticos
             saved = load_moments(project) or {"moments": []}
-            best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"),
+            best = sorted((m for m in saved["moments"] if m.get("status") != "discarded"
+                           and (only is None or m["id"] in only)),
                           key=lambda m: m.get("score", 0), reverse=True)  # a análise já escolheu quantos
             if best:
                 job.update(stage="render", progress=0.0, message=f"gerando {len(best)} clipe(s)")
@@ -346,12 +354,39 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 if req.force:
                     project.invalidate_from("scoring")
                 job.update(stage="analyze", project=project.dir.name)
+                before = (load_moments(project) or {}).get("moments", []) if req.merge else []
                 analyzer(project, s, n=req.n, profile=req.profile,
                          on_progress=lambda f, m: progress("analyze", f, m))
+                new_ids = None
+                if req.merge:  # "Analisar a live inteira": o que já existe fica (aprovados, fila), só soma
+                    data = load_moments(project) or {"moments": []}
+                    new = [m for m in data["moments"] if all(_overlap(m, o) <= 0.3 for o in before)
+                           and m["id"] not in {o["id"] for o in before}]
+                    data["moments"] = before + new
+                    write_json_atomic(project.path("moments.json"), data)
+                    new_ids = {m["id"] for m in new}
                 if req.auto:
-                    render_best(project)
+                    render_best(project, new_ids)
             else:
-                project = pipeline(req.source, s, progress)
+                try:
+                    project = pipeline(req.source, s, progress)
+                except LiveInProgress as live:  # live no ar: acompanha fora da fila e libera a vaga
+                    info = live.info
+                    key = f"{(info.get('extractor_key') or '').lower()}:{info.get('id')}#live"
+                    project = Project.find_by_source(projects_dir, key) or Project.create(
+                        projects_dir, key, info.get("title") or "Live")
+                    project.data.update(url=req.source, title=info.get("title") or project.data.get("title"),
+                                        streamer=project.data.get("streamer") or info.get("uploader") or info.get("channel"))
+                    project.save()
+                    try:
+                        live_factory(project, s, req.source, {"min_seconds": req.min_seconds,
+                                                              "max_seconds": req.max_seconds, "profile": req.profile})
+                    except LiveError as e:
+                        raise IngestError(str(e)) from e
+                    job["live"] = True
+                    job.update(status="done", stage="ingest", project=project.dir.name, progress=1.0,
+                               message="acompanhando a live ao vivo")
+                    return
                 if req.auto:  # do link aos clipes prontos numa tarefa só
                     job.update(stage="analyze", project=project.dir.name, progress=0.0,
                                message="procurando os melhores momentos")
@@ -383,7 +418,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
             jobs.jobs[job_id] = {"id": job_id, "source": req.source, "status": "running",
                                  "stage": "ingest", "progress": 0.0, "message": "iniciando",
                                  "error": None, "project": None, "started_at": time.time(),
-                                 "auto": req.auto}
+                                 "auto": req.auto, "live": False}
             jobs.running = job_id
         threading.Thread(target=_run_job, args=(job_id, req), daemon=True).start()
         return jobs.jobs[job_id]
@@ -412,6 +447,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                     "duration": data.get("duration", 0), "stages": list(data.get("stages", {})),
                     "has_transcript": (pj.parent / "transcript.json").exists(),
                     "has_moments": (pj.parent / "moments.json").exists(),
+                    "live": bool((LiveState.load(pj.parent / LIVE_FILE) or LiveState(url="", active=False)).active),
                     "clips": sum(1 for f in (pj.parent / "clips").glob("*.mp4") if ".preview" not in f.name
                                  and ".tmp" not in f.name),
                     "mtime": pj.stat().st_mtime,
@@ -778,6 +814,44 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
                 "percent": round(min(g.get("seconds", 0.0) / max(1, g_lim) * 100, 100.0), 1),
                 "rate_limited": g.get("rate_limited", False)}
         return {**u, "limits": lim, "percent": round(min(pct, 100.0), 1), "provider": provider, "groq": groq}
+
+    # --- live ao vivo ----------------------------------------------------
+    def _live_left(m) -> float | None:
+        st, lv = m.state, settings.live
+        if not st.parts:
+            return None
+        last = st.windows[-1].end if st.windows else st.parts[0].offset
+        return max(0.0, last + lv.window_seconds - st.recorded_until())
+
+    @app.get("/api/live")
+    def live_status():
+        for m in list(live_mon.ACTIVE.values()):
+            return {**m.status(), "next_in": _live_left(m)}
+        if projects_dir.exists():
+            for f in projects_dir.glob(f"*/{LIVE_FILE}"):
+                st = LiveState.load(f)
+                if st and st.active:  # app fechou no meio da live: dá para retomar
+                    return {"active": False, "can_resume": True, "project": f.parent.name}
+        return {"active": False}
+
+    @app.post("/api/live/stop")
+    def live_stop():
+        for m in list(live_mon.ACTIVE.values()):
+            m.stop()
+            return {"ok": True}
+        raise HTTPException(404, "nenhuma live sendo acompanhada")
+
+    @app.post("/api/live/resume")
+    def live_resume(project: str):
+        p = Project.load(_project_dir(project))
+        st = LiveState.load(p.dir / LIVE_FILE)
+        if not st:
+            raise HTTPException(404, "esse projeto não é de live")
+        try:
+            live_factory(p, settings.model_copy(deep=True), st.url, st.opts)
+        except LiveError as e:
+            raise HTTPException(409, str(e)) from e
+        return {"ok": True}
 
     @app.get("/api/projects/{name}/video")
     def get_video(name: str, moment: str | None = None):

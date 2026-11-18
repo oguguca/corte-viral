@@ -41,6 +41,14 @@ class IngestError(Exception):
     pass
 
 
+class LiveInProgress(IngestError):
+    """O link é uma live no ar: o servidor passa a acompanhá-la ao vivo em vez de baixar."""
+
+    def __init__(self, info: dict):
+        super().__init__("live em andamento")
+        self.info = info
+
+
 class _QuietLogger:
     """Silencia o yt-dlp no terminal; os erros chegam como exceção e são traduzidos."""
     def debug(self, msg): pass
@@ -181,8 +189,10 @@ def ingest(source: str, settings: Settings, on_progress: ProgressFn | None = Non
         url = source.strip()
         info = _probe_url(url, settings)
         status = info.get("live_status")
-        if info.get("is_live") or status in ("is_live", "is_upcoming"):
-            raise IngestError("live em andamento: aguarde a live terminar e virar VOD")
+        if info.get("is_live") or status == "is_live":
+            raise LiveInProgress(info)
+        if status == "is_upcoming":
+            raise IngestError("a live ainda não começou: cole o link de novo quando ela estiver no ar")
         if status == "post_live":
             raise IngestError("a live acabou, mas o VOD ainda está sendo processado pela plataforma. "
                               "Tente de novo em alguns minutos")
