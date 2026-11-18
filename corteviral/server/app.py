@@ -191,6 +191,7 @@ def create_app(settings: Settings, pipeline: Pipeline | None = None, analyzer=No
         sched.start()
         yield
         sched.stop.set()
+        live_mon.shutdown_all()  # sem gravador órfão; a live fica pronta para Retomar
 
     app = FastAPI(title="Corte Viral", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")

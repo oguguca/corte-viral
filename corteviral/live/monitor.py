@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 LIVE_FILE = "live.json"
 POLL = 15.0         # s entre ciclos
 RETRY_AI = 120.0    # s até tentar de novo uma janela que a IA não avaliou
+RETRY_FAILED = 60.0  # s até tentar de novo uma janela que deu erro
+MAX_FAILED_TRIES = 3
 ACTIVE: dict[str, "LiveMonitor"] = {}   # projeto → monitor (uma live por vez)
 _LOCK = threading.Lock()
 
@@ -33,7 +35,20 @@ def _default_finalize(project, state):
     return finalize(project, state)
 
 
-def _default_is_live(url: str, settings: Settings) -> bool:
+def _kill_pid(pid: int) -> None:
+    """Encerra um gravador órfão (e o ffmpeg filho dele) que ficou de uma execução anterior."""
+    import os
+    import subprocess
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+    else:
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+
+
+def _default_is_live(url: str, settings: Settings) -> bool | None:
     from corteviral.pipeline.ingest import probe_is_live
     return probe_is_live(url, settings)
 
@@ -52,13 +67,14 @@ class LiveMonitor:
         self.wait = settings.live.retry_wait
         self.stopping = False
         self.finished = False
+        self._final_tried: set[int] = set()
 
     # --- ciclo -----------------------------------------------------------
     def _new_part(self) -> None:
         n = len(self.state.parts)
         out = self.recorder.start(n)
         offset = 0.0 if n == 0 else round(self.clock() - self.state.started_at, 3)
-        self.state.parts.append(Part(file=str(out), offset=offset))
+        self.state.parts.append(Part(file=str(out), offset=offset, pid=getattr(self.recorder, "pid", None)))
 
     def step(self) -> None:
         st, lv = self.state, self.settings.live
@@ -68,14 +84,23 @@ class LiveMonitor:
             if real.exists():
                 part.file = str(real)  # nome real (o yt-dlp pode acrescentar a extensão)
             part.duration = max(part.duration, self.recorder.recorded(Path(part.file)))
+        if self.stopping and self.recorder.running():
+            self.recorder.stop()
         if not self.recorder.running():
+            if self.stopping:
+                self._finish()
+                return
             gained = st.parts and st.parts[-1].duration > 1.0
             self.failures = 0 if gained else self.failures + 1
-            if self.stopping or self.failures > lv.max_retries or not self.is_live(st.url):
+            # sem internet o "está ao vivo?" também falha (None): conta como tentativa, não como fim
+            if self.failures > lv.max_retries or self.is_live(st.url) is False:
                 self._finish()
                 return
             self.sleep(self.wait)
             self.wait = min(60, self.wait * 2)
+            if self.stopping:  # Parar durante a espera
+                self._finish()
+                return
             self._new_part()
         elif st.parts and st.parts[-1].duration > 1.0:
             self.wait = lv.retry_wait
@@ -85,7 +110,12 @@ class LiveMonitor:
     def _process_one(self, final: bool = False) -> bool:
         st, lv = self.state, self.settings.live
         now = self.clock()
-        win = next((w for w in st.windows if w.state == "pending_ai" and (final or w.next_try <= now)), None)
+        def retry(w) -> bool:
+            if final and w.n in self._final_tried:
+                return False  # no fechamento, cada janela pendente é tentada uma vez só
+            due = final or w.next_try <= now
+            return due and (w.state == "pending_ai" or (w.state == "failed" and w.tries < MAX_FAILED_TRIES))
+        win = next((w for w in st.windows if retry(w)), None)
         if win is None:
             win = st.next_window(lv.window_seconds, lv.overlap_seconds, final=final)
             if win is None:
@@ -96,6 +126,9 @@ class LiveMonitor:
         except Exception as e:  # noqa: BLE001 — uma janela ruim não derruba a live
             log.warning("Janela %s da live falhou: %s", win.n, e)
             win.state, win.tries = "failed", win.tries + 1
+            win.next_try = now + RETRY_FAILED
+        if final:
+            self._final_tried.add(win.n)
         if win.state == "pending_ai":
             win.next_try = now + RETRY_AI
         st.save(self.path)
@@ -104,11 +137,8 @@ class LiveMonitor:
     def _finish(self) -> None:
         st = self.state
         self.recorder.stop()
-        for _ in range(500):  # o que sobrou da gravação antes de fechar
+        for _ in range(500):  # o que sobrou da gravação antes de fechar (cada pendente uma vez)
             if not self._process_one(final=True):
-                break
-            if not any(w.state == "pending_ai" for w in st.windows) and st.next_window(
-                    self.settings.live.window_seconds, self.settings.live.overlap_seconds, final=True) is None:
                 break
         st.active, st.ended = False, True
         st.save(self.path)
@@ -143,9 +173,21 @@ class LiveMonitor:
                 "pending_ai": sum(w.state == "pending_ai" for w in st.windows)}
 
 
+def shutdown_all() -> None:
+    """App fechando: para os gravadores (sem órfão gravando) e deixa a live pronta para Retomar."""
+    with _LOCK:
+        for m in list(ACTIVE.values()):
+            m.finished = True
+            try:
+                m.recorder.stop()
+            except Exception as e:  # noqa: BLE001
+                log.warning("Não consegui parar o gravador: %s", e)
+        ACTIVE.clear()
+
+
 def start_monitor(project: Project, settings: Settings, url: str, opts: dict, recorder=None, process=None,
                   is_live=None, clock=time.time, sleep=time.sleep, finalize_fn=None,
-                  thread: bool = True) -> LiveMonitor:
+                  thread: bool = True, killer=_kill_pid) -> LiveMonitor:
     """Começa (ou retoma, se já há live.json) o acompanhamento. Uma live por vez."""
     with _LOCK:
         if ACTIVE:
@@ -154,6 +196,10 @@ def start_monitor(project: Project, settings: Settings, url: str, opts: dict, re
         state = LiveState.load(path)
         if state is None:
             state = LiveState(url=url, opts=opts, started_at=clock())
+        for part in state.parts:  # retomando: gravador que sobrou de antes não pode seguir gravando
+            if part.pid:
+                killer(part.pid)
+                part.pid = None
         state.active, state.ended = True, False
         state.save(path)
         rec = recorder or Recorder(url, project.dir / "live", settings)

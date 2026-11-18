@@ -90,12 +90,12 @@ def _probe_url(url: str, settings: Settings) -> dict:
         raise IngestError(f"não foi possível acessar o link: {_friendly_error(str(e))}") from e
 
 
-def probe_is_live(url: str, settings: Settings) -> bool:
-    """A transmissão ainda está no ar? (erro de acesso conta como não)."""
+def probe_is_live(url: str, settings: Settings) -> bool | None:
+    """A transmissão ainda está no ar? None = não deu para saber (ex.: sem internet)."""
     try:
         info = _probe_url(url, settings)
     except IngestError:
-        return False
+        return None
     return bool(info.get("is_live")) or info.get("live_status") == "is_live"
 
 

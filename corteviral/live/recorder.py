@@ -37,6 +37,10 @@ class Recorder:
                                 creationflags=flags)
         return out
 
+    @property
+    def pid(self) -> int | None:
+        return getattr(self.proc, "pid", None)
+
     def running(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 

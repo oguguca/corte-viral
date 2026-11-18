@@ -20,6 +20,7 @@ class Part(BaseModel):
     file: str
     offset: float               # início na linha do tempo da live
     duration: float = 0.0       # quanto já foi gravado
+    pid: int | None = None      # processo do gravador (para encerrar um órfão ao retomar)
 
     @property
     def end(self) -> float:

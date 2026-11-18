@@ -25,11 +25,16 @@ MAX_OVERLAP = 0.3
 def cut_window(part_path: Path, part_offset: float, win: Window, dest: Path) -> Path:
     """Recorte preciso (re-encode rápido) da janela: video.mp4 + audio.wav do mesmo jeito que o ingest."""
     dest.mkdir(parents=True, exist_ok=True)
-    video = dest / "video.mp4"
+    video, tmp = dest / "video.mp4", dest / "video.tmp.mp4"
     ss, dur = win.start - part_offset, win.end - win.start
-    ffmpeg.run(["-y", "-i", str(part_path), "-ss", f"{ss:.3f}", "-t", f"{dur:.3f}",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-c:a", "aac", "-b:a", "160k",
-                "-movflags", "+faststart", str(video)])
+    try:  # -ss antes do -i: não decodifica a live desde o começo (re-encode mantém o corte exato)
+        ffmpeg.run(["-y", "-ss", f"{ss:.3f}", "-i", str(part_path), "-t", f"{dur:.3f}",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-c:a", "aac", "-b:a", "160k",
+                    "-movflags", "+faststart", str(tmp)])
+    except Exception:
+        tmp.unlink(missing_ok=True)  # nunca deixa um vídeo pela metade para ser reaproveitado
+        raise
+    tmp.replace(video)
     ffmpeg.run(["-y", "-i", str(video), "-vn", "-ac", "1", "-ar", str(AUDIO_RATE), "-c:a", "pcm_s16le",
                 str(dest / "audio.wav")])
     return video
@@ -88,8 +93,9 @@ def process_window(main: Project, state: LiveState, win: Window, settings: Setti
         cut_window(Path(part.file), part.offset, win, wdir)
     wp = Project.load(wdir) if (wdir / "project.json").exists() else window_project(main, win, video)
     if not main.data.get("video_path"):  # provisório até o fim da live: detecção de layout e prévia
-        main.data.update(video_path=str(video), duration=round(win.end - win.start, 3))
-        main.save()
+        main.data["video_path"] = str(video)
+    main.data["duration"] = round(max(float(main.data.get("duration") or 0), state.recorded_until(), win.end), 3)
+    main.save()
 
     tpath = wp.path("transcript.json")
     t = Transcript.load(tpath) if tpath.exists() else transcribe_fn(wp, settings)
@@ -108,7 +114,7 @@ def process_window(main: Project, state: LiveState, win: Window, settings: Setti
         new = []
         for m in saved.get("moments", []):
             m = {**m, "id": f"L{win.n:03d}-{m['id']}", "start": round(m["start"] + win.start, 3),
-                 "end": round(m["end"] + win.start, 3), "source": {"video": str(video), "offset": win.start}}
+                 "end": round(m["end"] + win.start, 3), "source": {"video": str(video), "offset": win.start, "end": win.end}}
             if any(_overlap(m, o) > MAX_OVERLAP for o in existing + new):
                 continue
             new.append(m)

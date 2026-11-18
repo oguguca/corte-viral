@@ -25,11 +25,16 @@ def _words(project: Project, start: float, end: float) -> list[dict]:
             for w in Transcript.load(tpath).words if start <= w.start < end]
 
 
-def _validate_cut(project: Project, start: float, end: float) -> None:
+def _validate_cut(project: Project, start: float, end: float, source: dict | None = None) -> None:
     duration = float(project.data.get("duration") or 0)
     if not start < end:
         raise ReviewError("o início precisa vir antes do fim")
-    if start < 0 or (duration and end > duration + 0.01):
+    if source:  # clipe da live ao vivo: só existe o vídeo da janela dele
+        lo, hi = float(source["offset"]), float(source.get("end") or float("inf"))
+        if start < lo - 0.01 or end > hi + 0.01:
+            raise ReviewError(f"durante a live, o corte deste clipe precisa ficar entre {lo:.0f} e {hi:.0f} s "
+                              "(depois que a live acabar, dá para mexer à vontade)")
+    elif start < 0 or (duration and end > duration + 0.01):
         raise ReviewError(f"o corte precisa ficar dentro do vídeo (0 a {duration:.0f} s)")
     if not MIN_CLIP <= end - start <= MAX_CLIP:
         raise ReviewError(f"o clipe precisa ter entre {MIN_CLIP:.0f} e {MAX_CLIP:.0f} segundos")
@@ -65,7 +70,7 @@ def apply_patch(project: Project, moment_id: str, patch: dict, settings: Setting
         if patch.get("start") is not None or patch.get("end") is not None:
             start = float(patch.get("start", m0["start"]) if patch.get("start") is not None else m0["start"])
             end = float(patch.get("end", m0["end"]) if patch.get("end") is not None else m0["end"])
-            _validate_cut(project, start, end)
+            _validate_cut(project, start, end, m0.get("source"))
             changes.update(start=round(start, 3), end=round(end, 3),
                            text=" ".join(w["w"] for w in _words(project, start, end)))
             if m0.get("caption_words") and patch.get("caption_text") is None:
